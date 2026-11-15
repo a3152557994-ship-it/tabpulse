@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TabPulse 万站回音 — 免浏览器插件的跨平台私信哨兵与 24h 全网求购雷达</title>
+  <meta name="description" content="不绑死谷歌浏览器！原生桌面端静默盯守电鸭、V2EX、小红书、闲鱼、Upwork、Reddit、X、Hacker News 未读回复与求购帖，新客户来信 1 分钟推手机，内置 Claude/Cursor MCP 接口。" />
+  <meta property="og:title" content="TabPulse 万站回音 — 别等打开网页才发现客户早找别人了" />
+  <meta property="og:description" content="免浏览器插件 · 原生桌面静默盯单哨兵 + 免费测试过去 24h 全网漏单扫描器。" />
+  <meta property="og:image" content="https://a3152557994-ship-it.github.io/tabpulse/og-hero.png" />
+  <meta property="og:type" content="website" />
+  <link rel="canonical" href="https://a3152557994-ship-it.github.io/tabpulse/" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "TabPulse (万站回音)",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "macOS 12.0+, Cross-Platform Node/MCP",
+        "url": "https://a3152557994-ship-it.github.io/tabpulse/",
+        "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/TabPulse-v0.2.0-macOS-universal.dmg",
+        "softwareVersion": "0.2.0",
+        "description": "Browser-independent cross-platform unread inbox sentinel, live 24h buyer-intent lead scanner, and 5-tool MCP server for AI-powered freelancers, agencies, and indie founders.",
+        "offers": [
+          { "@type": "Offer", "name": "Free Starter", "price": "0", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "Pro Annual", "price": "228", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "Local Desktop Lifetime", "price": "69", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "CN Lifetime Pro", "price": "168", "priceCurrency": "CNY" }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Does TabPulse require Chrome or a browser extension?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. TabPulse ships as a standalone native macOS app powered by system WebKit. You log in once inside the built-in window—no Chrome extension or technical setup needed."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Will platforms ban my account if TabPulse monitors unread messages?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "TabPulse runs locally on your own residential IP with ±25% random human jitter, automatic 00:00–08:00 night sleep, instant pause on login expiry, and strictly read-only badge inspection—never auto-posting on red-light social platforms."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --surface: #111827;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 50% 0%, #172554 0%, var(--bg) 52%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: inherit; text-decoration: none; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center; padding: 20px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; }
+    .logo-badge {
+      width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #3b82f6, #6366f1);
+      display: grid; place-items: center; font-size: 18px;
+    }
+    .nav-links { display: flex; gap: 16px; align-items: center; font-size: 14px; color: var(--muted); }
+    .nav-links a:hover { color: #fff; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 20px; border-radius: 11px; font-weight: 700; font-size: 14.5px;
+      cursor: pointer; border: 1px solid var(--border); background: var(--card); color: #fff;
+      transition: transform 0.14s, background 0.14s;
+    }
+    .btn:hover { transform: translateY(-1px); background: #26354d; }
+    .btn.primary { background: linear-gradient(135deg, #2563eb, #4f46e5); border: none; box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35); }
+    .btn.primary:hover { background: linear-gradient(135deg, #1d4ed8, #4338ca); }
+    .btn.sm { padding: 6px 12px; font-size: 12.5px; border-radius: 8px; }
+
+    .hero { text-align: center; padding: 54px 0 36px; }
+    .eyebrow {
+      display: inline-block; padding: 5px 14px; border-radius: 999px;
+      background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(96, 165, 250, 0.35);
+      color: #93c5fd; font-size: 12.5px; font-weight: 700; margin-bottom: 16px;
+    }
+    h1 { font-size: clamp(28px, 4.5vw, 48px); line-height: 1.18; margin: 0 auto 16px; max-width: 880px; letter-spacing: -0.02em; }
+    .hero p { color: var(--muted); font-size: 17px; max-width: 720px; margin: 0 auto 26px; }
+    .cta-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 34px; }
+
+    /* Free Live Scanner Box */
+    .scanner-panel {
+      background: rgba(30, 41, 59, 0.88); border: 1px solid rgba(96, 165, 250, 0.35);
+      border-radius: 20px; padding: 24px; text-align: left; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+      margin-bottom: 56px;
+    }
+    .scanner-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); display: inline-block; box-shadow: 0 0 10px var(--green); }
+    .scanner-bar { display: flex; gap: 10px; flex-wrap: wrap; }
+    .scanner-bar input {
+      flex: 1; min-width: 220px; background: #0f172a; border: 1px solid var(--border);
+      color: #fff; padding: 12px 15px; border-radius: 11px; font-size: 15px; font-family: inherit;
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+    .chip {
+      font-size: 12px; padding: 4px 11px; border-radius: 999px; background: #0f172a;
+      border: 1px solid var(--border); color: #cbd5e1; cursor: pointer;
+    }
+    .chip:hover { border-color: var(--primary); color: #fff; }
+    .results-grid { display: grid; gap: 10px; }
+    .lead-row {
+      background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 13px 16px;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .lead-row:hover { border-color: #3b82f6; }
+    .tag { font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
+    .tag-green { background: rgba(16, 185, 129, 0.16); color: #34d399; }
+    .tag-blue { background: rgba(59, 130, 246, 0.16); color: #93c5fd; }
+
+    /* Features */
+    .section { padding: 44px 0; }
+    .section h2 { text-align: center; font-size: 29px; margin: 0 0 10px; }
+    .section .lead { text-align: center; color: var(--muted); max-width: 680px; margin: 0 auto 32px; }
+    .feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; }
+    .feat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .feat-card h3 { margin: 0 0 8px; font-size: 17px; }
+    .feat-card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    /* Pricing */
+    .price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; margin-top: 22px; }
+    .p-card {
+      background: var(--card); border: 1.5px solid var(--border); border-radius: 18px;
+      padding: 24px; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .p-card.pop { border-color: #3b82f6; background: linear-gradient(180deg, #1e293b 0%, #172554 100%); position: relative; }
+    .p-big { font-size: 36px; font-weight: 800; margin: 8px 0 4px; }
+    .p-card ul { padding-left: 18px; color: #cbd5e1; font-size: 14px; margin: 14px 0 20px; }
+    .p-card li { margin-bottom: 7px; }
+
+    pre.codebox {
+      background: #090d16; border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; overflow-x: auto; font-size: 13px; color: #cbd5e1;
+    }
+    footer { border-top: 1px solid rgba(148, 163, 184, 0.14); padding: 32px 0 48px; margin-top: 40px; color: var(--muted); font-size: 13.5px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <div class="logo-badge">🔔</div>
+        <span>TabPulse · 万站回音</span>
+      </div>
+      <nav class="nav-links">
+        <a href="#scanner" id="nav-scan">免费漏单扫描</a>
+        <a href="#features" id="nav-feat">核心特性</a>
+        <a href="#pricing" id="nav-price">买断与订阅</a>
+        <a href="#mcp">MCP 接入</a>
+        <a href="./llms.txt">llms.txt</a>
+        <button class="btn sm" onclick="toggleSiteLang()" id="lang-btn">English</button>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <span class="eyebrow" id="h-eyebrow">🚀 v0.2.0 原生独立桌面版上线 · 彻底告别绑定谷歌浏览器插件</span>
+      <h1 id="h-title">你不打开平台，客户发来的询盘就永远躺在死角里烂掉。</h1>
+      <p id="h-sub">
+        专为独立开发者、远程外包工作室与一人公司打造的<strong>免浏览器跨平台未读哨兵 + 24h 全网求购雷达</strong>。内置安全登录窗，本机住宅 IP 拟人低频值守电鸭、V2EX、小红书、闲鱼、Upwork、Reddit、X，新消息 1 分钟推到手机。
+      </p>
+      <div class="cta-group">
+        <a class="btn primary" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/TabPulse-v0.2.0-macOS-universal.dmg" id="cta-dl">
+           免费下载 macOS 原生独立版 (.dmg)
+        </a>
+        <a class="btn" href="#pricing" id="cta-buy">💎 查看 ¥168 永久买断方案</a>
+        <a class="btn" href="https://github.com/a3152557994-ship-it/tabpulse" target="_blank" rel="noopener">GitHub &amp; MCP</a>
+      </div>
+      <div style="font-size:12.5px;color:var(--muted);" id="h-trust">
+        支持 Apple Silicon (M1–M4) &amp; Intel · 免注册即开即用（免费盯 2 个平台）· Cookie 100% 留在本机绝不上传云端
+      </div>
+    </section>
+
+    <!-- FREE INTERACTIVE TOOL: 24H MISSED LEAD SCANNER -->
+    <section id="scanner" class="scanner-panel">
+      <div class="scanner-head">
+        <div>
+          <span class="live-dot"></span>
+          <strong style="margin-left:6px;font-size:16px;" id="sc-title">免费在线实测：《过去 24～72 小时全网漏单与求购贴扫描器》</strong>
+        </div>
+        <span style="font-size:12px;color:var(--muted);" id="sc-note">免登录 · 实时直连 Reddit / Hacker News / GitHub 公开需求池</span>
+      </div>
+      <div class="scanner-bar">
+        <input id="kw" value="Shopify" placeholder="输入你接单的手艺或产品关键词，如 Shopify, Python scraper, iOS App, UI Figma..." onkeydown="if(event.key==='Enter')scanNow()" />
+        <button class="btn primary" onclick="scanNow()" id="sc-btn">🔍 立即扫描我漏掉的商机</button>
+      </div>
+      <div class="chip-row">
+        <span class="chip" onclick="pickKw('Shopify')">Shopify 独立站</span>
+        <span class="chip" onclick="pickKw('Python scraper')">Python 爬虫自动化</span>
+        <span class="chip" onclick="pickKw('Next.js MVP')">Next.js / AI 全栈</span>
+        <span class="chip" onclick="pickKw('iOS Swift')">iOS / macOS App</span>
+        <span class="chip" onclick="pickKw('UI Figma')">UI / Landing Page</span>
+        <span class="chip" onclick="pickKw('SEO backlink')">SEO 出海增长</span>
+      </div>
+      <div id="results" class="results-grid"></div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #334155;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;font-size:13px;color:#cbd5e1;">
+        <span id="sc-upsell">💡 公开求购帖只是冰山一角——客户在你电鸭、V2EX、小红书、Upwork、Reddit 后台发的私信更值钱！</span>
+        <a class="btn sm primary" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/TabPulse-v0.2.0-macOS-universal.dmg">下载桌面端开启 24h 自动秒推 →</a>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <h2 id="f-heading">为什么同行做死的痛点，万站回音能稳稳跑通？</h2>
+      <p class="lead" id="f-lead">吸取 Station 重壳浏览器卡死电脑、云端代爬封号的惨痛教训，用极简本地原生架构护住你的账号与订单。</p>
+      <div class="feat-grid">
+        <div class="feat-card">
+          <h3>🖥️ 彻底脱离浏览器捆绑</h3>
+          <p>不管你平时用 Safari、Edge、夸克还是根本不开浏览器，下载双击即可独立运行。点一下卡片内置安全窗口登录一次，小白 3 分钟上手。</p>
+        </div>
+        <div class="feat-card">
+          <h3>🛡️ 住宅 IP + 拟人防封铁律</h3>
+          <p>绝不用云端机房脏 IP 代登你的账号！本机真实网络 ±25% 随机间隔巡检，凌晨 00:00–08:00 自动休眠；小红书/X/Reddit 等红灯平台只拟稿提醒、人工手发，0 封号隐患。</p>
+        </div>
+        <div class="feat-card">
+          <h3>🤖 原生内置 5 大 MCP 工具</h3>
+          <p>无缝接入 Claude Desktop、Cursor 与 Antigravity。你的 AI 干完活自动调用 <code>tabpulse_register_watch</code> 挂上回音哨兵，来信秒唤醒原上下文拟好破冰回复。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="pricing" class="section">
+      <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:8px;">
+        <h2 style="margin:0;" id="p-heading">简单透明的定价 · 抓到 1 单就回本十倍</h2>
+      </div>
+      <div style="display:flex;justify-content:center;gap:8px;margin:14px 0 24px;">
+        <button class="btn sm primary" id="tab-cn" onclick="setMarket('cn')">🇨🇳 国内版（人民币买断推荐）</button>
+        <button class="btn sm" id="tab-gl" onclick="setMarket('gl')">🌍 Global Edition (USD)</button>
+      </div>
+
+      <!-- CN PRICING -->
+      <div id="market-cn" class="price-grid">
+        <div class="p-card">
+          <div>
+            <span class="tag tag-blue">零门槛验血</span>
+            <div class="p-big">¥0 <span style="font-size:14px;font-weight:500;color:var(--muted);">永久免费</span></div>
+            <div style="font-size:13px;color:var(--muted);">免注册直接下载即用</div>
+            <ul>
+              <li>同时静默盯守 <strong>2 个</strong> 自选平台</li>
+              <li>网页与桌面内置 24h 求购扫描器</li>
+              <li>完整开放本地 5 工具 MCP Server</li>
+            </ul>
+          </div>
+          <a class="btn" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/TabPulse-v0.2.0-macOS-universal.dmg">免费下载体验</a>
+        </div>
+
+        <div class="p-card">
+          <div>
+            <span class="tag tag-blue">单年陪跑档</span>
+            <div class="p-big">¥99 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ 年</span></div>
+            <div style="font-size:13px;color:var(--muted);">单次付款 · 到期绝不自动扣费</div>
+            <ul>
+              <li><strong>无限个</strong>跨平台后台与私信盯守</li>
+              <li>一键导入「国内接单包」与「海外美金包」</li>
+              <li>飞书 / Server酱 / Bark / Webhook 手机秒推</li>
+            </ul>
+          </div>
+          <a class="btn" href="mailto:a3152557994@gmail.com?subject=%E8%B4%AD%E4%B9%B0%20TabPulse%20%E5%B9%B4%E5%BA%A6%E7%89%88(%C2%A599)&body=%E4%BD%A0%E5%A5%BD%EF%BC%8C%E6%88%91%E6%83%B3%E8%8E%B7%E5%8F%96%20TabPulse%20%E5%B9%B4%E5%BA%A6%E7%89%88(%C2%A599)%E5%BE%AE%E4%BF%A1/%E6%94%AF%E4%BB%98%E5%AE%9D%E6%94%B6%E6%AC%BE%E7%A0%81%E4%B8%8E%E6%BF%80%E6%B4%BB%E7%A0%81%E3%80%82">联系秒发年度激活码</a>
+        </div>
+
+        <div class="p-card pop">
+          <div>
+            <span class="tag tag-green">🔥 85% 独立接单者首选 · 一次买断</span>
+            <div class="p-big">¥168 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ 永久买断</span></div>
+            <div style="font-size:13px;color:#93c5fd;font-weight:700;">仅比年付多 ¥69 · 永久拥有 · 支持 2 台电脑</div>
+            <ul>
+              <li><strong>包含年度版全部无限平台 + 手机秒推能力</strong></li>
+              <li>含 1 年新平台适配规则更新</li>
+              <li>🎁 <strong>白送赠品</strong>：《高成交率外包与商务破冰话术库（中英 AI 提示词版）》</li>
+              <li>🛡️ <strong>14 天铁血承诺</strong>：14 天内没帮你抓到任何真实商机或回复，邮件一句话全额退款！</li>
+            </ul>
+          </div>
+          <a class="btn primary" href="mailto:a3152557994@gmail.com?subject=%E8%B4%AD%E4%B9%B0%20TabPulse%20%E7%BB%88%E8%BA%AB%E4%B9%B0%E6%96%AD%E7%89%88(%C2%A5168)&body=%E4%BD%A0%E5%A5%BD%EF%BC%8C%E8%AF%B7%E5%8F%91%E6%88%91%20TabPulse%20%E7%BB%88%E8%BA%AB%E4%B9%B0%E6%96%AD%E7%89%88(%C2%A5168)%E5%BE%AE%E4%BF%A1/%E6%94%AF%E4%BB%98%E5%AE%9D%E7%A0%81%E6%88%96%E9%97%B2%E9%B1%BC%E8%87%AA%E5%8A%A8%E5%8F%91%E8%B4%A7%E5%8F%A3%E4%BB%A4%EF%BC%81">立即获取 ¥168 买断激活码 →</a>
+        </div>
+      </div>
+
+      <!-- GLOBAL PRICING -->
+      <div id="market-gl" class="price-grid" style="display:none;">
+        <div class="p-card">
+          <div>
+            <span class="tag tag-blue">Pro Subscription</span>
+            <div class="p-big">$19 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ mo</span></div>
+            <div style="font-size:13px;color:var(--muted);">Billed $228/yr (or $29/mo monthly)</div>
+            <ul>
+              <li><strong>Unlimited</strong> private inboxes &amp; community feeds</li>
+              <li>Instant Slack, Telegram, Discord &amp; Webhook alerts</li>
+              <li>Full 5-tool MCP integration for Claude &amp; Cursor</li>
+            </ul>
+          </div>
+          <a class="btn" href="mailto:a3152557994@gmail.com?subject=TabPulse%20Pro%20Subscription%20License&body=Hi!%20I'd%20like%20to%20activate%20TabPulse%20Pro%20($19/mo%20annual%20or%20$29/mo).">Get Pro License →</a>
+        </div>
+
+        <div class="p-card pop">
+          <div>
+            <span class="tag tag-green">🔥 Indie Favorite · Pay Once</span>
+            <div class="p-big">$69 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ Lifetime</span></div>
+            <div style="font-size:13px;color:#93c5fd;font-weight:700;">Own Desktop Pro forever · 2 Macs · Zero subscription</div>
+            <ul>
+              <li><strong>Unlimited local WebKit inbox sentinel (0 Chrome needed)</strong></li>
+              <li>1 year of platform selector &amp; rule updates</li>
+              <li>🎁 <strong>Free Bonus</strong>: High-Converting Cold Reply Playbook</li>
+              <li>🛡️ <strong>14-Day Zero-Lead Guarantee</strong>: Catch at least 1 real reply/lead or 100% refund</li>
+            </ul>
+          </div>
+          <a class="btn primary" href="mailto:a3152557994@gmail.com?subject=Buy%20TabPulse%20Lifetime%20Desktop%20($69)&body=Hi!%20Send%20me%20the%20checkout%20link%20for%20TabPulse%20Lifetime%20Desktop%20($69)%20+%20Cold%20Reply%20Playbook.">Buy Lifetime Desktop ($69) →</a>
+        </div>
+
+        <div class="p-card">
+          <div>
+            <span class="tag tag-blue">Agency Multi-Account</span>
+            <div class="p-big">$79 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ mo</span></div>
+            <div style="font-size:13px;color:var(--muted);">For outbound &amp; dev agencies</div>
+            <ul>
+              <li>Multiple isolated accounts per platform</li>
+              <li>Team webhook routing &amp; client SLA tracking</li>
+              <li>30% Affiliate Partner revenue share access</li>
+            </ul>
+          </div>
+          <a class="btn" href="mailto:a3152557994@gmail.com?subject=TabPulse%20Agency%20Plan%20($79/mo)">Contact for Agency →</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="mcp" class="section">
+      <h2>一行配置接入 Claude / Cursor / Antigravity MCP</h2>
+      <p class="lead">让你的 AI 编程与业务助手直接拥有「实时扫描全球求购帖」与「自动挂哨盯客户回信」超能力。</p>
+      <pre class="codebox">{
+  "mcpServers": {
+    "tabpulse": {
+      "command": "npx",
+      "args": ["-y", "github:a3152557994-ship-it/tabpulse"]
+    }
+  }
+}</pre>
+    </section>
+
+    <section class="section">
+      <h2>实战指南与方案对比</h2>
+      <div class="feat-grid">
+        <a class="feat-card" href="./guides/upwork-rss-alternative.html">
+          <h3>Upwork 关停 RSS 后怎么秒收新单与消息提醒？（2026 防封方案）→</h3>
+          <p>对比云端爬虫与本地原生 WebKit 哨兵的真实成交率与账号安全性。</p>
+        </a>
+        <a class="feat-card" href="./guides/reddit-hackernews-lead-monitor.html">
+          <h3>F5Bot vs Syften vs TabPulse：独立开发者怎么盯 Reddit 与 HN 求购帖？→</h3>
+          <p>为什么光盯公开关键词不够，必须把已登录私信收件箱合一？</p>
+        </a>
+        <a class="feat-card" href="./guides/eleduck-v2ex-xiaohongshu-monitor.html">
+          <h3>一人公司防漏单指南：免开浏览器同时盯住电鸭、V2EX、小红书与闲鱼 →</h3>
+          <p>3 分钟搭好不串号、不封号的跨平台客户回音壁。</p>
+        </a>
+      </div>
+    </section>
+
+    <footer>
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;">
+        <div>© 2026 TabPulse (万站回音) · Built for AI-First Freelancers, Agencies &amp; Indie Founders.</div>
+        <div style="display:flex;gap:16px;">
+          <a href="./llms.txt">llms.txt (AI Agents)</a>
+          <a href="./sitemap.xml">Sitemap</a>
+          <a href="https://github.com/a3152557994-ship-it/tabpulse">GitHub</a>
+          <a href="mailto:a3152557994@gmail.com">Support &amp; 30% Affiliate</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    let siteLang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+
+    function applySiteLang() {
+      const en = siteLang === "en";
+      document.getElementById("lang-btn").textContent = en ? "中文" : "English";
+      document.getElementById("h-eyebrow").textContent = en
+        ? "🚀 v0.2.0 Native macOS App Live · Zero Browser Extension Required"
+        : "🚀 v0.2.0 原生独立桌面版上线 · 彻底告别绑定谷歌浏览器插件";
+      document.getElementById("h-title").textContent = en
+        ? "Every Hour a Buyer Reply Sits Unseen in a Closed Tab, Your Close Rate Drops 50%."
+        : "你不打开平台，客户发来的询盘就永远躺在死角里烂掉。";
+      document.getElementById("h-sub").innerHTML = en
+        ? "The <strong>browser-independent unread inbox sentinel &amp; live 24h buyer-intent radar</strong> for freelancers, agencies, and indie founders. Log in once inside our native WebKit window — get instant mobile alerts from Reddit, Upwork, HN, X, GitHub &amp; niche portals without cloud-IP ban risk."
+        : "专为独立开发者、远程外包工作室与一人公司打造的<strong>免浏览器跨平台未读哨兵 + 24h 全网求购雷达</strong>。内置安全登录窗，本机住宅 IP 拟人低频值守电鸭、V2EX、小红书、闲鱼、Upwork、Reddit、X，新消息 1 分钟推到手机。";
+      document.getElementById("cta-dl").textContent = en
+        ? " Download Free for macOS (.dmg)"
+        : " 免费下载 macOS 原生独立版 (.dmg)";
+      document.getElementById("cta-buy").textContent = en
+        ? "💎 Get Lifetime Pro ($69)"
+        : "💎 查看 ¥168 永久买断方案";
+      document.getElementById("sc-title").textContent = en
+        ? "Free Live Tool: Last 24–72h Missed Buyer-Intent Lead Scanner"
+        : "免费在线实测：《过去 24～72 小时全网漏单与求购贴扫描器》";
+      document.getElementById("sc-btn").textContent = en ? "🔍 Scan Live Buyer Leads" : "🔍 立即扫描我漏掉的商机";
+      setMarket(en ? "gl" : "cn");
+    }
+
+    function toggleSiteLang() {
+      siteLang = siteLang === "zh" ? "en" : "zh";
+      applySiteLang();
+    }
+
+    function setMarket(m) {
+      document.getElementById("market-cn").style.display = m === "cn" ? "grid" : "none";
+      document.getElementById("market-gl").style.display = m === "gl" ? "grid" : "none";
+      document.getElementById("tab-cn").classList.toggle("primary", m === "cn");
+      document.getElementById("tab-gl").classList.toggle("primary", m === "gl");
+    }
+
+    function pickKw(val) {
+      document.getElementById("kw").value = val;
+      scanNow();
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    async function scanNow() {
+      const q = document.getElementById("kw").value.trim() || "Shopify";
+      const box = document.getElementById("results");
+      box.innerHTML = `<div class="lead-row"><span>⏳ Scanning Reddit, Hacker News &amp; GitHub live for <strong>${esc(q)}</strong> buyer-intent posts...</span></div>`;
+      const hasZh = /[\u4e00-\u9fa5]/.test(q);
+      const rq = encodeURIComponent(hasZh ? q + " 外包" : q + " hiring freelance");
+      const hq = encodeURIComponent(hasZh ? q : q + " hiring freelance");
+      const gq = encodeURIComponent(hasZh ? `${q} (外包 OR 远程 OR 兼职) in:title,body` : `${q} (hiring OR freelance OR paid OR bounty) in:title,body`);
+
+      const [rRes, hRes, gRes] = await Promise.allSettled([
+        fetch(`https://api.pullpush.io/reddit/search/submission/?q=${rq}&size=4&sort=desc`).then((r) => r.json()),
+        fetch(`https://hn.algolia.com/api/v1/search_by_date?query=${hq}&tags=(story,comment)&hitsPerPage=4`).then((r) => r.json()),
+        fetch(`https://api.github.com/search/issues?q=${gq}&sort=created&order=desc&per_page=4`).then((r) => r.json()),
+      ]);
+
+      const items = [];
+      if (rRes.status === "fulfilled" && Array.isArray(rRes.value?.data)) {
+        for (const d of rRes.value.data) {
+          if (!d.title) continue;
+          items.push({
+            src: "Reddit r/" + (d.subreddit || "all"),
+            title: d.title,
+            url: d.permalink ? "https://www.reddit.com" + d.permalink : "https://www.reddit.com",
+            ts: (d.created_utc || 0) * 1000,
+          });
+        }
+      }
+      if (hRes.status === "fulfilled" && Array.isArray(hRes.value?.hits)) {
+        for (const h of hRes.value.hits) {
+          items.push({
+            src: "Hacker News",
+            title: h.title || h.story_title || "HN Hiring Thread",
+            url: "https://news.ycombinator.com/item?id=" + h.objectID,
+            ts: (h.created_at_i || 0) * 1000,
+          });
+        }
+      }
+      if (gRes.status === "fulfilled" && Array.isArray(gRes.value?.items)) {
+        for (const g of gRes.value.items) {
+          items.push({
+            src: "GitHub Bounty/Issue",
+            title: g.title,
+            url: g.html_url,
+            ts: new Date(g.created_at).getTime(),
+          });
+        }
+      }
+
+      items.sort((a, b) => b.ts - a.ts);
+      const top = items.slice(0, 7);
+      if (!top.length) {
+        box.innerHTML = `<div class="lead-row"><span>未找到最近实时匹配，建议试试英文技术词如 Shopify, Python, React, iOS。</span></div>`;
+        return;
+      }
+      box.innerHTML = top.map((it) => {
+        const hoursAgo = Math.max(1, Math.round((Date.now() - it.ts) / 3600000));
+        const ageLabel = hoursAgo < 48 ? `${hoursAgo}h ago` : `${Math.round(hoursAgo / 24)}d ago`;
+        return `
+          <div class="lead-row">
+            <div style="max-width:760px;">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:3px;">
+                <span class="tag tag-green">High Intent</span>
+                <span class="tag tag-blue">${esc(it.src)}</span>
+                <span style="font-size:12px;color:var(--muted);">${ageLabel}</span>
+              </div>
+              <a href="${esc(it.url)}" target="_blank" rel="noopener" style="font-weight:700;font-size:14.5px;color:#f8fafc;">${esc(it.title)}</a>
+            </div>
+            <a class="btn sm primary" href="${esc(it.url)}" target="_blank" rel="noopener">Open Thread ↗</a>
+          </div>
+        `;
+      }).join("");
+    }
+
+    applySiteLang();
+    scanNow();
+  </script>
+</body>
+</html>
