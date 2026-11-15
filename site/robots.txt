@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://a3152557994-ship-it.github.io/tabpulse/sitemap.xml

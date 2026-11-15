@@ -1,0 +1,17 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      tabpulsePort:
+        type: number
+        default: 17890
+        description: Local TabPulse Hub port on 127.0.0.1
+  commandFunction: |-
+    (config) => ({
+      command: 'node',
+      args: ['./mcp-server/index.mjs'],
+      env: {
+        TABPULSE_PORT: String(config.tabpulsePort || 17890)
+      }
+    })

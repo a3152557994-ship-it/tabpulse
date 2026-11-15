@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "TabPulse · 万站回音哨兵",
+  "version": "0.1.0",
+  "description": "AI 时代全平台只读未读哨兵：本地真浏览器静默看红点，不破接口不代发，绝不漏掉冷门与主流平台商机。",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "alarms",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "万站回音 · TabPulse"
+  }
+}

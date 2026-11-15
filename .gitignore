@@ -1,0 +1,7 @@
+node_modules/
+data/
+dist/
+release/
+.DS_Store
+*.pem
+*license-keys*

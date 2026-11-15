@@ -1,0 +1,29 @@
+{
+  "name": "tabpulse",
+  "version": "0.2.0",
+  "description": "万站回音 (TabPulse) — Browser-independent native macOS unread inbox sentinel, live 24h buyer-intent lead scanner, and 5-tool MCP server.",
+  "type": "module",
+  "bin": {
+    "tabpulse-mcp": "./mcp-server/index.mjs",
+    "tabpulse-hub": "./hub/server.mjs"
+  },
+  "scripts": {
+    "start": "node ./hub/server.mjs",
+    "mcp": "node ./mcp-server/index.mjs",
+    "build:mac": "bash ./native-mac/build-mac-app.sh",
+    "keygen": "node ./bin/generate-license.mjs",
+    "test": "node --test ./tests/tabpulse.test.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agent",
+    "lead-generation",
+    "unread-aggregator",
+    "freelance",
+    "upwork-alternative",
+    "reddit-monitor",
+    "macos"
+  ],
+  "license": "MIT"
+}
