@@ -86,9 +86,9 @@ final class StandaloneStore {
             return obj
         }
         let initial: [String: Any] = [
-            "version": "0.2.0",
+            "version": "0.3.0",
             "license": NSNull(),
-            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": "zh"],
+            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": "zh", "termsAcceptedAt": NSNull()],
             "watches": [
                 [
                     "id": "v2ex-notifications",
@@ -162,9 +162,9 @@ final class StandaloneStore {
         }
 
         return [
-            "version": "0.2.0",
+            "version": "0.3.0",
             "license": licOut,
-            "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": "zh"],
+            "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": "zh", "termsAcceptedAt": NSNull()],
             "stats": [
                 "total": watches.count,
                 "unreadCount": unreadList.count,
@@ -259,6 +259,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var probeWebView: WKWebView!
     var loginWindow: NSWindow?
     var loginWebView: WKWebView?
+    var liveTabs: [String: WKWebView] = [:]
+    var webViewToWatchId: [ObjectIdentifier: String] = [:]
     var activeLoginWatchId: String?
     var statusItem: NSStatusItem!
     var sentinelTimer: Timer?
@@ -416,52 +418,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func openLoginSheet(urlStr: String, name: String, watchId: String = "") {
         guard let u = URL(string: urlStr) else { return }
         activeLoginWatchId = watchId.isEmpty ? nil : watchId
-        let cfg = WKWebViewConfiguration()
-        cfg.websiteDataStore = .default()
-        let wv = WKWebView(frame: NSRect(x: 0, y: 0, width: 1040, height: 740), configuration: cfg)
-        wv.customUserAgent = probeWebView.customUserAgent
-        wv.uiDelegate = self
-        wv.load(URLRequest(url: u))
+
+        let wv: WKWebView
+        if !watchId.isEmpty, let existing = liveTabs[watchId] {
+            // Wavebox model: reuse live persistent tab with ZERO reload!
+            wv = existing
+        } else {
+            let cfg = WKWebViewConfiguration()
+            cfg.websiteDataStore = .default()
+            cfg.userContentController.add(self, name: "tabpulsePassive")
+            if let obsURL = Bundle.main.url(forResource: "passive-observer", withExtension: "js"),
+               let obsJS = try? String(contentsOf: obsURL, encoding: .utf8) {
+                let us = WKUserScript(source: obsJS, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+                cfg.userContentController.addUserScript(us)
+            }
+            let created = WKWebView(frame: NSRect(x: 0, y: 0, width: 1060, height: 750), configuration: cfg)
+            created.uiDelegate = self
+            created.load(URLRequest(url: u))
+            if !watchId.isEmpty {
+                liveTabs[watchId] = created
+                webViewToWatchId[ObjectIdentifier(created)] = watchId
+            }
+            wv = created
+        }
         loginWebView = wv
 
-        let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1040, height: 740),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        win.center()
-        win.title = "内置安全登录与查看窗 — \(name)（登完直接关窗即可自动恢复后台盯守）"
-        win.isReleasedWhenClosed = false
-        win.delegate = self
-        win.contentView = wv
-        win.makeKeyAndOrderFront(nil)
+        if loginWindow == nil {
+            let win = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1060, height: 750),
+                styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            win.center()
+            win.isReleasedWhenClosed = false
+            win.delegate = self
+            loginWindow = win
+        }
+        loginWindow?.title = "常驻工作台（零刷页防封模式）— \(name)（关窗后后台继续被动收听新消息）"
+        loginWindow?.contentView = wv
+        loginWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        loginWindow = win
     }
 
     func windowWillClose(_ notification: Notification) {
         guard let closedWin = notification.object as? NSWindow, closedWin == loginWindow else { return }
-        if let wid = activeLoginWatchId, !wid.isEmpty {
+        // Keep liveTabs[wid] alive in probeHostWindow backing hierarchy without reloading URL!
+        if let wid = activeLoginWatchId, let liveWV = liveTabs[wid] {
             activeLoginWatchId = nil
-            if useExternalHub, let resURL = URL(string: "http://127.0.0.1:17890/api/watches/\(wid)/resolve") {
-                var req = URLRequest(url: resURL)
-                req.httpMethod = "POST"
-                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                req.httpBody = try? JSONSerialization.data(withJSONObject: ["action": "resume"])
-                URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
-                    DispatchQueue.main.async {
-                        self?.runSilentCheckCycle(forceImmediate: true, targetId: wid)
-                    }
-                }.resume()
-            } else {
-                runSilentCheckCycle(forceImmediate: true, targetId: wid)
-            }
+            probeHostWindow.contentView = liveWV
         }
     }
 
     // MARK: - WKScriptMessageHandler Bridge
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "tabpulsePassive" {
+            guard let srcWV = message.webView,
+                  let wid = webViewToWatchId[ObjectIdentifier(srcWV)],
+                  let payload = message.body as? [String: Any] else { return }
+            let count = (payload["unreadCount"] as? Int) ?? 0
+            let snippet = (payload["snippet"] as? String) ?? ""
+            handlePassiveEvent(watchId: wid, unreadCount: count, snippet: snippet)
+            return
+        }
+
         guard let body = message.body as? [String: Any],
               let action = body["action"] as? String else { return }
 
@@ -542,6 +562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             var st = StandaloneStore.shared.loadState()
             var set = (st["settings"] as? [String: Any]) ?? [:]
             if let wh = payload?["webhookUrl"] as? String { set["webhookUrl"] = wh }
+            if let ta = payload?["termsAcceptedAt"] as? String { set["termsAcceptedAt"] = ta }
             st["settings"] = set
             StandaloneStore.shared.saveState(st)
             replyCallback(reqId, ["ok": true, "settings": set])
@@ -629,6 +650,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let unread = (stats?["unreadMessagesTotal"] as? Int) ?? 0
         DispatchQueue.main.async {
             self.statusItem?.button?.title = unread > 0 ? "🔴 \(unread) 未读" : "🔔 回音"
+        }
+    }
+
+    func handlePassiveEvent(watchId: String, unreadCount: Int, snippet: String) {
+        if useExternalHub, let repURL = URL(string: "http://127.0.0.1:17890/api/report") {
+            var req = URLRequest(url: repURL)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let body: [String: Any] = ["id": watchId, "unreadCount": unreadCount, "snippet": snippet, "authExpired": false]
+            req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+                self?.notifyDashboardProbeDone(id: watchId, name: watchId, unreadCount: unreadCount, authExpired: false)
+            }.resume()
+            DispatchQueue.main.async {
+                if unreadCount > 0 { self.statusItem?.button?.title = "🔴 \(unreadCount) 未读" }
+            }
+        } else {
+            var st = StandaloneStore.shared.loadState()
+            var watches = (st["watches"] as? [[String: Any]]) ?? []
+            if let idx = watches.firstIndex(where: { ($0["id"] as? String) == watchId }) {
+                watches[idx]["lastCheckedAt"] = ISO8601DateFormatter().string(from: Date())
+                if unreadCount > 0 {
+                    watches[idx]["status"] = "unread"
+                    watches[idx]["unreadCount"] = unreadCount
+                    watches[idx]["snippet"] = snippet
+                    NSSound.beep()
+                } else {
+                    watches[idx]["status"] = "idle"
+                    watches[idx]["unreadCount"] = 0
+                }
+                st["watches"] = watches
+                StandaloneStore.shared.saveState(st)
+                updateMenuBadge(from: StandaloneStore.shared.publicSummary())
+                notifyDashboardProbeDone(id: watchId, name: watchId, unreadCount: unreadCount, authExpired: false)
+            }
         }
     }
 

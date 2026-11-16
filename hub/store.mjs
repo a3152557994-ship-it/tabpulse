@@ -18,7 +18,7 @@ export function getDataFilePath() {
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "0.2.0",
+    version: "0.3.0",
     extensionHeartbeatAt: null,
     license: null,
     settings: {
@@ -120,12 +120,14 @@ export function activateLicenseKey(rawKey, nowDate = new Date()) {
 
 export function updateSettings(patch = {}, nowDate = new Date()) {
   const state = loadState(nowDate);
-  const current = state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" };
+  const current = state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh", termsAcceptedAt: null };
   state.settings = {
     webhookUrl: patch.webhookUrl !== undefined ? String(patch.webhookUrl || "").trim() : current.webhookUrl,
     radarKeywords:
       patch.radarKeywords !== undefined ? String(patch.radarKeywords || "").trim() : current.radarKeywords,
     lang: patch.lang === "en" ? "en" : patch.lang === "zh" ? "zh" : current.lang || "zh",
+    termsAcceptedAt:
+      patch.termsAcceptedAt !== undefined ? patch.termsAcceptedAt : (current.termsAcceptedAt || null),
   };
   saveState(state);
   return state.settings;
@@ -266,7 +268,10 @@ export function getDueWatches(nowDate = new Date(), { recordHeartbeat = true, fo
     };
   }
 
-  const active = state.watches.filter((w) => w.status !== "paused" && (force || w.status !== "auth_expired"));
+  // Red-light social platforms use Wavebox-style passive live-tab observation (ZERO automatic cold reloads!)
+  const active = state.watches.filter(
+    (w) => w.status !== "paused" && (force || (w.status !== "auth_expired" && w.publishTier !== "red"))
+  );
   if (force) {
     const sorted = [...active].sort((a, b) => {
       const aLast = a.lastCheckedAt ? new Date(a.lastCheckedAt).getTime() : 0;
@@ -414,7 +419,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "0.2.0",
+    version: "0.3.0",
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),
     settings: state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" },

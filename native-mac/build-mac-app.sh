@@ -6,7 +6,7 @@ DIST_DIR="$PROJECT_ROOT/dist"
 APP_NAME="TabPulse"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 DMG_STAGE="$DIST_DIR/dmg-stage"
-DMG_PATH="$DIST_DIR/TabPulse-v0.2.0-macOS-universal.dmg"
+DMG_PATH="$DIST_DIR/TabPulse-v0.3.0-macOS-universal.dmg"
 
 rm -rf "$APP_BUNDLE" "$DMG_STAGE" "$DMG_PATH"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
@@ -56,6 +56,7 @@ rm -rf "$ICON_TMP"
 echo "[2/5] Bundling UI, probe script, presets, and Info.plist..."
 cp "$PROJECT_ROOT/hub/ui/index.html" "$APP_BUNDLE/Contents/Resources/index.html"
 cp "$PROJECT_ROOT/extension/probe.js" "$APP_BUNDLE/Contents/Resources/probe.js"
+cp "$PROJECT_ROOT/extension/passive-observer.js" "$APP_BUNDLE/Contents/Resources/passive-observer.js"
 cp "$PROJECT_ROOT/docs/cold-reply-playbook.html" "$APP_BUNDLE/Contents/Resources/cold-reply-playbook.html"
 
 /usr/local/bin/node -e '
@@ -86,9 +87,9 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.2.0</string>
+  <string>0.3.0</string>
   <key>CFBundleVersion</key>
-  <string>2</string>
+  <string>3</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
   <key>NSHighResolutionCapable</key>

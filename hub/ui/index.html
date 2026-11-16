@@ -210,7 +210,8 @@
 
       <div class="actions-row">
         <button class="sm" onclick="toggleLang()" id="btn-lang">EN / 中文</button>
-        <button class="sm" onclick="triggerNativeCheckNow()" id="btn-check-now">⚡ 立即巡检</button>
+        <button class="sm" onclick="checkAppUpdate()" id="btn-update">🔄 检查更新</button>
+        <button class="sm" onclick="openFeedback()" id="btn-feedback">💬 反馈/加站</button>
         <button class="sm" onclick="openSettingsModal()">⚙️ 手机推送</button>
         <button class="sm gold" onclick="openPaywallModal()" id="btn-upgrade">💎 激活 / 升级 Pro</button>
         <button class="primary" onclick="openAddModal()" id="btn-add">+ 新增盯守</button>
@@ -397,6 +398,33 @@
     </div>
   </div>
 
+  <!-- MODAL: FIRST-RUN EULA & PRIVACY CONSENT (UNCHECKED BY DEFAULT) -->
+  <div class="modal-backdrop" id="modal-consent">
+    <div class="modal" style="max-width:560px;">
+      <h2>欢迎使用 万站回音 TabPulse · 安全与隐私确认</h2>
+      <p style="font-size:13px;color:#334155;line-height:1.65;">
+        在开始使用前，请确认以下核心机制与使用条款：
+      </p>
+      <ul style="font-size:13px;color:#334155;line-height:1.7;padding-left:20px;margin:8px 0 14px;">
+        <li><strong>零刷页常驻防封架构</strong>：针对小红书、闲鱼、X、Reddit 等严管平台，软件采用与 Safari 浏览器一致的「常驻真实标签被动通知监听」，<strong>绝不后台定时重复刷网页、绝不自动群发消息</strong>。</li>
+        <li><strong>100% 本地隐私存储</strong>：您的所有平台登录态（Cookie）仅保存在您个人电脑本地系统目录中，绝不上传至任何第三方云服务器。</li>
+        <li><strong>合规与责任边界</strong>：本工具仅作本地只读提醒辅助，请遵守各平台社区规则；软件提供 14 天无忧全额退款保障，最高责任上限以您实际支付的软件授权费为限。</li>
+      </ul>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;background:#f8fafc;padding:10px 12px;border-radius:10px;border:1px solid var(--border);">
+        <input type="checkbox" id="consent-checkbox" onchange="document.getElementById('btn-accept-consent').disabled = !this.checked" style="margin-top:3px;width:16px;height:16px;" />
+        <span>
+          我已阅读并同意
+          <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《用户服务与软件许可协议》</a>
+          及
+          <a href="https://a3152557994-ship-it.github.io/tabpulse/privacy.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《隐私政策》</a>
+        </span>
+      </label>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+        <button class="primary" id="btn-accept-consent" disabled onclick="acceptTermsConsent()">同意并进入万站回音</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -451,6 +479,9 @@
         ]);
         if (st && Array.isArray(st.watches)) appState = st;
         if (pr && Array.isArray(pr.packs)) presetPacks = pr.packs;
+        if (!appState.settings || !appState.settings.termsAcceptedAt) {
+          document.getElementById("modal-consent").classList.add("open");
+        }
         renderAll();
       } catch (e) {
         console.error(e);
@@ -631,10 +662,10 @@
           ${list.map((w) => {
             const cls = w.status === "unread" ? "is-unread" : w.status === "auth_expired" ? "is-auth" : w.status === "paused" ? "is-paused" : "";
             const tierBadge = w.publishTier === "red"
-              ? `<span class="badge badge-red">红灯手发</span>`
+              ? `<span class="badge badge-green">🛡️ 零刷页常驻监听</span>`
               : w.publishTier === "green"
-                ? `<span class="badge badge-green">绿灯后台</span>`
-                : `<span class="badge badge-amber">黄灯辅助</span>`;
+                ? `<span class="badge badge-slate">绿灯后台</span>`
+                : `<span class="badge badge-amber">温和看护</span>`;
             const statusText = w.status === "unread"
               ? `🔴 ${w.unreadCount} 条未读`
               : w.status === "auth_expired"
@@ -660,9 +691,9 @@
                 </div>
                 <div class="card-foot">
                   <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}')">
-                    ${isNativeApp ? "🔓 内置登录/查看" : "↗ 打开网页"}
+                    ${isNativeApp ? "🔓 打开常驻工作台" : "↗ 打开网页"}
                   </button>
-                  <button class="sm" onclick="triggerNativeCheckNow('${escapeAttr(w.id)}', '${escapeAttr(w.name)}')">⚡ 测一下</button>
+                  ${w.publishTier !== "red" ? `<button class="sm" onclick="triggerNativeCheckNow('${escapeAttr(w.id)}', '${escapeAttr(w.name)}')">⚡ 测一下</button>` : ""}
                   ${w.status === "paused"
                     ? `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','resume')">▶ 恢复</button>`
                     : `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','pause')">⏸ 暂停</button>`
@@ -826,6 +857,41 @@
       closeModals();
       await refreshState();
       showToast("手机推送 Webhook 已保存！");
+    }
+
+    async function acceptTermsConsent() {
+      const box = document.getElementById("consent-checkbox");
+      if (!box || !box.checked) return;
+      await apiCall("POST", "/api/settings", { termsAcceptedAt: new Date().toISOString() });
+      document.getElementById("modal-consent").classList.remove("open");
+      await refreshState();
+      showToast("✓ 已确认安全与隐私条款");
+    }
+
+    async function checkAppUpdate() {
+      const currentVer = appState.version || "0.3.0";
+      showToast("正在检查最新版本...");
+      try {
+        const res = await fetch("https://a3152557994-ship-it.github.io/tabpulse/version.json?t=" + Date.now());
+        const info = await res.json();
+        if (info.latestVersion && info.latestVersion !== currentVer) {
+          if (confirm(`发现新版本 v${info.latestVersion}！\n\n更新内容：${info.notesZh || ""}\n\n是否立即下载更新？`)) {
+            window.open(info.downloadUrl, "_blank");
+          }
+        } else {
+          showToast(`🟢 当前已是最新版本 v${currentVer}`);
+        }
+      } catch {
+        showToast(`当前版本 v${currentVer}（离线运行正常）`);
+      }
+    }
+
+    function openFeedback() {
+      window.open(
+        "mailto:a3152557994@gmail.com?subject=" + encodeURIComponent("TabPulse 使用反馈 / 申请适配新平台") +
+        "&body=" + encodeURIComponent("我想反馈的问题或希望新增适配的平台网址：\n1. "),
+        "_blank"
+      );
     }
 
     function openPlaybook() {

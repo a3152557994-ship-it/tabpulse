@@ -1,6 +1,6 @@
 {
   "name": "tabpulse",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "万站回音 (TabPulse) — Browser-independent native macOS unread inbox sentinel, live 24h buyer-intent lead scanner, and 5-tool MCP server.",
   "type": "module",
   "bin": {

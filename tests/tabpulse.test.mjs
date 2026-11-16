@@ -126,7 +126,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
     assert.ok((await llmsRes.text()).includes("tabpulse_scan_buyer_leads"));
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
-    assert.deepEqual(health, { ok: true, version: "0.2.0" });
+    assert.deepEqual(health, { ok: true, version: "0.3.0" });
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -235,7 +235,7 @@ test("Native Universal macOS binary passes --self-test and Chrome MV3 extension 
     assert.ok(out.includes("SELFTEST_OK"));
   }
 
-  for (const rel of ["extension/background.js", "extension/probe.js", "extension/popup.js"]) {
+  for (const rel of ["extension/background.js", "extension/probe.js", "extension/passive-observer.js", "extension/popup.js"]) {
     execFileSync(process.execPath, ["--check", path.join(PROJECT_ROOT, rel)]);
   }
 });
