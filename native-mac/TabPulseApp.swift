@@ -255,6 +255,7 @@ final class NativeLeadScanner {
 final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
     var mainWindow: NSWindow!
     var dashboardWebView: WKWebView!
+    var probeHostWindow: NSWindow!
     var probeWebView: WKWebView!
     var loginWindow: NSWindow?
     var loginWebView: WKWebView?
@@ -343,8 +344,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .default()
         probeWebView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: cfg)
-        probeWebView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15"
         probeWebView.navigationDelegate = self
+        // Host inside a real backing NSWindow so window.outerWidth/outerHeight match normal Safari window metrics
+        probeHostWindow = NSWindow(
+            contentRect: NSRect(x: -10000, y: -10000, width: 1280, height: 800),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: true
+        )
+        probeHostWindow.isReleasedWhenClosed = false
+        probeHostWindow.contentView = probeWebView
     }
 
     func detectHubAndLoadDashboard() {

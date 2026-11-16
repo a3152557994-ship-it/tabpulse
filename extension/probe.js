@@ -13,7 +13,48 @@
     return rect.width > 0 && rect.height > 0;
   }
 
-  // 1. Detect login redirect or prominent login gate (never try to bypass auth)
+  // 1. Hard Circuit Breaker: Detect ANY anti-bot / slider captcha / challenge page -> Trip immediately & NEVER retry!
+  const captchaSelectors = [
+    "#nc_1_wrapper",
+    ".nc-container",
+    ".baxia-dialog",
+    "#baxia-dialog-content",
+    ".secsdk-captcha-drag-icon",
+    "#captcha-verify-image",
+    ".cf-turnstile",
+    "#challenge-running",
+    "#challenge-form",
+    ".g-recaptcha",
+    ".h-captcha",
+    '[id*="captcha" i]',
+  ];
+  const hasVisibleCaptchaNode = captchaSelectors.some((sel) => {
+    try {
+      return Array.from(document.querySelectorAll(sel)).some((el) => isVisible(el));
+    } catch {
+      return false;
+    }
+  });
+  const bodySample = ((document.body && document.body.innerText) || "").slice(0, 1200);
+  const challengeTitlePattern = /(安全验证|滑动验证|人机验证|访问验证|验证码拦截|Just a moment|Attention Required|Verify you are human|Security Check)/i;
+  const challengeBodyPattern = /(请拖动滑块|完成安全验证|访问过于频繁|异常访问|Verify you are human|Checking your browser before accessing)/i;
+  const challengeDetected =
+    hasVisibleCaptchaNode ||
+    challengeTitlePattern.test(title) ||
+    (bodySample.length < 500 && challengeBodyPattern.test(bodySample));
+
+  if (challengeDetected) {
+    return {
+      unreadCount: 0,
+      snippet: "检测到平台安全验证/滑块，防封保险丝已自动熔断停检",
+      authExpired: true,
+      challengeDetected: true,
+      pageTitle: title,
+      url: href,
+    };
+  }
+
+  // 1b. Detect login redirect or prominent login gate (never try to bypass auth)
   const passwordInput = document.querySelector('input[type="password"]');
   const loginPathPattern = /\/(login|signin|sign-in|passport|sso|i\/flow\/login)/i;
   const loginTitlePattern = /^(登录|Sign in|Log in|会员登录|用户登录)/i;

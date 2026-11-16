@@ -139,7 +139,8 @@ export function updateSettings(patch = {}, nowDate = new Date()) {
  */
 export function computeNextCheck(item, nowDate = new Date(), randomFn = Math.random) {
   const nowMs = nowDate instanceof Date ? nowDate.getTime() : new Date(nowDate).getTime();
-  let intervalMinutes = Math.max(5, Number(item.baseIntervalMinutes) || 60);
+  const minFloor = item.publishTier === "red" ? 60 : 15;
+  let intervalMinutes = Math.max(minFloor, Number(item.baseIntervalMinutes) || 60);
 
   const createdMs = item.createdAt ? new Date(item.createdAt).getTime() : nowMs;
   const ageMs = Number.isFinite(createdMs) ? nowMs - createdMs : 0;
