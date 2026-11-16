@@ -252,15 +252,18 @@ final class NativeLeadScanner {
 }
 
 // MARK: - Main App Delegate (Window + Menu Bar + Silent WebKit Probe)
-final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
     var mainWindow: NSWindow!
     var dashboardWebView: WKWebView!
     var probeWebView: WKWebView!
     var loginWindow: NSWindow?
+    var loginWebView: WKWebView?
+    var activeLoginWatchId: String?
     var statusItem: NSStatusItem!
     var sentinelTimer: Timer?
     var useExternalHub = false
     var currentProbeTargetId: String?
+    var currentProbeTargetName: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMainMenu()
@@ -321,6 +324,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         cfg.userContentController.add(self, name: "tabpulse")
 
         dashboardWebView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1180, height: 780), configuration: cfg)
+        dashboardWebView.uiDelegate = self
         mainWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1180, height: 780),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -384,26 +388,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         runSilentCheckCycle(forceImmediate: true)
     }
 
-    func openLoginSheet(urlStr: String, name: String) {
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        guard let targetURL = navigationAction.request.url else { return nil }
+        // Inside login window: load OAuth / SSO popup in place so session cookies stay connected
+        if webView == loginWebView {
+            loginWebView?.load(URLRequest(url: targetURL))
+            return nil
+        }
+        // Inside dashboard: local bonus playbook opens in built-in sheet; external links open in system browser
+        if targetURL.host == "127.0.0.1" || targetURL.host == "localhost" || targetURL.isFileURL {
+            openLoginSheet(urlStr: targetURL.absoluteString, name: "万站回音", watchId: "")
+        } else {
+            NSWorkspace.shared.open(targetURL)
+        }
+        return nil
+    }
+
+    func openLoginSheet(urlStr: String, name: String, watchId: String = "") {
         guard let u = URL(string: urlStr) else { return }
+        activeLoginWatchId = watchId.isEmpty ? nil : watchId
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .default()
-        let wv = WKWebView(frame: NSRect(x: 0, y: 0, width: 1020, height: 720), configuration: cfg)
+        let wv = WKWebView(frame: NSRect(x: 0, y: 0, width: 1040, height: 740), configuration: cfg)
         wv.customUserAgent = probeWebView.customUserAgent
+        wv.uiDelegate = self
         wv.load(URLRequest(url: u))
+        loginWebView = wv
 
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1020, height: 720),
+            contentRect: NSRect(x: 0, y: 0, width: 1040, height: 740),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         win.center()
-        win.title = "内置安全登录与回复窗 — \(name)（登录态仅保存在你本机）"
+        win.title = "内置安全登录与查看窗 — \(name)（登完直接关窗即可自动恢复后台盯守）"
         win.isReleasedWhenClosed = false
+        win.delegate = self
         win.contentView = wv
         win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         loginWindow = win
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let closedWin = notification.object as? NSWindow, closedWin == loginWindow else { return }
+        if let wid = activeLoginWatchId, !wid.isEmpty {
+            activeLoginWatchId = nil
+            if useExternalHub, let resURL = URL(string: "http://127.0.0.1:17890/api/watches/\(wid)/resolve") {
+                var req = URLRequest(url: resURL)
+                req.httpMethod = "POST"
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.httpBody = try? JSONSerialization.data(withJSONObject: ["action": "resume"])
+                URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+                    DispatchQueue.main.async {
+                        self?.runSilentCheckCycle(forceImmediate: true, targetId: wid)
+                    }
+                }.resume()
+            } else {
+                runSilentCheckCycle(forceImmediate: true, targetId: wid)
+            }
+        }
     }
 
     // MARK: - WKScriptMessageHandler Bridge
@@ -414,16 +459,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if action == "openLoginSheet" {
             let url = (body["url"] as? String) ?? ""
             let name = (body["name"] as? String) ?? "平台"
-            openLoginSheet(urlStr: url, name: name)
+            let id = (body["id"] as? String) ?? ""
+            openLoginSheet(urlStr: url, name: name, watchId: id)
             return
         }
         if action == "checkNow" {
-            runSilentCheckCycle(forceImmediate: true)
+            let tid = (body["targetId"] as? String) ?? ""
+            runSilentCheckCycle(forceImmediate: true, targetId: tid)
             return
         }
         if action == "openPlaybook" {
             if let u = Bundle.main.url(forResource: "cold-reply-playbook", withExtension: "html") {
-                openLoginSheet(urlStr: u.absoluteString, name: "高成交率破冰话术库")
+                openLoginSheet(urlStr: u.absoluteString, name: "高成交率破冰话术库", watchId: "")
             }
             return
         }
@@ -577,7 +624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     // MARK: - Silent Background WebKit Sentinel
-    func runSilentCheckCycle(forceImmediate: Bool = false) {
+    func runSilentCheckCycle(forceImmediate: Bool = false, targetId: String = "") {
         guard currentProbeTargetId == nil else { return }
         if !forceImmediate {
             let hour = Calendar.current.component(.hour, from: Date())
@@ -585,7 +632,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
 
         if useExternalHub {
-            guard let dueURL = URL(string: "http://127.0.0.1:17890/api/due") else { return }
+            var q = forceImmediate ? "?force=1" : ""
+            if !targetId.isEmpty {
+                let enc = targetId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? targetId
+                q = "?force=1&id=\(enc)"
+            }
+            guard let dueURL = URL(string: "http://127.0.0.1:17890/api/due\(q)") else { return }
             URLSession.shared.dataTask(with: dueURL) { [weak self] data, _, _ in
                 guard let d = data,
                       let obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any],
@@ -594,8 +646,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                       let id = first["id"] as? String,
                       let urlStr = first["url"] as? String,
                       let targetURL = URL(string: urlStr) else { return }
+                let name = (first["name"] as? String) ?? id
                 DispatchQueue.main.async {
                     self?.currentProbeTargetId = id
+                    self?.currentProbeTargetName = name
                     self?.probeWebView.load(URLRequest(url: targetURL))
                 }
             }.resume()
@@ -604,14 +658,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let watches = (st["watches"] as? [[String: Any]]) ?? []
             let nowISO = ISO8601DateFormatter().string(from: Date())
             let candidate = watches.first { w in
+                let wid = (w["id"] as? String) ?? ""
+                if !targetId.isEmpty { return wid == targetId }
                 let status = (w["status"] as? String) ?? "idle"
-                if status == "paused" || status == "auth_expired" { return false }
+                if status == "paused" || (!forceImmediate && status == "auth_expired") { return false }
                 if forceImmediate { return true }
                 let next = (w["nextCheckAt"] as? String) ?? ""
                 return next.isEmpty || next <= nowISO
             }
             if let c = candidate, let id = c["id"] as? String, let uStr = c["url"] as? String, let u = URL(string: uStr) {
                 currentProbeTargetId = id
+                currentProbeTargetName = (c["name"] as? String) ?? id
                 probeWebView.load(URLRequest(url: u))
             }
         }
@@ -619,24 +676,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard webView == probeWebView, let targetId = currentProbeTargetId else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.8) { [weak self] in
             self?.extractUnreadFromProbe(targetId: targetId)
         }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        if webView == probeWebView { currentProbeTargetId = nil }
+        if webView == probeWebView {
+            currentProbeTargetId = nil
+            currentProbeTargetName = nil
+        }
+    }
+
+    func notifyDashboardProbeDone(id: String, name: String, unreadCount: Int, authExpired: Bool) {
+        let info: [String: Any] = [
+            "id": id,
+            "name": name,
+            "unreadCount": unreadCount,
+            "authExpired": authExpired
+        ]
+        if let d = try? JSONSerialization.data(withJSONObject: info),
+           let s = String(data: d, encoding: .utf8) {
+            DispatchQueue.main.async {
+                self.dashboardWebView.evaluateJavaScript("if(window.__onNativeProbeFinished) window.__onNativeProbeFinished(\(s));", completionHandler: nil)
+            }
+        }
     }
 
     func extractUnreadFromProbe(targetId: String) {
+        let targetName = currentProbeTargetName ?? targetId
         guard let probeURL = Bundle.main.url(forResource: "probe", withExtension: "js"),
               let js = try? String(contentsOf: probeURL, encoding: .utf8) else {
             currentProbeTargetId = nil
+            currentProbeTargetName = nil
             return
         }
         probeWebView.evaluateJavaScript(js) { [weak self] res, _ in
             guard let self = self else { return }
-            defer { self.currentProbeTargetId = nil }
+            defer {
+                self.currentProbeTargetId = nil
+                self.currentProbeTargetName = nil
+            }
             guard let report = res as? [String: Any] else { return }
             let unreadCount = (report["unreadCount"] as? Int) ?? 0
             let authExpired = (report["authExpired"] as? Bool) ?? false
@@ -649,14 +729,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 var body = report
                 body["id"] = targetId
                 req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-                URLSession.shared.dataTask(with: req).resume()
-                if unreadCount > 0 { self.statusItem?.button?.title = "🔴 \(unreadCount) 未读" }
+                URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+                    self?.notifyDashboardProbeDone(id: targetId, name: targetName, unreadCount: unreadCount, authExpired: authExpired)
+                }.resume()
+                DispatchQueue.main.async {
+                    if unreadCount > 0 { self.statusItem?.button?.title = "🔴 \(unreadCount) 未读" }
+                }
             } else {
                 var st = StandaloneStore.shared.loadState()
                 var watches = (st["watches"] as? [[String: Any]]) ?? []
                 if let idx = watches.firstIndex(where: { ($0["id"] as? String) == targetId }) {
                     let mins = (watches[idx]["baseIntervalMinutes"] as? Int) ?? 60
                     watches[idx]["nextCheckAt"] = StandaloneStore.shared.computeNextCheckISO(baseMinutes: mins)
+                    watches[idx]["lastCheckedAt"] = ISO8601DateFormatter().string(from: Date())
                     if authExpired {
                         watches[idx]["status"] = "auth_expired"
                     } else if unreadCount > 0 {
@@ -671,6 +756,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     st["watches"] = watches
                     StandaloneStore.shared.saveState(st)
                     self.updateMenuBadge(from: StandaloneStore.shared.publicSummary())
+                    self.notifyDashboardProbeDone(id: targetId, name: targetName, unreadCount: unreadCount, authExpired: authExpired)
                 }
             }
         }

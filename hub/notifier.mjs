@@ -82,7 +82,22 @@ export async function notifyUnread(item, settings = {}) {
     return { skipped: true, reason: "TABPULSE_DISABLE_EXTERNAL_EFFECTS=1" };
   }
 
-  const result = { notify: null, agent: null, webhook: null };
+  const result = { notify: null, macBanner: null, agent: null, webhook: null };
+
+  if (process.platform === "darwin" && fs.existsSync("/usr/bin/osascript")) {
+    try {
+      const safeTitle = `万站回音：${item.name} (${item.unreadCount}条未读)`.replace(/"/g, "'");
+      const safeSub = (item.snippet || item.contextSummary || "点击菜单栏「回音」一键查看回复").slice(0, 80).replace(/"/g, "'");
+      await execFileAsync(
+        "/usr/bin/osascript",
+        ["-e", `display notification "${safeSub}" with title "${safeTitle}" sound name "Glass"`],
+        { timeout: 5000 }
+      );
+      result.macBanner = "shown";
+    } catch (err) {
+      result.macBannerError = err.message;
+    }
+  }
 
   if (settings?.webhookUrl) {
     result.webhook = await sendCustomerWebhook(settings.webhookUrl, subject, body);

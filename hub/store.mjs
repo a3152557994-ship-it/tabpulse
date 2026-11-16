@@ -248,7 +248,7 @@ export function upsertWatch(input, nowDate = new Date()) {
   return { watch: newWatch, created: true };
 }
 
-export function getDueWatches(nowDate = new Date(), { recordHeartbeat = true } = {}) {
+export function getDueWatches(nowDate = new Date(), { recordHeartbeat = true, force = false, targetId = "" } = {}) {
   const state = loadState(nowDate);
   const nowMs = nowDate.getTime();
   if (recordHeartbeat) {
@@ -256,7 +256,29 @@ export function getDueWatches(nowDate = new Date(), { recordHeartbeat = true } =
     saveState(state);
   }
 
-  const active = state.watches.filter((w) => w.status !== "paused" && w.status !== "auth_expired");
+  if (targetId) {
+    const exact = state.watches.filter((w) => w.id === targetId);
+    return {
+      due: exact,
+      pendingDueCount: exact.length,
+      extensionHeartbeatAt: state.extensionHeartbeatAt,
+    };
+  }
+
+  const active = state.watches.filter((w) => w.status !== "paused" && (force || w.status !== "auth_expired"));
+  if (force) {
+    const sorted = [...active].sort((a, b) => {
+      const aLast = a.lastCheckedAt ? new Date(a.lastCheckedAt).getTime() : 0;
+      const bLast = b.lastCheckedAt ? new Date(b.lastCheckedAt).getTime() : 0;
+      return aLast - bLast;
+    });
+    return {
+      due: sorted.slice(0, 1),
+      pendingDueCount: sorted.length,
+      extensionHeartbeatAt: state.extensionHeartbeatAt,
+    };
+  }
+
   const pinned = active.filter((w) => w.mode === "pinned");
   const dueLowFreq = active
     .filter((w) => w.mode !== "pinned")

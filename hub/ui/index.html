@@ -530,23 +530,39 @@
       showToast(currentLang === "en" ? "Preset pack imported!" : "已成功导入整套盯守包！");
     }
 
-    function openSiteLogin(url, name) {
+    function openSiteLogin(url, name, id = "") {
       if (isNativeApp) {
-        nativePost("openLoginSheet", { url, name });
+        nativePost("openLoginSheet", { url, name, id });
       } else {
         window.open(url, "_blank", "noopener");
       }
     }
 
-    function triggerNativeCheckNow() {
+    function triggerNativeCheckNow(targetId = "", targetName = "") {
       if (isNativeApp) {
-        nativePost("checkNow", {});
-        showToast(currentLang === "en" ? "Running silent WebKit check..." : "已触发后台原生 WebKit 静默巡检...");
+        nativePost("checkNow", { targetId, targetName });
+        showToast(
+          targetName
+            ? `⚡ 正在后台静默检测「${targetName}」登录态与未读数（约5秒）...`
+            : (currentLang === "en" ? "Running silent WebKit check..." : "⚡ 正在后台静默巡检下一站点（约5秒）...")
+        );
       } else {
         refreshState();
-        showToast(currentLang === "en" ? "Refreshed hub state" : "已刷新最新哨兵状态");
+        showToast(currentLang === "en" ? "Refreshed hub state" : "已刷新最新哨兵状态（请打开 TabPulse.app 启用免浏览器静默巡检）");
       }
     }
+
+    window.__onNativeProbeFinished = function(info) {
+      refreshState();
+      if (!info) return;
+      if (info.authExpired) {
+        showToast(`🟠「${info.name || info.id}」尚未登录或登录已过期，请点「内置登录」登一次`);
+      } else if (info.unreadCount > 0) {
+        showToast(`🔴 抓到了！「${info.name || info.id}」有 ${info.unreadCount} 条未读消息！`);
+      } else {
+        showToast(`🟢「${info.name || info.id}」巡检正常：当前 0 条新未读`);
+      }
+    };
 
     function renderAlerts() {
       const container = document.getElementById("alerts-section");
@@ -570,7 +586,7 @@
                     </span>
                   </div>
                   <div style="display:flex;gap:6px;">
-                    <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}')">
+                    <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}')">
                       ${isNativeApp ? "🔓 内置窗口打开/回复" : "↗ 打开官方后台"}
                     </button>
                     <button class="sm" onclick="resolveItem('${escapeAttr(w.id)}', '${isAuth ? "resume" : "resolve"}')">
@@ -619,6 +635,16 @@
               : w.publishTier === "green"
                 ? `<span class="badge badge-green">绿灯后台</span>`
                 : `<span class="badge badge-amber">黄灯辅助</span>`;
+            const statusText = w.status === "unread"
+              ? `🔴 ${w.unreadCount} 条未读`
+              : w.status === "auth_expired"
+                ? "🟠 待内置登录一次"
+                : w.status === "paused"
+                  ? "⏸ 已暂停"
+                  : (w.lastCheckedAt ? "🟢 已接通值守" : "⚪ 待首次巡检");
+            const checkedStr = w.lastCheckedAt
+              ? new Date(w.lastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : "尚未检测";
             return `
               <div class="card ${cls}">
                 <div>
@@ -629,13 +655,14 @@
                   <div class="card-meta">${escapeHtml(w.url)}</div>
                   ${w.contextSummary ? `<div style="font-size:12px;color:#334155;margin-bottom:6px;">${escapeHtml(w.contextSummary)}</div>` : ""}
                   <div style="font-size:11.5px;color:var(--muted);">
-                    状态：<strong>${escapeHtml(w.status)}</strong> · 周期：${w.baseIntervalMinutes || 60}m
+                    状态：<strong>${statusText}</strong> · 上次：${checkedStr} · 周期：${w.baseIntervalMinutes || 60}m
                   </div>
                 </div>
                 <div class="card-foot">
-                  <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}')">
+                  <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}')">
                     ${isNativeApp ? "🔓 内置登录/查看" : "↗ 打开网页"}
                   </button>
+                  <button class="sm" onclick="triggerNativeCheckNow('${escapeAttr(w.id)}', '${escapeAttr(w.name)}')">⚡ 测一下</button>
                   ${w.status === "paused"
                     ? `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','resume')">▶ 恢复</button>`
                     : `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','pause')">⏸ 暂停</button>`

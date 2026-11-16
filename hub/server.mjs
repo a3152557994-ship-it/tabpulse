@@ -156,7 +156,9 @@ export function createHubServer() {
       }
 
       if (req.method === "GET" && pathname === "/api/due") {
-        sendJson(res, 200, getDueWatches(), corsOrigin);
+        const force = reqUrl.searchParams.get("force") === "1";
+        const targetId = reqUrl.searchParams.get("id") || "";
+        sendJson(res, 200, getDueWatches(new Date(), { force, targetId }), corsOrigin);
         return;
       }
 
