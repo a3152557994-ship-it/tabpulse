@@ -20,7 +20,7 @@
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "macOS 12.0+, Cross-Platform Node/MCP",
         "url": "https://a3152557994-ship-it.github.io/tabpulse/",
-        "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/TabPulse-v0.3.0-macOS-universal.dmg",
+        "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
         "softwareVersion": "0.2.0",
         "description": "Browser-independent cross-platform unread inbox sentinel, live 24h buyer-intent lead scanner, and 5-tool MCP server for AI-powered freelancers, agencies, and indie founders.",
         "offers": [
@@ -171,7 +171,7 @@
     <header>
       <div class="logo">
         <div class="logo-badge">🔔</div>
-        <span>TabPulse · 万站回音</span>
+        <span id="brand-name">消息总管</span>
       </div>
       <nav class="nav-links">
         <a href="#scanner" id="nav-scan">免费漏单扫描</a>
@@ -190,7 +190,7 @@
         专为独立开发者、远程外包工作室与一人公司打造的<strong>免浏览器跨平台未读哨兵 + 24h 全网求购雷达</strong>。内置安全登录窗，本机住宅 IP 拟人低频值守电鸭、V2EX、小红书、闲鱼、Upwork、Reddit、X，新消息 1 分钟推到手机。
       </p>
       <div class="cta-group">
-        <a class="btn primary" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/TabPulse-v0.3.0-macOS-universal.dmg" id="cta-dl">
+        <a class="btn primary" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg" id="cta-dl">
            免费下载 macOS 原生独立版 (.dmg)
         </a>
         <a class="btn" href="#pricing" id="cta-buy">💎 查看 ¥168 永久买断方案</a>
@@ -225,12 +225,12 @@
       <div id="results" class="results-grid"></div>
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid #334155;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;font-size:13px;color:#cbd5e1;">
         <span id="sc-upsell">💡 公开求购帖只是冰山一角——客户在你电鸭、V2EX、小红书、Upwork、Reddit 后台发的私信更值钱！</span>
-        <a class="btn sm primary" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/TabPulse-v0.3.0-macOS-universal.dmg">下载桌面端开启 24h 自动秒推 →</a>
+        <a class="btn sm primary" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg">下载桌面端开启 24h 自动秒推 →</a>
       </div>
     </section>
 
     <section id="features" class="section">
-      <h2 id="f-heading">为什么同行做死的痛点，万站回音能稳稳跑通？</h2>
+      <h2 id="f-heading">为什么同行软件要么卡死电脑、要么封号，而《消息总管》稳稳好用？</h2>
       <p class="lead" id="f-lead">吸取 Station 重壳浏览器卡死电脑、云端代爬封号的惨痛教训，用极简本地原生架构护住你的账号与订单。</p>
       <div class="feat-grid">
         <div class="feat-card">
@@ -270,7 +270,7 @@
               <li>完整开放本地 5 工具 MCP Server</li>
             </ul>
           </div>
-          <a class="btn" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/TabPulse-v0.3.0-macOS-universal.dmg">免费下载体验</a>
+          <a class="btn" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg">免费下载体验</a>
         </div>
 
         <div class="p-card">
@@ -400,30 +400,44 @@
   </div>
 
   <script>
+    const DL_CN = "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg";
+    const DL_EN = "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg";
     let siteLang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
 
     function applySiteLang() {
       const en = siteLang === "en";
-      document.getElementById("lang-btn").textContent = en ? "中文" : "English";
+      document.title = en
+        ? "ReplyRadar — All-in-One Unread Inbox & 24h Buyer Lead Alerts"
+        : "消息总管 — 多平台未读消息提醒与全网找单盒子";
+      document.getElementById("brand-name").textContent = en ? "ReplyRadar" : "消息总管";
+      document.getElementById("lang-btn").textContent = en ? "中文版" : "English";
+      document.getElementById("nav-scan").textContent = en ? "Free Lead Scanner" : "免费找单扫描";
+      document.getElementById("nav-feat").textContent = en ? "Why ReplyRadar" : "为什么选它";
+      document.getElementById("nav-price").textContent = en ? "Pricing" : "买断与会员";
       document.getElementById("h-eyebrow").textContent = en
-        ? "🚀 v0.2.0 Native macOS App Live · Zero Browser Extension Required"
-        : "🚀 v0.2.0 原生独立桌面版上线 · 彻底告别绑定谷歌浏览器插件";
+        ? "🚀 ReplyRadar v0.4 for macOS · Zero Browser Extension · Zero Auto-Refresh Ban Risk"
+        : "🚀 《消息总管》v0.4 苹果桌面独立版 · 免装浏览器插件 · 零刷页安全防封";
       document.getElementById("h-title").textContent = en
         ? "Every Hour a Buyer Reply Sits Unseen in a Closed Tab, Your Close Rate Drops 50%."
-        : "你不打开平台，客户发来的询盘就永远躺在死角里烂掉。";
+        : "你不打开网页，客户发来的私信和订单就永远躺在角落里烂掉。";
       document.getElementById("h-sub").innerHTML = en
-        ? "The <strong>browser-independent unread inbox sentinel &amp; live 24h buyer-intent radar</strong> for freelancers, agencies, and indie founders. Log in once inside our native WebKit window — get instant mobile alerts from Reddit, Upwork, HN, X, GitHub &amp; niche portals without cloud-IP ban risk."
-        : "专为独立开发者、远程外包工作室与一人公司打造的<strong>免浏览器跨平台未读哨兵 + 24h 全网求购雷达</strong>。内置安全登录窗，本机住宅 IP 拟人低频值守电鸭、V2EX、小红书、闲鱼、Upwork、Reddit、X，新消息 1 分钟推到手机。";
-      document.getElementById("cta-dl").textContent = en
-        ? " Download Free for macOS (.dmg)"
-        : " 免费下载 macOS 原生独立版 (.dmg)";
+        ? "<strong>ReplyRadar</strong> keeps all your logged-in marketplaces &amp; social inboxes (Upwork, Reddit, HN, X, GitHub) in one safe 680KB macOS menu-bar app, plus a live 24h buyer-intent scanner."
+        : "<strong>《消息总管》</strong>帮你把闲鱼、小红书、电鸭、V2EX、苹果后台等十几个网站的新消息统一收进电脑右上角。点一下登录一次，零刷页被动听消息，新客户来信 1 秒提醒你。";
+      const ctaDl = document.getElementById("cta-dl");
+      ctaDl.href = en ? DL_EN : DL_CN;
+      ctaDl.textContent = en
+        ? " Download ReplyRadar for macOS (.dmg)"
+        : " 免费下载《消息总管》苹果电脑版 (.dmg)";
       document.getElementById("cta-buy").textContent = en
         ? "💎 Get Lifetime Pro ($69)"
         : "💎 查看 ¥168 永久买断方案";
       document.getElementById("sc-title").textContent = en
-        ? "Free Live Tool: Last 24–72h Missed Buyer-Intent Lead Scanner"
-        : "免费在线实测：《过去 24～72 小时全网漏单与求购贴扫描器》";
-      document.getElementById("sc-btn").textContent = en ? "🔍 Scan Live Buyer Leads" : "🔍 立即扫描我漏掉的商机";
+        ? "Free Live Tool: Last 24–72h Buyer-Intent Lead Scanner"
+        : "免费在线实测：《过去 24～72 小时全网漏单与求购扫描器》";
+      document.getElementById("sc-btn").textContent = en ? "🔍 Scan Live Buyer Leads" : "🔍 立即扫描新商机";
+      document.getElementById("p-heading").textContent = en
+        ? "Simple Pricing · Catch 1 Client and Pay for Itself 10x"
+        : "简单实在的定价 · 帮你兜住 1 单就回本十倍";
       setMarket(en ? "gl" : "cn");
     }
 
