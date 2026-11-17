@@ -66,13 +66,13 @@ function readTranscriptTailSummary(conversationId) {
 }
 
 export async function notifyUnread(item, settings = {}) {
-  const subject = `🚨 【AI推送】万站回音：${item.name} 有 ${item.unreadCount} 条新消息`;
+  const subject = `🚨 【消息总管】${item.name} 有 ${item.unreadCount} 条新消息`;
   const body = [
     `平台：${item.name}（${item.url}）`,
     `未读数：${item.unreadCount}`,
     item.contextSummary ? `当初背景：${item.contextSummary}` : "",
     item.snippet ? `消息摘要：${item.snippet}` : "",
-    `建议动作：打开万站回音桌面端或 http://127.0.0.1:17890 查看 AI 拟好的草稿，并一键跳回官方后台回复。`,
+    `建议动作：打开《消息总管》查看拟好的回复草稿，一键跳回原网页回复。`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -86,8 +86,8 @@ export async function notifyUnread(item, settings = {}) {
 
   if (process.platform === "darwin" && fs.existsSync("/usr/bin/osascript")) {
     try {
-      const safeTitle = `万站回音：${item.name} (${item.unreadCount}条未读)`.replace(/"/g, "'");
-      const safeSub = (item.snippet || item.contextSummary || "点击菜单栏「回音」一键查看回复").slice(0, 80).replace(/"/g, "'");
+      const safeTitle = `消息总管：${item.name} (${item.unreadCount}条新消息)`.replace(/"/g, "'");
+      const safeSub = (item.snippet || item.contextSummary || "点击右上角菜单栏「消息」一键查看回复").slice(0, 80).replace(/"/g, "'");
       await execFileAsync(
         "/usr/bin/osascript",
         ["-e", `display notification "${safeSub}" with title "${safeTitle}" sound name "Glass"`],

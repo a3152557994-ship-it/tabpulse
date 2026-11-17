@@ -63,6 +63,11 @@ struct LicenseVerifier {
     }
 }
 
+let isChineseSystem: Bool = {
+    let first = Locale.preferredLanguages.first?.lowercased() ?? "en"
+    return first.hasPrefix("zh")
+}()
+
 // MARK: - Standalone Local Store (Zero Node.js Required for Customers)
 final class StandaloneStore {
     static let shared = StandaloneStore()
@@ -85,42 +90,74 @@ final class StandaloneStore {
            obj["watches"] is [[String: Any]] {
             return obj
         }
-        let initial: [String: Any] = [
-            "version": "0.3.0",
-            "license": NSNull(),
-            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": "zh", "termsAcceptedAt": NSNull()],
-            "watches": [
-                [
-                    "id": "v2ex-notifications",
-                    "name": "V2EX 未读消息提醒",
-                    "url": "https://www.v2ex.com/notifications",
-                    "category": "接单外包",
-                    "publishTier": "yellow",
-                    "contextSummary": "外包与分享创造节点客户回复提醒",
-                    "baseIntervalMinutes": 60,
-                    "status": "idle",
-                    "unreadCount": 0,
-                    "snippet": "",
-                    "lastDraft": "",
-                    "lastFingerprint": "",
-                    "nextCheckAt": ISO8601DateFormatter().string(from: Date().addingTimeInterval(300))
-                ],
-                [
-                    "id": "reddit-inbox",
-                    "name": "Reddit Inbox & Buyer Replies",
-                    "url": "https://www.reddit.com/message/unread/",
-                    "category": "接单外包",
-                    "publishTier": "red",
-                    "contextSummary": "Global freelance & SaaS buyer DMs",
-                    "baseIntervalMinutes": 45,
-                    "status": "idle",
-                    "unreadCount": 0,
-                    "snippet": "",
-                    "lastDraft": "",
-                    "lastFingerprint": "",
-                    "nextCheckAt": ISO8601DateFormatter().string(from: Date().addingTimeInterval(600))
-                ]
+        let defaultWatches: [[String: Any]] = isChineseSystem ? [
+            [
+                "id": "xianyu-im",
+                "name": "闲鱼网页版买家咨询",
+                "url": "https://www.goofish.com/im",
+                "category": "主力阵地",
+                "publishTier": "red",
+                "contextSummary": "商品与服务买家私信实时提醒",
+                "baseIntervalMinutes": 60,
+                "status": "idle",
+                "unreadCount": 0,
+                "snippet": "",
+                "lastDraft": "",
+                "lastFingerprint": "",
+                "nextCheckAt": ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600))
+            ],
+            [
+                "id": "xhs-creator",
+                "name": "小红书创作者消息",
+                "url": "https://creator.xiaohongshu.com/new/home",
+                "category": "主力阵地",
+                "publishTier": "red",
+                "contextSummary": "笔记评论与合作私信提醒",
+                "baseIntervalMinutes": 60,
+                "status": "idle",
+                "unreadCount": 0,
+                "snippet": "",
+                "lastDraft": "",
+                "lastFingerprint": "",
+                "nextCheckAt": ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600))
             ]
+        ] : [
+            [
+                "id": "reddit-inbox",
+                "name": "Reddit Inbox & Buyer DMs",
+                "url": "https://www.reddit.com/message/unread/",
+                "category": "接单外包",
+                "publishTier": "red",
+                "contextSummary": "Inbound freelance & SaaS buyer replies",
+                "baseIntervalMinutes": 60,
+                "status": "idle",
+                "unreadCount": 0,
+                "snippet": "",
+                "lastDraft": "",
+                "lastFingerprint": "",
+                "nextCheckAt": ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600))
+            ],
+            [
+                "id": "github-notifications",
+                "name": "GitHub Notifications",
+                "url": "https://github.com/notifications",
+                "category": "开发者商店",
+                "publishTier": "green",
+                "contextSummary": "Customer issues, bounties & repo mentions",
+                "baseIntervalMinutes": 45,
+                "status": "idle",
+                "unreadCount": 0,
+                "snippet": "",
+                "lastDraft": "",
+                "lastFingerprint": "",
+                "nextCheckAt": ISO8601DateFormatter().string(from: Date().addingTimeInterval(1800))
+            ]
+        ]
+        let initial: [String: Any] = [
+            "version": "0.4.0",
+            "license": NSNull(),
+            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
+            "watches": defaultWatches
         ]
         saveState(initial)
         return initial
@@ -162,9 +199,9 @@ final class StandaloneStore {
         }
 
         return [
-            "version": "0.3.0",
+            "version": "0.4.0",
             "license": licOut,
-            "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": "zh", "termsAcceptedAt": NSNull()],
+            "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
                 "total": watches.count,
                 "unreadCount": unreadList.count,
@@ -291,20 +328,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let appItem = NSMenuItem()
         mainMenu.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "打开万站回音主控台", action: #selector(showMainWindow), keyEquivalent: "1")
-        appMenu.addItem(withTitle: "立即静默巡检一次", action: #selector(triggerCheckMenu), keyEquivalent: "r")
+        appMenu.addItem(withTitle: isChineseSystem ? "打开《消息总管》主界面" : "Open ReplyRadar", action: #selector(showMainWindow), keyEquivalent: "1")
+        appMenu.addItem(withTitle: isChineseSystem ? "立即检查一次后台消息" : "Check Inboxes Now", action: #selector(triggerCheckMenu), keyEquivalent: "r")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "退出 万站回音 TabPulse", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: isChineseSystem ? "退出消息总管" : "Quit ReplyRadar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
         let editItem = NSMenuItem()
         mainMenu.addItem(editItem)
-        let editMenu = NSMenu(title: "编辑")
-        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
-        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let editMenu = NSMenu(title: isChineseSystem ? "编辑" : "Edit")
+        editMenu.addItem(withTitle: isChineseSystem ? "撤销" : "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: isChineseSystem ? "剪切" : "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: isChineseSystem ? "复制" : "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: isChineseSystem ? "粘贴" : "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: isChineseSystem ? "全选" : "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = editMenu
 
         NSApp.mainMenu = mainMenu
@@ -312,12 +349,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func setupStatusBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "🔔 回音"
+        statusItem.button?.title = isChineseSystem ? "🔔 消息" : "🔔 Inbox"
         let menu = NSMenu()
-        menu.addItem(withTitle: "打开主控台与商机扫描器", action: #selector(showMainWindow), keyEquivalent: "")
-        menu.addItem(withTitle: "⚡ 立即后台静默巡检", action: #selector(triggerCheckMenu), keyEquivalent: "")
+        menu.addItem(withTitle: isChineseSystem ? "打开消息总管主窗口" : "Open ReplyRadar Dashboard", action: #selector(showMainWindow), keyEquivalent: "")
+        menu.addItem(withTitle: isChineseSystem ? "⚡ 立即检查后台消息" : "⚡ Check Inboxes Now", action: #selector(triggerCheckMenu), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(withTitle: "退出 TabPulse", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: isChineseSystem ? "退出消息总管" : "Quit ReplyRadar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         statusItem.menu = menu
     }
 
@@ -335,7 +372,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             defer: false
         )
         mainWindow.center()
-        mainWindow.title = "万站回音 · TabPulse (原生免浏览器独立版 v0.2.0)"
+        mainWindow.title = isChineseSystem
+            ? "消息总管 — 多平台未读消息提醒与找单盒子"
+            : "ReplyRadar — All-in-One Unread Inbox & Buyer Lead Alerts"
         mainWindow.isReleasedWhenClosed = false
         mainWindow.contentView = dashboardWebView
         mainWindow.makeKeyAndOrderFront(nil)
@@ -455,7 +494,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             win.delegate = self
             loginWindow = win
         }
-        loginWindow?.title = "常驻工作台（零刷页防封模式）— \(name)（关窗后后台继续被动收听新消息）"
+        loginWindow?.title = isChineseSystem
+            ? "消息总管 · 安全工作台 — \(name)（关掉窗口后后台照常安静听新消息）"
+            : "ReplyRadar · Safe Workspace — \(name) (Keeps listening passively when closed)"
         loginWindow?.contentView = wv
         loginWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -649,7 +690,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let stats = summary["stats"] as? [String: Any]
         let unread = (stats?["unreadMessagesTotal"] as? Int) ?? 0
         DispatchQueue.main.async {
-            self.statusItem?.button?.title = unread > 0 ? "🔴 \(unread) 未读" : "🔔 回音"
+            if isChineseSystem {
+                self.statusItem?.button?.title = unread > 0 ? "🔴 \(unread) 未读" : "🔔 消息"
+            } else {
+                self.statusItem?.button?.title = unread > 0 ? "🔴 \(unread) Unread" : "🔔 Inbox"
+            }
         }
     }
 
@@ -664,7 +709,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 self?.notifyDashboardProbeDone(id: watchId, name: watchId, unreadCount: unreadCount, authExpired: false)
             }.resume()
             DispatchQueue.main.async {
-                if unreadCount > 0 { self.statusItem?.button?.title = "🔴 \(unreadCount) 未读" }
+                if unreadCount > 0 {
+                    self.statusItem?.button?.title = isChineseSystem ? "🔴 \(unreadCount) 未读" : "🔴 \(unreadCount) Unread"
+                }
             }
         } else {
             var st = StandaloneStore.shared.loadState()

@@ -1,7 +1,7 @@
 {
   "name": "tabpulse",
-  "version": "0.3.0",
-  "description": "万站回音 (TabPulse) — Browser-independent native macOS unread inbox sentinel, live 24h buyer-intent lead scanner, and 5-tool MCP server.",
+  "version": "0.4.0",
+  "description": "消息总管 (CN) / ReplyRadar (Global) — Native macOS all-in-one unread inbox guard, live 24h buyer-intent scanner & 5-tool MCP server.",
   "type": "module",
   "bin": {
     "tabpulse-mcp": "./mcp-server/index.mjs",

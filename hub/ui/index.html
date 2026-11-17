@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>万站回音 · TabPulse — 跨平台未读哨兵与全网求购雷达</title>
+  <title>消息总管</title>
   <style>
     :root {
       --bg: #f4f6fb;
@@ -51,7 +51,7 @@
       display: grid; place-items: center; font-size: 20px; font-weight: 800;
       box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
     }
-    .brand h1 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+    .brand h1 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
     .brand .sub { font-size: 12px; color: var(--muted); }
     .stats-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .pill {
@@ -60,7 +60,6 @@
       border: 1px solid var(--border);
     }
     .pill.hot { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
-    .pill.warn { background: var(--amber-bg); color: var(--amber); border-color: var(--amber-border); }
     .pill.ok { background: var(--green-bg); color: var(--green); border-color: var(--green-border); }
     .pill.pro { background: var(--purple-bg); color: var(--purple); border-color: #ddd6fe; cursor: pointer; }
 
@@ -138,7 +137,6 @@
     .card-meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; word-break: break-all; }
     .card-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1f5f9; }
 
-    /* Scanner View */
     .scanner-box {
       background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
       padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px;
@@ -163,7 +161,6 @@
     .lead-title { font-size: 15px; font-weight: 700; color: #0f172a; }
     .lead-title:hover { color: var(--primary); text-decoration: underline; }
 
-    /* Modals */
     .modal-backdrop {
       position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
       display: none; place-items: center; z-index: 999; padding: 16px;
@@ -181,12 +178,8 @@
     }
     .pricing-cards { display: grid; grid-template-columns: 1fr 1.15fr; gap: 12px; margin: 14px 0; }
     @media (max-width: 640px) { .pricing-cards { grid-template-columns: 1fr; } }
-    .price-box {
-      border: 1.5px solid var(--border); border-radius: 12px; padding: 15px; background: #f8fafc;
-    }
-    .price-box.featured {
-      border-color: var(--primary); background: #eff6ff; position: relative;
-    }
+    .price-box { border: 1.5px solid var(--border); border-radius: 12px; padding: 15px; background: #f8fafc; }
+    .price-box.featured { border-color: var(--primary); background: #eff6ff; position: relative; }
     .price-num { font-size: 26px; font-weight: 800; color: #0f172a; margin: 4px 0; }
     .offer-list { font-size: 12.5px; color: #334155; padding-left: 18px; margin: 8px 0; }
     .toast {
@@ -196,60 +189,52 @@
   </style>
 </head>
 <body>
+  <!-- Brand identifiers: 消息总管 (CN) / ReplyRadar (EN) -->
   <div class="wrap">
     <div class="topbar">
       <div class="brand">
         <div class="brand-icon">🔔</div>
         <div>
-          <h1 id="t-title">万站回音 · TabPulse</h1>
-          <div class="sub" id="t-sub">免浏览器插件 · 跨平台私信未读哨兵 &amp; 24h 全网求购雷达</div>
+          <h1 id="t-title">消息总管</h1>
+          <div class="sub" id="t-sub">多平台未读消息提醒与找单盒子 · 免装浏览器插件</div>
         </div>
       </div>
 
       <div class="stats-row" id="stats-row"></div>
 
       <div class="actions-row">
-        <button class="sm" onclick="toggleLang()" id="btn-lang">EN / 中文</button>
+        <button class="sm" onclick="toggleLang()" id="btn-lang">English</button>
         <button class="sm" onclick="checkAppUpdate()" id="btn-update">🔄 检查更新</button>
-        <button class="sm" onclick="openFeedback()" id="btn-feedback">💬 反馈/加站</button>
-        <button class="sm" onclick="openSettingsModal()">⚙️ 手机推送</button>
-        <button class="sm gold" onclick="openPaywallModal()" id="btn-upgrade">💎 激活 / 升级 Pro</button>
-        <button class="primary" onclick="openAddModal()" id="btn-add">+ 新增盯守</button>
+        <button class="sm" onclick="openFeedback()" id="btn-feedback">💬 意见反馈</button>
+        <button class="sm" onclick="openSettingsModal()" id="btn-push">📱 手机提醒</button>
+        <button class="sm gold" onclick="openPaywallModal()" id="btn-upgrade">💎 激活专业版</button>
+        <button class="primary" onclick="openAddModal()" id="btn-add">+ 添加平台</button>
       </div>
     </div>
 
     <div class="nav-tabs">
-      <button class="nav-tab active" id="tab-inbox" onclick="switchTab('inbox')">📬 跨平台收件与未读哨兵</button>
-      <button class="nav-tab" id="tab-scanner" onclick="switchTab('scanner')">🎯 过去 24h 全网求购贴实时扫描</button>
-      <button class="nav-tab" id="tab-playbook" onclick="openPlaybook()">🎁 成交破冰话术库</button>
+      <button class="nav-tab active" id="tab-inbox" onclick="switchTab('inbox')">📬 我的各平台消息</button>
+      <button class="nav-tab" id="tab-scanner" onclick="switchTab('scanner')">🎯 实时找单扫描器</button>
+      <button class="nav-tab" id="tab-playbook" onclick="openPlaybook()">🎁 高成交回复话术库</button>
     </div>
 
-    <!-- VIEW 1: INBOX SENTINEL -->
     <div id="view-inbox">
       <div class="packs-bar" id="packs-bar"></div>
       <div id="alerts-section"></div>
       <div id="categories-section"></div>
     </div>
 
-    <!-- VIEW 2: 24H BUYER INTENT SCANNER -->
     <div id="view-scanner" style="display:none;">
       <div class="scanner-box">
         <h2 style="margin:0 0 4px;font-size:18px;" id="scan-heading">过去 24～72 小时全网真实求购与外包线索扫描</h2>
         <div style="font-size:13px;color:var(--muted);" id="scan-desc">
-          输入你的手艺或产品词，实时并发检索 Reddit、Hacker News 与 GitHub 悬赏/外包需求，按付费意图打分排序。
+          输入你的手艺或业务关键词，实时检索全网公开求购、悬赏与找人帖，按成交意向自动排序。
         </div>
         <div class="search-row">
-          <input id="scan-input" value="Shopify" placeholder="例如：Shopify, Python scraper, iOS App, UI Design, 小程序, SEO..." onkeydown="if(event.key==='Enter')runLeadScan()" />
-          <button class="primary" onclick="runLeadScan()" id="btn-scan">🔍 立即扫描全网商机</button>
+          <input id="scan-input" value="Shopify" onkeydown="if(event.key==='Enter')runLeadScan()" />
+          <button class="primary" onclick="runLeadScan()" id="btn-scan">🔍 立即扫描新商机</button>
         </div>
-        <div class="chips">
-          <span class="chip" onclick="quickScan('Shopify')">Shopify 建站/插件</span>
-          <span class="chip" onclick="quickScan('Python scraper')">Python 爬虫自动化</span>
-          <span class="chip" onclick="quickScan('iOS Swift')">iOS / Mac 开发</span>
-          <span class="chip" onclick="quickScan('Next.js SaaS')">Next.js / AI MVP</span>
-          <span class="chip" onclick="quickScan('UI Figma')">UI / 落地页设计</span>
-          <span class="chip" onclick="quickScan('SEO content')">SEO 增长代运营</span>
-        </div>
+        <div class="chips" id="scan-chips"></div>
       </div>
       <div id="scan-results" class="lead-list"></div>
     </div>
@@ -258,124 +243,120 @@
   <!-- MODAL: ADD WATCH -->
   <div class="modal-backdrop" id="modal-add">
     <div class="modal">
-      <h2 id="add-modal-title">新增跨平台盯守目标</h2>
-      <p style="font-size:12.5px;color:var(--muted);margin-top:0;">
-        添加后点击卡片上的「内置窗口登录」登录一次即可，无需安装谷歌浏览器插件；夜间 00:00-08:00 自动静默防封。
+      <h2 id="add-modal-title">添加要盯守的网站平台</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="add-modal-desc">
+        添加后点击卡片上的「打开工作台」登录一次即可，关掉窗口后后台照样安静听新消息，不刷网页不伤号。
       </p>
       <div class="form-row">
-        <label>平台或任务名称</label>
-        <input id="f-name" placeholder="例如：电鸭社区私信 / Upwork Messages / 闲鱼咨询" />
+        <label id="lbl-name">网站或店铺名称</label>
+        <input id="f-name" placeholder="例如：闲鱼买家咨询 / 小红书后台 / 电鸭私信" />
       </div>
       <div class="form-row">
-        <label>消息页或后台网址 (URL)</label>
+        <label id="lbl-url">消息页网址</label>
         <input id="f-url" placeholder="https://..." />
       </div>
       <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div>
-          <label>业务分组</label>
+          <label id="lbl-cat">所属分类</label>
           <select id="f-cat">
-            <option value="接单外包">接单外包</option>
-            <option value="主力阵地">主力阵地</option>
-            <option value="开发者商店">开发者商店</option>
-            <option value="长尾蹲守">长尾蹲守</option>
+            <option value="接单外包" id="opt-cat-1">接单与客户询盘</option>
+            <option value="主力阵地" id="opt-cat-2">自媒体与店铺消息</option>
+            <option value="开发者商店" id="opt-cat-3">应用与商品审核后台</option>
+            <option value="长尾蹲守" id="opt-cat-4">其他常用网站</option>
           </select>
         </div>
         <div>
-          <label>巡检间隔（分钟，带 ±25% 拟人抖动）</label>
-          <input id="f-interval" type="number" value="45" min="5" />
+          <label id="lbl-interval">检查间隔（分钟）</label>
+          <input id="f-interval" type="number" value="60" min="15" />
         </div>
       </div>
       <div class="form-row">
-        <label>防封安全等级</label>
+        <label id="lbl-tier">安全看护方式</label>
         <select id="f-tier">
-          <option value="red">🔴 红灯平台（仅只读提醒 + AI拟稿，人工手发防封：小红书/X/Reddit/闲鱼）</option>
-          <option value="yellow">🟡 黄灯平台（半自动辅助：电鸭/V2EX/猪八戒）</option>
-          <option value="green">🟢 绿灯后台（开发者控制台：GitHub/App Store/CrazyGames）</option>
+          <option value="red" id="opt-tier-red">🛡️ 零刷页常驻监听（最稳防封：适合闲鱼/小红书/社交平台）</option>
+          <option value="yellow" id="opt-tier-yellow">🟡 温和低频看护（适合普通论坛/外包网）</option>
+          <option value="green" id="opt-tier-green">🟢 常规后台看护（适合开发者与工作台后台）</option>
         </select>
       </div>
       <div class="form-row">
-        <label>备注当初你在这干了啥（来消息时提醒你上下文）</label>
-        <input id="f-ctx" placeholder="例如：发了独立站代开发帖，报价 3000 元起" />
+        <label id="lbl-ctx">备注备忘（来消息时提醒你当初干了啥）</label>
+        <input id="f-ctx" placeholder="例如：挂了定制服务，报价 300 元起" />
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-        <button onclick="closeModals()">取消</button>
-        <button class="primary" onclick="submitWatch()">保存并加入哨兵</button>
+        <button onclick="closeModals()" id="btn-cancel-add">取消</button>
+        <button class="primary" onclick="submitWatch()" id="btn-save-add">保存添加</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: UPGRADE & LICENSE ACTIVATION -->
+  <!-- MODAL: UPGRADE & LICENSE -->
   <div class="modal-backdrop" id="modal-paywall">
     <div class="modal">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-        <h2>解锁 TabPulse Pro · 再也不漏掉任何一个高客单客户</h2>
-        <div style="display:flex;gap:6px;">
-          <button class="sm" onclick="setPriceRegion('cn')" id="reg-cn">🇨🇳 人民币</button>
-          <button class="sm" onclick="setPriceRegion('global')" id="reg-gl">🌍 USD</button>
-        </div>
+        <h2 id="pw-title">解锁《消息总管》专业版 · 不漏掉任何一笔客户消息</h2>
       </div>
       <p style="font-size:13px;color:var(--muted);margin:4px 0 10px;" id="paywall-reason">
-        免费版支持同时盯守 2 个平台。升级 Pro 解锁无限平台、一键导入行业包、24h 自动手机推送与专属破冰话术库！
+        免费版可同时盯守 2 个平台。解锁专业版即可添加无限个网站、一键导入常用包、开启手机实时提醒并获赠破冰话术库！
       </p>
 
       <div id="price-cn" class="pricing-cards">
         <div class="price-box">
-          <span class="badge badge-slate">单年陪跑档</span>
+          <span class="badge badge-slate">年度会员</span>
           <div class="price-num">¥99 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 年</span></div>
-          <div style="font-size:12px;color:var(--muted);">单次付款，到期绝不自动偷偷扣费</div>
+          <div style="font-size:12px;color:var(--muted);">单次付款，到期绝不自动扣费</div>
           <ul class="offer-list">
-            <li>无限跨平台收件箱静默盯守</li>
-            <li>微信 Server酱 / Bark / 飞书秒级推送</li>
-            <li>夜间防封休眠与拟人随机巡检</li>
+            <li>无限个网站与店铺私信同时盯守</li>
+            <li>飞书 / 微信服务通知 / 手机秒推</li>
+            <li>零刷页常驻安全防封保护</li>
           </ul>
         </div>
         <div class="price-box featured">
-          <span class="badge badge-green">🔥 85% 用户首选 · 最划算</span>
+          <span class="badge badge-green">🔥 85% 用户首选 · 一次买断</span>
           <div class="price-num">¥168 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 永久买断</span></div>
-          <div style="font-size:12px;color:var(--primary);font-weight:600;">加 ¥69 直接永久买断 · 支持 2 台电脑</div>
+          <div style="font-size:12px;color:var(--primary);font-weight:600;">加 ¥69 直接永久拥有 · 支持 2 台电脑</div>
           <ul class="offer-list">
-            <li><strong>包含年度版全部无限功能 + 1年平台规则更新</strong></li>
-            <li>🎁 <strong>白送赠品</strong>：《高成交率外包与商务破冰话术库》</li>
-            <li>🛡️ <strong>零风险承诺</strong>：14 天内没帮你抓到任何真实回复或商机，无理由全额退！</li>
+            <li><strong>包含年度版全部无限平台与手机提醒功能</strong></li>
+            <li>🎁 <strong>白送赠品</strong>：《高成交率外包与商务回复话术库》</li>
+            <li>🛡️ <strong>14 天退款承诺</strong>：抓不到任何真实消息无理由全额退！</li>
           </ul>
-          <a class="btn primary" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">获取官方激活码（秒发货）→</a>
+          <a class="btn primary" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">获取正版激活码（秒发货）→</a>
         </div>
       </div>
 
       <div id="price-global" class="pricing-cards" style="display:none;">
         <div class="price-box">
-          <span class="badge badge-slate">Pro Cloud + Desktop</span>
+          <span class="badge badge-slate">Annual Pro</span>
           <div class="price-num">$19 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ mo (billed $228/yr)</span></div>
-          <div style="font-size:12px;color:var(--muted);">Or $29/mo monthly · Agency Multi-Account $79/mo</div>
+          <div style="font-size:12px;color:var(--muted);">Or $29/mo monthly · Agency $79/mo</div>
           <ul class="offer-list">
-            <li>Unlimited private inboxes + 24/7 keyword radar</li>
-            <li>Instant Slack, Telegram, Discord &amp; Webhook alerts</li>
-            <li>5-tool MCP Server for Claude, Cursor &amp; Antigravity</li>
+            <li>Unlimited private inboxes &amp; 24/7 lead radar</li>
+            <li>Instant Slack, Telegram &amp; Discord push alerts</li>
+            <li>Zero-polling safe native workspace engine</li>
           </ul>
         </div>
         <div class="price-box featured">
-          <span class="badge badge-green">🔥 Indie Favorite · No Subscription</span>
-          <div class="price-num">$69 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ Lifetime Desktop</span></div>
-          <div style="font-size:12px;color:var(--primary);font-weight:600;">Pay once, own forever · 2 macOS devices</div>
+          <span class="badge badge-green">🔥 Most Popular · Pay Once</span>
+          <div class="price-num">$69 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ Lifetime</span></div>
+          <div style="font-size:12px;color:var(--primary);font-weight:600;">Own ReplyRadar Desktop forever · 2 Macs</div>
           <ul class="offer-list">
-            <li><strong>Unlimited local WebKit inbox sentinel (0 Chrome needed)</strong></li>
+            <li><strong>Unlimited inboxes (zero Chrome extension needed)</strong></li>
             <li>🎁 <strong>Free Bonus</strong>: High-Converting Cold Reply Playbook</li>
-            <li>🛡️ <strong>14-Day Guarantee</strong>: Catch at least 1 real lead or 100% refund</li>
+            <li>🛡️ <strong>14-Day Guarantee</strong>: Catch a real lead or 100% refund</li>
           </ul>
           <a class="btn primary" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">Get Instant License Key →</a>
         </div>
       </div>
 
       <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:10px;">
-        <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;">已有激活码？粘贴下方离线秒级解锁（Ed25519 签名验证）：</label>
+        <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;" id="lbl-lic-input">已有正版激活码？粘贴到下方立即解锁：</label>
         <div style="display:flex;gap:8px;">
-          <input id="license-input" style="flex:1;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;font-size:12.5px;" placeholder="TP1.eyJwIjoibGlmZXRpbWUi..." />
-          <button class="primary" onclick="activateKey()">立即激活</button>
+          <input id="license-input" style="flex:1;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;font-size:12.5px;" placeholder="TP1...." />
+          <button class="primary" onclick="activateKey()" id="btn-lic-act">立即激活</button>
         </div>
         <div id="license-msg" style="font-size:12px;margin-top:6px;"></div>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:10px;">
-        <button onclick="closeModals()">关闭</button>
+        <button onclick="closeModals()" id="btn-close-pw">关闭</button>
       </div>
     </div>
   </div>
@@ -383,36 +364,33 @@
   <!-- MODAL: SETTINGS -->
   <div class="modal-backdrop" id="modal-settings">
     <div class="modal" style="max-width:520px;">
-      <h2>手机秒级推送设置（Webhook）</h2>
-      <p style="font-size:12.5px;color:var(--muted);margin-top:0;">
-        填入飞书机器人、企业微信、Server酱、Bark、Slack 或 Discord 的 Webhook 链接，一旦检测到新客户私信立即推送到你手机。
+      <h2 id="set-title">手机实时消息提醒设置</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="set-desc">
+        填入飞书机器人、企业微信、Server酱或 Bark 的通知链接，有新客户私信时第一时间发到你手机上。
       </p>
       <div class="form-row">
-        <label>Webhook URL</label>
-        <input id="s-webhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/... 或 Bark / Slack URL" />
+        <label id="lbl-hook">通知推送链接</label>
+        <input id="s-webhook" placeholder="https://..." />
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-        <button onclick="closeModals()">取消</button>
-        <button class="primary" onclick="saveWebhookSettings()">保存设置</button>
+        <button onclick="closeModals()" id="btn-cancel-set">取消</button>
+        <button class="primary" onclick="saveWebhookSettings()" id="btn-save-set">保存</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: FIRST-RUN EULA & PRIVACY CONSENT (UNCHECKED BY DEFAULT) -->
+  <!-- MODAL: FIRST-RUN CONSENT -->
   <div class="modal-backdrop" id="modal-consent">
     <div class="modal" style="max-width:560px;">
-      <h2>欢迎使用 万站回音 TabPulse · 安全与隐私确认</h2>
-      <p style="font-size:13px;color:#334155;line-height:1.65;">
-        在开始使用前，请确认以下核心机制与使用条款：
-      </p>
-      <ul style="font-size:13px;color:#334155;line-height:1.7;padding-left:20px;margin:8px 0 14px;">
-        <li><strong>零刷页常驻防封架构</strong>：针对小红书、闲鱼、X、Reddit 等严管平台，软件采用与 Safari 浏览器一致的「常驻真实标签被动通知监听」，<strong>绝不后台定时重复刷网页、绝不自动群发消息</strong>。</li>
-        <li><strong>100% 本地隐私存储</strong>：您的所有平台登录态（Cookie）仅保存在您个人电脑本地系统目录中，绝不上传至任何第三方云服务器。</li>
-        <li><strong>合规与责任边界</strong>：本工具仅作本地只读提醒辅助，请遵守各平台社区规则；软件提供 14 天无忧全额退款保障，最高责任上限以您实际支付的软件授权费为限。</li>
+      <h2 id="cs-title">欢迎使用《消息总管》· 安全与隐私确认</h2>
+      <ul style="font-size:13px;color:#334155;line-height:1.75;padding-left:20px;margin:10px 0 14px;" id="cs-list">
+        <li><strong>零刷页安全防封</strong>：针对闲鱼、小红书等严管平台，软件采用与苹果自带浏览器一致的「常驻页面被动听消息」方式，<strong>绝不定时反复刷新网页、绝不自动群发消息</strong>。</li>
+        <li><strong>账号 100% 留在本机</strong>：您在软件内登录的网站状态仅保存在您自己的电脑里，绝不上传至任何外部服务器。</li>
+        <li><strong>售后与服务边界</strong>：本软件仅作本地消息提醒辅助，提供 14 天不满意无理由全额退款保障，软件最高责任上限不超过您实际支付的软件费用。</li>
       </ul>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;background:#f8fafc;padding:10px 12px;border-radius:10px;border:1px solid var(--border);">
         <input type="checkbox" id="consent-checkbox" onchange="document.getElementById('btn-accept-consent').disabled = !this.checked" style="margin-top:3px;width:16px;height:16px;" />
-        <span>
+        <span id="cs-check-label">
           我已阅读并同意
           <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《用户服务与软件许可协议》</a>
           及
@@ -420,7 +398,7 @@
         </span>
       </label>
       <div style="display:flex;justify-content:flex-end;margin-top:16px;">
-        <button class="primary" id="btn-accept-consent" disabled onclick="acceptTermsConsent()">同意并进入万站回音</button>
+        <button class="primary" id="btn-accept-consent" disabled onclick="acceptTermsConsent()">同意并开始使用</button>
       </div>
     </div>
   </div>
@@ -430,15 +408,22 @@
   <script>
     let appState = { watches: [], stats: {}, license: { valid: false, plan: "free" }, settings: { lang: "zh", webhookUrl: "" } };
     let presetPacks = [];
-    let currentLang = "zh";
+    let currentLang = (navigator.language || "zh").toLowerCase().startsWith("zh") ? "zh" : "en";
     const isNativeApp = Boolean(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tabpulse);
+
+    const CAT_EN = {
+      "接单外包": "Freelance & Client Leads",
+      "主力阵地": "Core Social & Storefronts",
+      "开发者商店": "App & Developer Portals",
+      "长尾蹲守": "Other Watched Sites"
+    };
 
     function showToast(msg) {
       const el = document.getElementById("toast");
       el.textContent = msg;
       el.style.display = "block";
       clearTimeout(window.__toastTimer);
-      window.__toastTimer = setTimeout(() => { el.style.display = "none"; }, 2600);
+      window.__toastTimer = setTimeout(() => { el.style.display = "none"; }, 2800);
     }
 
     function nativePost(action, payload = {}) {
@@ -471,6 +456,102 @@
       }
     };
 
+    function applyStaticLanguage() {
+      const en = currentLang === "en";
+      document.title = en ? "ReplyRadar — All-in-One Unread Inbox & Lead Alerts" : "消息总管 — 多平台未读消息提醒与找单盒子";
+      document.getElementById("t-title").textContent = en ? "ReplyRadar" : "消息总管";
+      document.getElementById("t-sub").textContent = en
+        ? "All-in-One Unread Inbox & Live Buyer Lead Radar · No Browser Extension Needed"
+        : "多平台未读消息提醒与找单盒子 · 免装浏览器插件";
+      document.getElementById("btn-lang").textContent = en ? "中文界面" : "English";
+      document.getElementById("btn-update").textContent = en ? "🔄 Check Updates" : "🔄 检查更新";
+      document.getElementById("btn-feedback").textContent = en ? "💬 Feedback" : "💬 意见反馈";
+      document.getElementById("btn-push").textContent = en ? "📱 Mobile Push" : "📱 手机提醒";
+      document.getElementById("btn-add").textContent = en ? "+ Add Site" : "+ 添加平台";
+
+      document.getElementById("tab-inbox").textContent = en ? "📬 Watched Inboxes" : "📬 我的各平台消息";
+      document.getElementById("tab-scanner").textContent = en ? "🎯 24h Buyer Lead Scanner" : "🎯 实时找单扫描器";
+      document.getElementById("tab-playbook").textContent = en ? "🎁 Cold-Reply Playbook" : "🎁 高成交回复话术库";
+
+      document.getElementById("scan-heading").textContent = en
+        ? "Scan Fresh Freelance & Buyer-Intent Posts (Last 24–72 Hours)"
+        : "过去 24～72 小时全网真实求购与外包线索扫描";
+      document.getElementById("scan-desc").textContent = en
+        ? "Enter your skill or product keyword to search live hiring, contract, and buyer threads across Reddit, Hacker News & GitHub."
+        : "输入你的手艺或业务关键词，实时检索全网公开求购、悬赏与找人帖，按成交意向自动排序。";
+      document.getElementById("scan-input").placeholder = en
+        ? "e.g. Shopify, Python scraper, iOS Swift, Next.js, UI Figma..."
+        : "例如：Shopify、Python 爬虫、小程序、UI设计、苹果开发...";
+      document.getElementById("btn-scan").textContent = en ? "🔍 Scan Live Leads" : "🔍 立即扫描新商机";
+
+      const chipData = en
+        ? [["Shopify", "Shopify Dev"], ["Python scraper", "Python Automation"], ["iOS Swift", "iOS / macOS"], ["Next.js SaaS", "Next.js MVP"], ["UI Figma", "UI / Landing Page"], ["SEO content", "SEO Growth"]]
+        : [["Shopify", "独立站开发"], ["Python scraper", "爬虫与自动化"], ["iOS Swift", "苹果应用开发"], ["Next.js SaaS", "网站与AI开发"], ["UI Figma", "界面与海报设计"], ["SEO content", "出海搜索推广"]];
+      document.getElementById("scan-chips").innerHTML = chipData
+        .map(([q, label]) => `<span class="chip" onclick="quickScan('${q}')">${label}</span>`)
+        .join("");
+
+      // Modals
+      document.getElementById("add-modal-title").textContent = en ? "Add Platform Inbox to Watch" : "添加要盯守的网站平台";
+      document.getElementById("add-modal-desc").textContent = en
+        ? "Click 'Open Workspace' on the card to sign in once. Even after closing the window, ReplyRadar listens passively without auto-refreshing."
+        : "添加后点击卡片上的「打开工作台」登录一次即可，关掉窗口后后台照样安静听新消息，不刷网页不伤号。";
+      document.getElementById("lbl-name").textContent = en ? "Platform or Store Name" : "网站或店铺名称";
+      document.getElementById("f-name").placeholder = en ? "e.g. Upwork Messages / Reddit Inbox" : "例如：闲鱼买家咨询 / 小红书后台 / 电鸭私信";
+      document.getElementById("lbl-url").textContent = en ? "Inbox / Notification URL" : "消息页网址";
+      document.getElementById("lbl-cat").textContent = en ? "Category" : "所属分类";
+      document.getElementById("opt-cat-1").textContent = en ? "Freelance & Client Leads" : "接单与客户询盘";
+      document.getElementById("opt-cat-2").textContent = en ? "Core Social & Storefronts" : "自媒体与店铺消息";
+      document.getElementById("opt-cat-3").textContent = en ? "App & Developer Portals" : "应用与商品审核后台";
+      document.getElementById("opt-cat-4").textContent = en ? "Other Watched Sites" : "其他常用网站";
+      document.getElementById("lbl-interval").textContent = en ? "Check Interval (mins)" : "检查间隔（分钟）";
+      document.getElementById("lbl-tier").textContent = en ? "Protection Mode" : "安全看护方式";
+      document.getElementById("opt-tier-red").textContent = en
+        ? "🛡️ Zero-Reload Passive Listener (Safest for Reddit / X / Social)"
+        : "🛡️ 零刷页常驻监听（最稳防封：适合闲鱼/小红书/社交平台）";
+      document.getElementById("opt-tier-yellow").textContent = en ? "🟡 Gentle Low-Frequency Check" : "🟡 温和低频看护（适合普通论坛/外包网）";
+      document.getElementById("opt-tier-green").textContent = en ? "🟢 Standard Dev Portal Check" : "🟢 常规后台看护（适合开发者与工作台后台）";
+      document.getElementById("lbl-ctx").textContent = en ? "Context Note (reminds you why you're watching)" : "备注备忘（来消息时提醒你当初干了啥）";
+      document.getElementById("f-ctx").placeholder = en ? "e.g. Sent $1,500 Shopify migration proposal" : "例如：挂了定制服务，报价 300 元起";
+      document.getElementById("btn-cancel-add").textContent = en ? "Cancel" : "取消";
+      document.getElementById("btn-save-add").textContent = en ? "Save & Watch" : "保存添加";
+
+      document.getElementById("pw-title").textContent = en
+        ? "Unlock ReplyRadar Pro · Never Miss a High-Ticket Reply"
+        : "解锁《消息总管》专业版 · 不漏掉任何一笔客户消息";
+      document.getElementById("price-cn").style.display = en ? "none" : "grid";
+      document.getElementById("price-global").style.display = en ? "grid" : "none";
+      document.getElementById("lbl-lic-input").textContent = en
+        ? "Already have a license key? Paste below to unlock instantly:"
+        : "已有正版激活码？粘贴到下方立即解锁：";
+      document.getElementById("btn-lic-act").textContent = en ? "Activate" : "立即激活";
+      document.getElementById("btn-close-pw").textContent = en ? "Close" : "关闭";
+
+      document.getElementById("set-title").textContent = en ? "Mobile Push Alert Settings" : "手机实时消息提醒设置";
+      document.getElementById("set-desc").textContent = en
+        ? "Paste a Slack, Discord, Telegram, or custom Webhook URL to receive instant phone notifications when a client replies."
+        : "填入飞书机器人、企业微信、Server酱或 Bark 的通知链接，有新客户私信时第一时间发到你手机上。";
+      document.getElementById("lbl-hook").textContent = en ? "Webhook URL" : "通知推送链接";
+      document.getElementById("btn-cancel-set").textContent = en ? "Cancel" : "取消";
+      document.getElementById("btn-save-set").textContent = en ? "Save" : "保存";
+
+      // Consent Modal
+      document.getElementById("cs-title").textContent = en
+        ? "Welcome to ReplyRadar · Safety & Privacy Confirmation"
+        : "欢迎使用《消息总管》· 安全与隐私确认";
+      document.getElementById("cs-list").innerHTML = en
+        ? `<li><strong>Zero-Polling Account Safety</strong>: Strict social platforms run inside persistent Safari-grade tabs using passive event listeners — <strong>zero synthetic page reloads and zero automated posting</strong>.</li>
+           <li><strong>100% Local Privacy</strong>: Your login cookies stay strictly on your own Mac and are never uploaded to external servers.</li>
+           <li><strong>14-Day Refund &amp; Terms</strong>: Backed by a 14-day full refund guarantee; software liability is strictly capped at the license fee paid.</li>`
+        : `<li><strong>零刷页安全防封</strong>：针对闲鱼、小红书等严管平台，软件采用与苹果自带浏览器一致的「常驻页面被动听消息」方式，<strong>绝不定时反复刷新网页、绝不自动群发消息</strong>。</li>
+           <li><strong>账号 100% 留在本机</strong>：您在软件内登录的网站状态仅保存在您自己的电脑里，绝不上传至任何外部服务器。</li>
+           <li><strong>售后与服务边界</strong>：本软件仅作本地消息提醒辅助，提供 14 天不满意无理由全额退款保障，软件最高责任上限不超过您实际支付的软件费用。</li>`;
+      document.getElementById("cs-check-label").innerHTML = en
+        ? `I have read and agree to the <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="color:var(--primary);text-decoration:underline;">Terms of License (EULA)</a> and <a href="https://a3152557994-ship-it.github.io/tabpulse/privacy.html" target="_blank" style="color:var(--primary);text-decoration:underline;">Privacy Policy</a>`
+        : `我已阅读并同意 <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《用户服务与软件许可协议》</a> 及 <a href="https://a3152557994-ship-it.github.io/tabpulse/privacy.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《隐私政策》</a>`;
+      document.getElementById("btn-accept-consent").textContent = en ? "Agree & Continue" : "同意并开始使用";
+    }
+
     async function refreshState() {
       try {
         const [st, pr] = await Promise.all([
@@ -493,28 +574,26 @@
     }
 
     function renderAll() {
+      const en = currentLang === "en";
       const stats = appState.stats || {};
       const lic = appState.license || { valid: false, plan: "free" };
       const statsEl = document.getElementById("stats-row");
-      const engineText = isNativeApp
-        ? (currentLang === "en" ? "🟢 Native WebKit Sentinel" : "🟢 原生独立哨兵运行中")
-        : (currentLang === "en" ? "🟢 Local Hub Active" : "🟢 本地哨兵中枢在线");
+      const engineText = en ? "🟢 Safe Guard Active" : "🟢 安全看护运行中";
 
       statsEl.innerHTML = `
         <span class="pill ok">${engineText}</span>
         <span class="pill ${stats.unreadCount > 0 ? "hot" : ""}">
-          ${currentLang === "en" ? "Unread" : "未读平台"}: ${stats.unreadCount || 0} (${stats.unreadMessagesTotal || 0})
+          ${en ? "Unread" : "未读提醒"}: ${stats.unreadCount || 0} (${stats.unreadMessagesTotal || 0})
         </span>
-        <span class="pill">${currentLang === "en" ? "Watching" : "盯守中"}: ${stats.activeCount || 0}</span>
+        <span class="pill">${en ? "Watching" : "看护平台"}: ${stats.activeCount || 0}</span>
         <span class="pill pro" onclick="openPaywallModal()">
-          ${lic.valid ? "💎 " + (currentLang === "en" ? "Pro Unlocked" : "已激活专业版") : (currentLang === "en" ? "Free Tier (2 max) · Upgrade" : "免费版 · 点此解锁无限")}
+          ${lic.valid ? (en ? "💎 Pro Unlocked" : "💎 已解锁专业版") : (en ? "Free (2 max) · Upgrade" : "免费版 · 点此解锁无限")}
         </span>
       `;
 
-      const btnUpgrade = document.getElementById("btn-upgrade");
-      btnUpgrade.textContent = lic.valid
-        ? (currentLang === "en" ? "💎 Pro Active" : "💎 已激活 Pro")
-        : (currentLang === "en" ? "💎 Upgrade / License" : "💎 激活 / 升级 Pro");
+      document.getElementById("btn-upgrade").textContent = lic.valid
+        ? (en ? "💎 Pro Active" : "💎 已激活专业版")
+        : (en ? "💎 Unlock Pro" : "💎 激活专业版");
 
       renderPacks();
       renderAlerts();
@@ -522,35 +601,38 @@
     }
 
     function renderPacks() {
+      const en = currentLang === "en";
       const el = document.getElementById("packs-bar");
       if (!presetPacks.length) { el.innerHTML = ""; return; }
-      el.innerHTML = presetPacks.map((p) => `
+      // Show matching market pack first, or only matching pack for clean native feel!
+      const ordered = en ? [...presetPacks].reverse() : presetPacks;
+      el.innerHTML = ordered.map((p) => `
         <div class="pack-card">
           <div>
-            <h3>${currentLang === "en" ? p.titleEn : p.titleZh}</h3>
-            <p>${currentLang === "en" ? p.descEn : p.descZh}</p>
+            <h3>${en ? p.titleEn : p.titleZh}</h3>
+            <p>${en ? p.descEn : p.descZh}</p>
           </div>
           <button class="sm primary" onclick="importPack('${p.packId}')">
-            ${currentLang === "en" ? "+ Load Pack" : "+ 一键导入"}
+            ${en ? "+ Add Pack" : "+ 一键添加"}
           </button>
         </div>
       `).join("");
     }
 
     async function importPack(packId) {
+      const en = currentLang === "en";
       const pack = presetPacks.find((x) => x.packId === packId);
       if (!pack) return;
       if (!isProUnlocked() && (appState.watches.length + pack.items.length) > 2) {
-        // Import up to 2 free items first so user gets immediate value, then show upgrade modal!
         const slots = Math.max(0, 2 - appState.watches.length);
         for (const item of pack.items.slice(0, slots)) {
           await apiCall("POST", "/api/watches", item);
         }
         await refreshState();
         openPaywallModal(
-          slots > 0
-            ? `已为你免费导入前 ${slots} 个高频平台！解锁 Pro 即可一次性导入整包全部 ${pack.items.length} 个平台并开启手机推送。`
-            : `免费版最多同时盯守 2 个平台。升级 Pro 即可一键导入「${pack.titleZh}」全部平台！`
+          en
+            ? `Added ${slots} free inbox(es)! Upgrade to Pro ($69 Lifetime) to monitor all ${pack.items.length} platforms at once.`
+            : `已免费为你添加前 ${slots} 个平台！解锁专业版（¥168 永久买断）即可一次性添加全部平台。`
         );
         return;
       }
@@ -558,7 +640,7 @@
         await apiCall("POST", "/api/watches", item);
       }
       await refreshState();
-      showToast(currentLang === "en" ? "Preset pack imported!" : "已成功导入整套盯守包！");
+      showToast(en ? "Preset pack added!" : "已成功导入常用平台包！");
     }
 
     function openSiteLogin(url, name, id = "") {
@@ -570,40 +652,35 @@
     }
 
     function triggerNativeCheckNow(targetId = "", targetName = "") {
+      const en = currentLang === "en";
       if (isNativeApp) {
         nativePost("checkNow", { targetId, targetName });
-        showToast(
-          targetName
-            ? `⚡ 正在后台静默检测「${targetName}」登录态与未读数（约5秒）...`
-            : (currentLang === "en" ? "Running silent WebKit check..." : "⚡ 正在后台静默巡检下一站点（约5秒）...")
-        );
+        showToast(en ? `Checking ${targetName || "inbox"}...` : `正在检查「${targetName || "平台"}」未读消息...`);
       } else {
         refreshState();
-        showToast(currentLang === "en" ? "Refreshed hub state" : "已刷新最新哨兵状态（请打开 TabPulse.app 启用免浏览器静默巡检）");
       }
     }
 
     window.__onNativeProbeFinished = function(info) {
+      const en = currentLang === "en";
       refreshState();
       if (!info) return;
       if (info.authExpired) {
-        showToast(`🟠「${info.name || info.id}」尚未登录或登录已过期，请点「内置登录」登一次`);
+        showToast(en ? `🟠 Sign-in needed for ${info.name || info.id}` : `🟠「${info.name || info.id}」还未登录，请点「打开工作台」登一次`);
       } else if (info.unreadCount > 0) {
-        showToast(`🔴 抓到了！「${info.name || info.id}」有 ${info.unreadCount} 条未读消息！`);
+        showToast(en ? `🔴 ${info.unreadCount} new unread in ${info.name || info.id}!` : `🔴「${info.name || info.id}」有 ${info.unreadCount} 条新消息！`);
       } else {
-        showToast(`🟢「${info.name || info.id}」巡检正常：当前 0 条新未读`);
+        showToast(en ? `🟢 ${info.name || info.id}: 0 unread` : `🟢「${info.name || info.id}」当前没有新未读消息`);
       }
     };
 
     function renderAlerts() {
+      const en = currentLang === "en";
       const container = document.getElementById("alerts-section");
       const alerts = (appState.watches || []).filter((w) => w.status === "unread" || w.status === "auth_expired");
-      if (!alerts.length) {
-        container.innerHTML = "";
-        return;
-      }
+      if (!alerts.length) { container.innerHTML = ""; return; }
       container.innerHTML = `
-        <div class="section-title">🚨 ${currentLang === "en" ? "Action Required" : "待处理新消息与登录提醒"} (${alerts.length})</div>
+        <div class="section-title">🚨 ${en ? "New Replies & Sign-In Notices" : "待处理的新消息与提醒"} (${alerts.length})</div>
         <div class="alerts-dock">
           ${alerts.map((w) => {
             const isAuth = w.status === "auth_expired";
@@ -613,25 +690,25 @@
                   <div class="alert-title">
                     <span>${escapeHtml(w.name)}</span>
                     <span class="badge ${isAuth ? "badge-amber" : "badge-red"}">
-                      ${isAuth ? "登录已过期 · 已自动停刷防封" : w.unreadCount + " 条新消息"}
+                      ${isAuth ? (en ? "Sign-in paused for safety" : "未登录 · 已自动停检保护账号") : (en ? `${w.unreadCount} Unread` : `${w.unreadCount} 条新消息`)}
                     </span>
                   </div>
                   <div style="display:flex;gap:6px;">
                     <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}')">
-                      ${isNativeApp ? "🔓 内置窗口打开/回复" : "↗ 打开官方后台"}
+                      ${isNativeApp ? (en ? "🔓 Open Workspace" : "🔓 打开工作台查看") : (en ? "↗ Open Site" : "↗ 打开网页")}
                     </button>
                     <button class="sm" onclick="resolveItem('${escapeAttr(w.id)}', '${isAuth ? "resume" : "resolve"}')">
-                      ${isAuth ? "我已重登，恢复巡检" : "✓ 标为已处理"}
+                      ${isAuth ? (en ? " Signed In · Resume" : "我已登录，恢复看护") : (en ? "✓ Mark Handled" : "✓ 标为已读")}
                     </button>
                   </div>
                 </div>
-                ${w.contextSummary ? `<div style="font-size:12.5px;color:#475569;">📌 背景：${escapeHtml(w.contextSummary)}</div>` : ""}
+                ${w.contextSummary ? `<div style="font-size:12.5px;color:#475569;">📌 ${escapeHtml(w.contextSummary)}</div>` : ""}
                 ${w.snippet ? `<div class="snippet-box">${escapeHtml(w.snippet)}</div>` : ""}
                 ${!isAuth ? `
-                  <textarea class="draft-area" id="draft-${escapeAttr(w.id)}" placeholder="AI 破冰回复草稿区（红灯平台复制后手动粘贴发送，100%防封）...">${escapeHtml(w.lastDraft || "")}</textarea>
+                  <textarea class="draft-area" id="draft-${escapeAttr(w.id)}" placeholder="${en ? "Reply draft (copy & paste manually to keep your account 100% safe)..." : "回复草稿区（点下方复制后手动粘贴发送，安全防封）..."}">${escapeHtml(w.lastDraft || "")}</textarea>
                   <div style="display:flex;gap:8px;margin-top:6px;">
-                    <button class="sm" onclick="copyDraft('${escapeAttr(w.id)}')">📋 复制回复并打开后台</button>
-                    <button class="sm" onclick="saveDraft('${escapeAttr(w.id)}')">💾 保存草稿</button>
+                    <button class="sm" onclick="copyDraft('${escapeAttr(w.id)}')">${en ? "📋 Copy & Open" : "📋 复制回复并去发送"}</button>
+                    <button class="sm" onclick="saveDraft('${escapeAttr(w.id)}')">${en ? "💾 Save Draft" : "💾 保存草稿"}</button>
                   </div>
                 ` : ""}
               </div>
@@ -642,10 +719,11 @@
     }
 
     function renderGrid() {
+      const en = currentLang === "en";
       const container = document.getElementById("categories-section");
       const watches = appState.watches || [];
       if (!watches.length) {
-        container.innerHTML = `<div class="scanner-box" style="text-align:center;color:var(--muted);">暂无盯守平台，点击上方「一键导入」或「+ 新增盯守」30秒开启防漏单值守。</div>`;
+        container.innerHTML = `<div class="scanner-box" style="text-align:center;color:var(--muted);">${en ? "No platforms added yet. Click '+ Add Pack' above to start in 10 seconds." : "还没有添加网站，点击上方「+ 一键添加」或右上角「+ 添加平台」即可开始。"}</div>`;
         return;
       }
       const groups = {};
@@ -656,26 +734,23 @@
       }
       container.innerHTML = Object.entries(groups).map(([cat, list]) => `
         <div class="section-title">
-          <span>📂 ${escapeHtml(cat)} <span style="color:var(--muted);font-weight:500;">(${list.length})</span></span>
+          <span>📂 ${escapeHtml(en ? (CAT_EN[cat] || cat) : cat)} <span style="color:var(--muted);font-weight:500;">(${list.length})</span></span>
         </div>
         <div class="grid">
           ${list.map((w) => {
             const cls = w.status === "unread" ? "is-unread" : w.status === "auth_expired" ? "is-auth" : w.status === "paused" ? "is-paused" : "";
             const tierBadge = w.publishTier === "red"
-              ? `<span class="badge badge-green">🛡️ 零刷页常驻监听</span>`
+              ? `<span class="badge badge-green">${en ? "🛡️ Zero-Reload Safe" : "🛡️ 零刷页常驻防封"}</span>`
               : w.publishTier === "green"
-                ? `<span class="badge badge-slate">绿灯后台</span>`
-                : `<span class="badge badge-amber">温和看护</span>`;
+                ? `<span class="badge badge-slate">${en ? "Portal Watch" : "后台看护"}</span>`
+                : `<span class="badge badge-amber">${en ? "Gentle Watch" : "温和看护"}</span>`;
             const statusText = w.status === "unread"
-              ? `🔴 ${w.unreadCount} 条未读`
+              ? (en ? `🔴 ${w.unreadCount} Unread` : `🔴 ${w.unreadCount} 条未读`)
               : w.status === "auth_expired"
-                ? "🟠 待内置登录一次"
+                ? (en ? "🟠 Needs Sign-In" : "🟠 待点工作台登录")
                 : w.status === "paused"
-                  ? "⏸ 已暂停"
-                  : (w.lastCheckedAt ? "🟢 已接通值守" : "⚪ 待首次巡检");
-            const checkedStr = w.lastCheckedAt
-              ? new Date(w.lastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-              : "尚未检测";
+                  ? (en ? "⏸ Paused" : "⏸ 已暂停")
+                  : (w.lastCheckedAt ? (en ? "🟢 Active" : "🟢 正常看护中") : (en ? "⚪ Ready (Open Once)" : "⚪ 点下方登录一次即可"));
             return `
               <div class="card ${cls}">
                 <div>
@@ -686,19 +761,19 @@
                   <div class="card-meta">${escapeHtml(w.url)}</div>
                   ${w.contextSummary ? `<div style="font-size:12px;color:#334155;margin-bottom:6px;">${escapeHtml(w.contextSummary)}</div>` : ""}
                   <div style="font-size:11.5px;color:var(--muted);">
-                    状态：<strong>${statusText}</strong> · 上次：${checkedStr} · 周期：${w.baseIntervalMinutes || 60}m
+                    ${statusText}
                   </div>
                 </div>
                 <div class="card-foot">
                   <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}')">
-                    ${isNativeApp ? "🔓 打开常驻工作台" : "↗ 打开网页"}
+                    ${isNativeApp ? (en ? "🔓 Open Workspace" : "🔓 打开工作台") : (en ? "↗ Open Web" : "↗ 打开网页")}
                   </button>
-                  ${w.publishTier !== "red" ? `<button class="sm" onclick="triggerNativeCheckNow('${escapeAttr(w.id)}', '${escapeAttr(w.name)}')">⚡ 测一下</button>` : ""}
+                  ${w.publishTier !== "red" ? `<button class="sm" onclick="triggerNativeCheckNow('${escapeAttr(w.id)}', '${escapeAttr(w.name)}')">${en ? "⚡ Check" : "⚡ 测一下"}</button>` : ""}
                   ${w.status === "paused"
-                    ? `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','resume')">▶ 恢复</button>`
-                    : `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','pause')">⏸ 暂停</button>`
+                    ? `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','resume')">${en ? "▶ Resume" : "▶ 恢复"}</button>`
+                    : `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','pause')">${en ? "⏸ Pause" : "⏸ 暂停"}</button>`
                   }
-                  <button class="sm danger" onclick="removeWatch('${escapeAttr(w.id)}')">删除</button>
+                  <button class="sm danger" onclick="removeWatch('${escapeAttr(w.id)}')">${en ? "Remove" : "删除"}</button>
                 </div>
               </div>
             `;
@@ -720,15 +795,15 @@
     async function saveDraft(id) {
       const val = document.getElementById("draft-" + id)?.value || "";
       await apiCall("POST", `/api/watches/${encodeURIComponent(id)}/draft`, { draft: val });
-      showToast("草稿已保存");
+      showToast(currentLang === "en" ? "Draft saved" : "草稿已保存");
     }
 
     async function copyDraft(id) {
       const val = document.getElementById("draft-" + id)?.value || "";
       if (val) await navigator.clipboard.writeText(val);
       const w = (appState.watches || []).find((x) => x.id === id);
-      showToast("已复制草稿，正在打开平台...");
-      if (w) openSiteLogin(w.url, w.name);
+      showToast(currentLang === "en" ? "Copied! Opening workspace..." : "已复制回复，正在打开平台...");
+      if (w) openSiteLogin(w.url, w.name, w.id);
     }
 
     function switchTab(tab) {
@@ -748,27 +823,28 @@
     }
 
     async function runLeadScan() {
+      const en = currentLang === "en";
       const q = document.getElementById("scan-input").value.trim() || "Shopify";
       const out = document.getElementById("scan-results");
-      out.innerHTML = `<div class="scanner-box" style="text-align:center;">⏳ 正在实时扫描 Reddit、Hacker News、GitHub 最新「${escapeHtml(q)}」求购与外包帖...</div>`;
+      out.innerHTML = `<div class="scanner-box" style="text-align:center;">⏳ ${en ? `Scanning live buyer posts for "${escapeHtml(q)}"...` : `正在实时扫描「${escapeHtml(q)}」最新求购与外包帖...`}</div>`;
       try {
         const data = await apiCall("GET", `/api/scan-leads?q=${encodeURIComponent(q)}&limit=12`);
         const leads = data.leads || [];
         if (!leads.length) {
-          out.innerHTML = `<div class="scanner-box">暂未扫到匹配的实时帖，试试换个更宽泛的英文/中文行业词（如 Shopify, Python, React, 外包）。</div>`;
+          out.innerHTML = `<div class="scanner-box">${en ? "No recent matches found. Try broader keywords like Shopify, Python, React, or iOS." : "暂未扫到匹配的实时帖，试试更常见的业务词（如 Shopify, Python, React, 外包）。"}</div>`;
           return;
         }
         out.innerHTML = leads.map((item, idx) => `
           <div class="lead-item">
             <div class="lead-head">
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                <span class="badge badge-green">意向分 ${item.intentScore}</span>
+                <span class="badge badge-green">${en ? `Intent ${item.intentScore}` : `意向分 ${item.intentScore}`}</span>
                 <span class="badge badge-slate">${escapeHtml(item.source)}</span>
                 <span style="font-size:12px;color:var(--muted);">${new Date(item.publishedAt).toLocaleString()}</span>
               </div>
               <div style="display:flex;gap:6px;">
-                <button class="sm" onclick="copyColdPitch(${idx})">✨ 复制秒回破冰话术</button>
-                <a class="btn sm primary" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">↗ 抢先联系客户</a>
+                <button class="sm" onclick="copyColdPitch(${idx})">${en ? "✨ Copy Pitch" : "✨ 复制破冰话术"}</button>
+                <a class="btn sm primary" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${en ? "↗ Open Post" : "↗ 去联系客户"}</a>
               </div>
             </div>
             <a class="lead-title" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>
@@ -776,8 +852,8 @@
           </div>
         `).join("");
         window.__lastLeads = leads;
-      } catch (err) {
-        out.innerHTML = `<div class="scanner-box">扫描超时，请检查网络连接后重试。</div>`;
+      } catch {
+        out.innerHTML = `<div class="scanner-box">${en ? "Scan timed out. Please check your connection." : "扫描超时，请检查网络连接后重试。"}</div>`;
       }
     }
 
@@ -786,35 +862,41 @@
       if (!item) return;
       const isZh = /[\u4e00-\u9fa5]/.test(item.title);
       const pitch = isZh
-        ? `你好！刚看到你发的「${item.title.slice(0, 28)}」，这类需求最关键的是先把核心交付边界定清防返工。我近期刚做过同类上线项目，方便的话今天内给你列一份明确工期+一口价清单供你参考？`
+        ? `你好！刚看到你发的「${item.title.slice(0, 28)}」，这类需求最关键的是先把交付边界定清防返工。我近期刚做过同类项目，方便的话今天内给你列一份明确工期+一口价清单供你参考？`
         : `Hey! Just saw your post ("${item.title.slice(0, 48)}"). I shipped a very similar workflow recently and know the exact edge cases to watch out for. Happy to send over a 3-bullet fixed-price scope today if you're still looking!`;
       await navigator.clipboard.writeText(pitch);
-      showToast(isZh ? "已复制中文高转化破冰话术！" : "Copied high-converting English pitch!");
+      showToast(currentLang === "en" ? "Copied pitch to clipboard!" : "已复制破冰回复话术！");
     }
 
     function openAddModal() {
+      const en = currentLang === "en";
       if (!isProUnlocked() && (appState.watches || []).length >= 2) {
-        openPaywallModal("免费体验版支持同时盯守 2 个平台。升级 Pro（¥168 永久买断 / $69 Lifetime）即可解锁无限平台盯守！");
+        openPaywallModal(
+          en
+            ? "Free tier watches up to 2 platforms. Unlock ReplyRadar Pro ($69 Lifetime) for unlimited platforms!"
+            : "免费版支持同时看护 2 个网站。升级《消息总管》专业版（¥168 永久买断）即可解锁无限个平台！"
+        );
         return;
       }
       document.getElementById("modal-add").classList.add("open");
     }
 
     async function submitWatch() {
+      const en = currentLang === "en";
       const name = document.getElementById("f-name").value.trim();
       const url = document.getElementById("f-url").value.trim();
-      if (!url) { showToast("请填写平台网址 URL"); return; }
+      if (!url) { showToast(en ? "Please enter a valid URL" : "请填写网站消息页网址"); return; }
       await apiCall("POST", "/api/watches", {
         name: name || url,
         url,
         category: document.getElementById("f-cat").value,
-        baseIntervalMinutes: Number(document.getElementById("f-interval").value) || 45,
+        baseIntervalMinutes: Number(document.getElementById("f-interval").value) || 60,
         publishTier: document.getElementById("f-tier").value,
         contextSummary: document.getElementById("f-ctx").value.trim(),
       });
       closeModals();
       await refreshState();
-      showToast("已加入哨兵盯守！可点卡片「内置登录」登录一次");
+      showToast(en ? "Added! Click 'Open Workspace' once to sign in." : "添加成功！点卡片上的「打开工作台」登录一次即可");
     }
 
     function openPaywallModal(reasonText) {
@@ -822,29 +904,30 @@
       document.getElementById("modal-paywall").classList.add("open");
     }
 
-    function setPriceRegion(r) {
-      document.getElementById("price-cn").style.display = r === "cn" ? "grid" : "none";
-      document.getElementById("price-global").style.display = r === "global" ? "grid" : "none";
-    }
-
     async function activateKey() {
+      const en = currentLang === "en";
       const key = document.getElementById("license-input").value.trim();
       const msgEl = document.getElementById("license-msg");
       const res = await apiCall("POST", "/api/license/activate", { key });
       if (res && res.ok) {
         msgEl.style.color = "var(--green)";
-        msgEl.textContent = "🎉 激活成功！已解锁无限平台与专属破冰话术库！";
+        msgEl.textContent = en ? "🎉 Pro Unlocked!" : "🎉 激活成功！已解锁无限平台与专属话术库！";
         await refreshState();
         setTimeout(closeModals, 900);
       } else {
         msgEl.style.color = "var(--red)";
-        msgEl.textContent = (res && res.error) || "激活码无效，请核对后重试";
+        msgEl.textContent = (res && res.error) || (en ? "Invalid license key" : "激活码无效，请核对后重试");
       }
     }
 
     function openSettingsModal() {
+      const en = currentLang === "en";
       if (!isProUnlocked()) {
-        openPaywallModal("手机秒级 Webhook 推送属于 Pro 专属能力，升级后支持飞书、Server酱、Bark、Slack、Telegram 秒推！");
+        openPaywallModal(
+          en
+            ? "Instant mobile push alerts are included in ReplyRadar Pro."
+            : "手机实时消息推送属于专业版功能，解锁后支持飞书、企业微信、Server酱秒级提醒！"
+        );
         return;
       }
       document.getElementById("s-webhook").value = appState.settings?.webhookUrl || "";
@@ -856,7 +939,7 @@
       await apiCall("POST", "/api/settings", { webhookUrl });
       closeModals();
       await refreshState();
-      showToast("手机推送 Webhook 已保存！");
+      showToast(currentLang === "en" ? "Push webhook saved!" : "手机提醒链接已保存！");
     }
 
     async function acceptTermsConsent() {
@@ -865,38 +948,45 @@
       await apiCall("POST", "/api/settings", { termsAcceptedAt: new Date().toISOString() });
       document.getElementById("modal-consent").classList.remove("open");
       await refreshState();
-      showToast("✓ 已确认安全与隐私条款");
+      showToast(currentLang === "en" ? "✓ Welcome to ReplyRadar" : "✓ 欢迎使用消息总管");
     }
 
     async function checkAppUpdate() {
-      const currentVer = appState.version || "0.3.0";
-      showToast("正在检查最新版本...");
+      const en = currentLang === "en";
+      const currentVer = appState.version || "0.4.0";
+      showToast(en ? "Checking for updates..." : "正在检查新版本...");
       try {
         const res = await fetch("https://a3152557994-ship-it.github.io/tabpulse/version.json?t=" + Date.now());
         const info = await res.json();
         if (info.latestVersion && info.latestVersion !== currentVer) {
-          if (confirm(`发现新版本 v${info.latestVersion}！\n\n更新内容：${info.notesZh || ""}\n\n是否立即下载更新？`)) {
-            window.open(info.downloadUrl, "_blank");
+          const dl = en ? (info.downloadUrlEn || info.downloadUrl) : (info.downloadUrlCn || info.downloadUrl);
+          if (confirm(en ? `New version v${info.latestVersion} available!\n\nDownload now?` : `发现新版本 v${info.latestVersion}！\n\n是否立即下载更新？`)) {
+            window.open(dl, "_blank");
           }
         } else {
-          showToast(`🟢 当前已是最新版本 v${currentVer}`);
+          showToast(en ? `🟢 Up to date (v${currentVer})` : `🟢 当前已是最新版 (v${currentVer})`);
         }
       } catch {
-        showToast(`当前版本 v${currentVer}（离线运行正常）`);
+        showToast(en ? `Running v${currentVer}` : `当前版本 v${currentVer}`);
       }
     }
 
     function openFeedback() {
+      const en = currentLang === "en";
       window.open(
-        "mailto:a3152557994@gmail.com?subject=" + encodeURIComponent("TabPulse 使用反馈 / 申请适配新平台") +
-        "&body=" + encodeURIComponent("我想反馈的问题或希望新增适配的平台网址：\n1. "),
+        "mailto:a3152557994@gmail.com?subject=" + encodeURIComponent(en ? "ReplyRadar Feedback / Site Request" : "消息总管使用反馈 / 申请适配新网站"),
         "_blank"
       );
     }
 
     function openPlaybook() {
+      const en = currentLang === "en";
       if (!isProUnlocked()) {
-        openPaywallModal("《高成交率外包与商务破冰话术库》为 Pro / 买断版专属赠品，输入激活码即可永久解锁阅读！");
+        openPaywallModal(
+          en
+            ? "The Cold-Reply Playbook is a free bonus included with ReplyRadar Pro."
+            : "《高成交回复话术库》为专业版/买断版附赠福利，输入激活码即可永久查看！"
+        );
         return;
       }
       if (isNativeApp && window.__TABPULSE_STANDALONE_MODE) {
@@ -912,15 +1002,7 @@
 
     function toggleLang() {
       currentLang = currentLang === "zh" ? "en" : "zh";
-      document.getElementById("t-title").textContent = currentLang === "en" ? "TabPulse · Unread & Buyer Radar" : "万站回音 · TabPulse";
-      document.getElementById("t-sub").textContent = currentLang === "en"
-        ? "Zero Browser Extension · Silent Native Inbox Sentinel & 24h Lead Scanner"
-        : "免浏览器插件 · 跨平台私信未读哨兵 & 24h 全网求购雷达";
-      document.getElementById("tab-inbox").textContent = currentLang === "en" ? "📬 Cross-Platform Inbox" : "📬 跨平台收件与未读哨兵";
-      document.getElementById("tab-scanner").textContent = currentLang === "en" ? "🎯 Live 24h Lead Scanner" : "🎯 过去 24h 全网求购贴实时扫描";
-      document.getElementById("tab-playbook").textContent = currentLang === "en" ? "🎁 Cold-Reply Playbook" : "🎁 成交破冰话术库";
-      document.getElementById("btn-add").textContent = currentLang === "en" ? "+ Add Watch" : "+ 新增盯守";
-      setPriceRegion(currentLang === "en" ? "global" : "cn");
+      applyStaticLanguage();
       renderAll();
     }
 
@@ -931,6 +1013,7 @@
       return escapeHtml(s).replace(/`/g, "&#96;");
     }
 
+    applyStaticLanguage();
     refreshState();
     setInterval(refreshState, 20000);
   </script>

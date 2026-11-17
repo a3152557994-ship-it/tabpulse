@@ -111,7 +111,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
   try {
     const htmlRes = await fetch(`${baseUrl}/`);
     assert.equal(htmlRes.status, 200);
-    assert.ok((await htmlRes.text()).includes("万站回音 · TabPulse"));
+    assert.ok((await htmlRes.text()).includes("消息总管"));
 
     const playbookRes = await fetch(`${baseUrl}/bonus/cold-reply-playbook`);
     assert.equal(playbookRes.status, 200);
@@ -126,7 +126,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
     assert.ok((await llmsRes.text()).includes("tabpulse_scan_buyer_leads"));
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
-    assert.deepEqual(health, { ok: true, version: "0.3.0" });
+    assert.deepEqual(health, { ok: true, version: "0.4.0" });
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -228,11 +228,14 @@ test("MCP stdio server v0.2.0 exposes 5 tools and completes roundtrip", async ()
   }
 });
 
-test("Native Universal macOS binary passes --self-test and Chrome MV3 extension passes syntax check", () => {
-  const macBin = path.join(PROJECT_ROOT, "dist", "TabPulse.app", "Contents", "MacOS", "TabPulse");
-  if (fs.existsSync(macBin)) {
-    const out = execFileSync(macBin, ["--self-test"], { encoding: "utf-8" });
-    assert.ok(out.includes("SELFTEST_OK"));
+test("Native Universal macOS binaries (CN 消息总管 & EN ReplyRadar) pass --self-test and scripts pass syntax check", () => {
+  const cnBin = path.join(PROJECT_ROOT, "dist", "消息总管.app", "Contents", "MacOS", "XiaoXiZongGuan");
+  const enBin = path.join(PROJECT_ROOT, "dist", "ReplyRadar.app", "Contents", "MacOS", "ReplyRadar");
+  if (fs.existsSync(cnBin)) {
+    assert.ok(execFileSync(cnBin, ["--self-test"], { encoding: "utf-8" }).includes("SELFTEST_OK"));
+  }
+  if (fs.existsSync(enBin)) {
+    assert.ok(execFileSync(enBin, ["--self-test"], { encoding: "utf-8" }).includes("SELFTEST_OK"));
   }
 
   for (const rel of ["extension/background.js", "extension/probe.js", "extension/passive-observer.js", "extension/popup.js"]) {

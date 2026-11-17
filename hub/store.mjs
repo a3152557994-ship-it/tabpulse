@@ -18,7 +18,7 @@ export function getDataFilePath() {
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "0.3.0",
+    version: "0.4.0",
     extensionHeartbeatAt: null,
     license: null,
     settings: {
@@ -419,7 +419,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "0.3.0",
+    version: "0.4.0",
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),
     settings: state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" },
