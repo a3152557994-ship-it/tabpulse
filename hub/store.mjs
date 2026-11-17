@@ -18,7 +18,7 @@ export function getDataFilePath() {
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "0.4.0",
+    version: "1.0.0",
     extensionHeartbeatAt: null,
     license: null,
     settings: {
@@ -186,14 +186,26 @@ function slugifyId(name, url) {
   return `${ascii || host || "watch"}-${suffix}`.replace(/^-+/, "");
 }
 
+export function deterministicProfileUuid(seedStr) {
+  const hex = crypto.createHash("sha1").update(`tabpulse-profile:${seedStr}`).digest("hex");
+  const p1 = hex.slice(0, 8);
+  const p2 = hex.slice(8, 12);
+  const p3 = "4" + hex.slice(13, 16);
+  const v = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  const p4 = v + hex.slice(17, 20);
+  const p5 = hex.slice(20, 32);
+  return `${p1}-${p2}-${p3}-${p4}-${p5}`;
+}
+
 export function upsertWatch(input, nowDate = new Date()) {
   if (!input || !input.url) {
     throw new Error("url is required");
   }
   const state = loadState(nowDate);
   const nowIso = nowDate.toISOString();
+  const allowDuplicateUrl = Boolean(input.allowDuplicateUrl || input.isolatedProfile);
   const existingIdx = state.watches.findIndex(
-    (w) => (input.id && w.id === input.id) || (!input.id && w.url === input.url)
+    (w) => (input.id && w.id === input.id) || (!input.id && !allowDuplicateUrl && w.url === input.url)
   );
 
   const category = VALID_CATEGORIES.has(input.category) ? input.category : "长尾蹲守";
@@ -221,12 +233,16 @@ export function upsertWatch(input, nowDate = new Date()) {
     return { watch: updated, created: false };
   }
 
+  const newId = input.id ? String(input.id).trim() : slugifyId(input.name, input.url);
+  const isolatedProfile = input.isolatedProfile !== undefined ? Boolean(input.isolatedProfile) : true;
   const newWatch = {
-    id: input.id ? String(input.id).trim() : slugifyId(input.name, input.url),
+    id: newId,
     name: String(input.name || new URL(input.url).hostname).trim(),
     url: String(input.url).trim(),
     category,
     publishTier,
+    isolatedProfile,
+    profileUuid: deterministicProfileUuid(newId),
     conversationId: String(input.conversationId || "").trim(),
     contextSummary: String(input.contextSummary || "").trim(),
     mode,
@@ -419,7 +435,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "0.4.0",
+    version: "1.0.0",
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),
     settings: state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" },

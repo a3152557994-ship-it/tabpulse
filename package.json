@@ -1,6 +1,6 @@
 {
   "name": "tabpulse",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "description": "消息总管 (CN) / ReplyRadar (Global) — Native macOS all-in-one unread inbox guard, live 24h buyer-intent scanner & 5-tool MCP server.",
   "type": "module",
   "bin": {

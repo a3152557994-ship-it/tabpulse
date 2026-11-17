@@ -3,11 +3,12 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST_DIR="$PROJECT_ROOT/dist"
+MAS_DIR="$PROJECT_ROOT/mas"
 
 rm -rf "$DIST_DIR"
-mkdir -p "$DIST_DIR"
+mkdir -p "$DIST_DIR" "$MAS_DIR"
 
-echo "[1/5] Generating macOS AppIcon.icns..."
+echo "[1/6] Generating macOS AppIcon.icns..."
 ICON_TMP="$(mktemp -d)"
 ICONSET_DIR="$ICON_TMP/AppIcon.iconset"
 mkdir -p "$ICONSET_DIR"
@@ -42,22 +43,28 @@ done
 ICNS_FILE="$ICON_TMP/AppIcon.icns"
 /usr/bin/iconutil -c icns "$ICONSET_DIR" -o "$ICNS_FILE"
 
-echo "[2/5] Compiling Universal macOS Binary (arm64 + x86_64)..."
+echo "[2/6] Compiling Universal macOS Binaries (Direct + Mac App Store StoreKit2)..."
 BIN_TMP="$(mktemp -d)"
-/usr/bin/swiftc -O \
-  -target arm64-apple-macos12.0 \
-  -framework Cocoa -framework WebKit -framework CryptoKit \
-  "$PROJECT_ROOT/native-mac/TabPulseApp.swift" \
-  -o "$BIN_TMP/bin-arm64"
 
-/usr/bin/swiftc -O \
-  -target x86_64-apple-macos12.0 \
+# Direct Universal Binary
+/usr/bin/swiftc -O -target arm64-apple-macos12.0 \
   -framework Cocoa -framework WebKit -framework CryptoKit \
-  "$PROJECT_ROOT/native-mac/TabPulseApp.swift" \
-  -o "$BIN_TMP/bin-x86_64"
+  "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/direct-arm64"
+/usr/bin/swiftc -O -target x86_64-apple-macos12.0 \
+  -framework Cocoa -framework WebKit -framework CryptoKit \
+  "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/direct-x86_64"
+UNIVERSAL_DIRECT="$BIN_TMP/DirectExec"
+/usr/bin/lipo -create "$BIN_TMP/direct-arm64" "$BIN_TMP/direct-x86_64" -output "$UNIVERSAL_DIRECT"
 
-UNIVERSAL_BIN="$BIN_TMP/UniversalExec"
-/usr/bin/lipo -create "$BIN_TMP/bin-arm64" "$BIN_TMP/bin-x86_64" -output "$UNIVERSAL_BIN"
+# MAS StoreKit2 Universal Binary
+/usr/bin/swiftc -O -DMAS_BUILD -target arm64-apple-macos12.0 \
+  -framework Cocoa -framework WebKit -framework CryptoKit -framework StoreKit \
+  "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/mas-arm64"
+/usr/bin/swiftc -O -DMAS_BUILD -target x86_64-apple-macos12.0 \
+  -framework Cocoa -framework WebKit -framework CryptoKit -framework StoreKit \
+  "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/mas-x86_64"
+UNIVERSAL_MAS="$BIN_TMP/MasExec"
+/usr/bin/lipo -create "$BIN_TMP/mas-arm64" "$BIN_TMP/mas-x86_64" -output "$UNIVERSAL_MAS"
 
 PRESETS_TMP="$BIN_TMP/presets.json"
 /usr/local/bin/node -e '
@@ -68,15 +75,16 @@ import("./seed/preset-packs.mjs").then((m) => {
 });
 ' "$PRESETS_TMP"
 
-build_variant() {
-  local bundle_name="$1"
-  local exec_name="$2"
-  local bundle_id="$3"
-  local dev_region="$4"
-  local app_dir="$DIST_DIR/${bundle_name}.app"
+populate_bundle() {
+  local app_dir="$1"
+  local bundle_name="$2"
+  local exec_name="$3"
+  local bundle_id="$4"
+  local dev_region="$5"
+  local src_bin="$6"
 
   mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources/zh-Hans.lproj" "$app_dir/Contents/Resources/en.lproj"
-  cp "$UNIVERSAL_BIN" "$app_dir/Contents/MacOS/$exec_name"
+  cp "$src_bin" "$app_dir/Contents/MacOS/$exec_name"
   chmod +x "$app_dir/Contents/MacOS/$exec_name"
   cp "$ICNS_FILE" "$app_dir/Contents/Resources/AppIcon.icns"
   cp "$PROJECT_ROOT/hub/ui/index.html" "$app_dir/Contents/Resources/index.html"
@@ -110,15 +118,19 @@ build_variant() {
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.4.0</string>
+  <string>1.0.0</string>
   <key>CFBundleVersion</key>
-  <string>4</string>
+  <string>1</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.productivity</string>
   <key>LSHasLocalizedDisplayName</key>
   <true/>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
   <key>NSAppTransportSecurity</key>
   <dict>
     <key>NSAllowsLocalNetworking</key>
@@ -127,22 +139,61 @@ build_variant() {
 </dict>
 </plist>
 PLIST
-
-  /usr/bin/codesign --force --deep --sign - "$app_dir"
 }
 
-echo "[3/5] Building pure Chinese edition (消息总管.app) & pure English edition (ReplyRadar.app)..."
-build_variant "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN"
-build_variant "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en"
+echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
+populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT"
+/usr/bin/codesign --force --deep --sign - "$DIST_DIR/消息总管.app"
 
-rm -rf "$ICON_TMP" "$BIN_TMP"
+populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT"
+/usr/bin/codesign --force --deep --sign - "$DIST_DIR/ReplyRadar.app"
 
-echo "[4/5] Running Ed25519 & Standalone Store self-tests on both editions..."
+echo "[4/6] Running self-tests on compiled Universal binaries..."
 SAMPLE_KEY="$(/usr/local/bin/node "$PROJECT_ROOT/bin/generate-license.mjs" --plan lifetime --count 1 --prefix TEST | awk -F'\t' '{print $4}')"
 "$DIST_DIR/消息总管.app/Contents/MacOS/XiaoXiZongGuan" --self-test --verify-key "$SAMPLE_KEY"
 "$DIST_DIR/ReplyRadar.app/Contents/MacOS/ReplyRadar" --self-test --verify-key "$SAMPLE_KEY"
 
-echo "[5/5] Packaging separate CN & EN DMG installers and installing 消息总管.app..."
+echo "[5/6] Building Official Apple Signed Mac App Store Package (ReplyRadar-MAS-1.0.0.pkg)..."
+if [ -f "$MAS_DIR/embedded.provisionprofile" ] && security find-identity -v | grep -q "Apple Distribution: Yang He (KU364788TC)"; then
+  MAS_STAGE="$BIN_TMP/mas-stage"
+  mkdir -p "$MAS_STAGE"
+  MAS_APP="$MAS_STAGE/ReplyRadar.app"
+  populate_bundle "$MAS_APP" "ReplyRadar" "ReplyRadar" "com.yanghe.replyradar" "zh_CN" "$UNIVERSAL_MAS"
+  cp "$MAS_DIR/embedded.provisionprofile" "$MAS_APP/Contents/embedded.provisionprofile"
+
+  ENT_FILE="$MAS_DIR/ReplyRadar-MAS.entitlements"
+  cat > "$ENT_FILE" <<'ENT'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <key>com.apple.application-identifier</key>
+  <string>KU364788TC.com.yanghe.replyradar</string>
+  <key>com.apple.developer.team-identifier</key>
+  <string>KU364788TC</string>
+</dict>
+</plist>
+ENT
+
+  /usr/bin/codesign --force --deep --options runtime \
+    --entitlements "$ENT_FILE" \
+    --sign "Apple Distribution: Yang He (KU364788TC)" \
+    "$MAS_APP"
+
+  /usr/bin/productbuild \
+    --component "$MAS_APP" /Applications \
+    --sign "3rd Party Mac Developer Installer: Yang He (KU364788TC)" \
+    "$DIST_DIR/ReplyRadar-MAS-1.0.0.pkg"
+  echo "MAS_PKG_SIGNED_OK: $DIST_DIR/ReplyRadar-MAS-1.0.0.pkg"
+fi
+
+rm -rf "$ICON_TMP" "$BIN_TMP"
+
+echo "[6/6] Packaging CN & EN DMG installers and updating /Applications/消息总管.app..."
 STAGE_CN="$(mktemp -d)"
 cp -R "$DIST_DIR/消息总管.app" "$STAGE_CN/"
 ln -s /Applications "$STAGE_CN/Applications"
@@ -159,5 +210,5 @@ rm -rf "$STAGE_EN"
 rm -rf "/Applications/TabPulse.app" "/Applications/消息总管.app"
 cp -R "$DIST_DIR/消息总管.app" "/Applications/消息总管.app"
 
-ls -lh "$DIST_DIR"/*.dmg
-echo "DUAL_BUILD_COMPLETE"
+ls -lh "$DIST_DIR"
+echo "ALL_MAC_BUILDS_COMPLETE"

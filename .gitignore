@@ -1,7 +1,10 @@
 node_modules/
 data/
 dist/
+mas/
 release/
 .DS_Store
 *.pem
 *license-keys*
+windows-app/bin/
+windows-app/obj/

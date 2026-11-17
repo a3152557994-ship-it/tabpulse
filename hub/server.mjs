@@ -119,7 +119,7 @@ export function createHubServer() {
       }
 
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "0.4.0" }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "1.0.0" }, corsOrigin);
         return;
       }
 

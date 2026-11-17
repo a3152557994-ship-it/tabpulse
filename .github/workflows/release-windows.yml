@@ -1,0 +1,59 @@
+name: Build & Release Windows Editions
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload Windows zips to"
+        required: true
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8 & Node
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Export Preset Packs JSON
+        shell: pwsh
+        run: |
+          node -e "import('./seed/preset-packs.mjs').then(m => import('node:fs').then(fs => fs.writeFileSync('presets.json', JSON.stringify(m.PRESET_PACKS, null, 2))))"
+
+      - name: Build Chinese Edition (消息总管.exe) & English Edition (ReplyRadar.exe)
+        shell: pwsh
+        run: |
+          dotnet publish windows-app/TabPulseWin.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:AssemblyName="消息总管" -o out-cn
+          mkdir out-cn/resources
+          cp hub/ui/index.html out-cn/resources/index.html
+          cp docs/cold-reply-playbook.html out-cn/resources/cold-reply-playbook.html
+          cp presets.json out-cn/resources/presets.json
+          ./out-cn/消息总管.exe --self-test
+
+          dotnet publish windows-app/TabPulseWin.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:AssemblyName="ReplyRadar" -o out-en
+          mkdir out-en/resources
+          cp hub/ui/index.html out-en/resources/index.html
+          cp docs/cold-reply-playbook.html out-en/resources/cold-reply-playbook.html
+          cp presets.json out-en/resources/presets.json
+          ./out-en/ReplyRadar.exe --self-test
+
+          Compress-Archive -Path out-cn/* -DestinationPath XiaoXiZongGuan-CN-Windows-x64.zip -Force
+          Compress-Archive -Path out-en/* -DestinationPath ReplyRadar-EN-Windows-x64.zip -Force
+
+      - name: Upload Windows Installers to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = if ("${{ github.event.inputs.tag }}" -ne "") { "${{ github.event.inputs.tag }}" } else { "${{ github.ref_name }}" }
+          gh release upload $tag XiaoXiZongGuan-CN-Windows-x64.zip ReplyRadar-EN-Windows-x64.zip --clobber

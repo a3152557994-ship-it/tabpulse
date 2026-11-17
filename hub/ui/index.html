@@ -301,53 +301,66 @@
 
       <div id="price-cn" class="pricing-cards">
         <div class="price-box">
-          <span class="badge badge-slate">年度会员</span>
-          <div class="price-num">¥99 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 年</span></div>
-          <div style="font-size:12px;color:var(--muted);">单次付款，到期绝不自动扣费</div>
+          <span class="badge badge-slate">轻量体验年卡</span>
+          <div class="price-num" id="cn-p1">¥9.9 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 年</span></div>
+          <div style="font-size:12px;color:var(--muted);">一杯水钱，全年防漏单</div>
           <ul class="offer-list">
-            <li>无限个网站与店铺私信同时盯守</li>
-            <li>飞书 / 微信服务通知 / 手机秒推</li>
+            <li>支持最多 6 个网站或账号同时盯守</li>
+            <li>独立防串号隔离仓（2 个闲鱼/小红书号同挂）</li>
             <li>零刷页常驻安全防封保护</li>
           </ul>
+          <button class="btn" id="mas-buy-yearly-cn" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.yearly')"> Apple 账户订阅 (¥9.9/年)</button>
         </div>
         <div class="price-box featured">
-          <span class="badge badge-green">🔥 85% 用户首选 · 一次买断</span>
-          <div class="price-num">¥168 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 永久买断</span></div>
-          <div style="font-size:12px;color:var(--primary);font-weight:600;">加 ¥69 直接永久拥有 · 支持 2 台电脑</div>
+          <span class="badge badge-green">🔥 92% 多号卖家首选 · 一次付清</span>
+          <div class="price-num" id="cn-p2">¥39 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 永久买断</span></div>
+          <div style="font-size:12px;color:var(--primary);font-weight:600;" id="cn-p2-sub">同行客服软件十分之一价格 · 支持同平台无限多开防串号</div>
           <ul class="offer-list">
-            <li><strong>包含年度版全部无限平台与手机提醒功能</strong></li>
+            <li><strong>无限个闲鱼 / 小红书 / 店铺账号独立隔离同时在线</strong></li>
+            <li><strong>手机飞书 / 微信服务通知秒级推送</strong></li>
             <li>🎁 <strong>白送赠品</strong>：《高成交率外包与商务回复话术库》</li>
-            <li>🛡️ <strong>14 天退款承诺</strong>：抓不到任何真实消息无理由全额退！</li>
+            <li>🛡️ <strong>售后承诺</strong>：14 天不满意无理由全额退！</li>
           </ul>
-          <a class="btn primary" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">获取正版激活码（秒发货）→</a>
+          <a class="btn primary" id="direct-buy-cn" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">获取正版买断激活码（秒发货）→</a>
+          <button class="btn primary" id="mas-buy-life-cn" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.lifetime')"> Apple 一键永久买断 (¥28)</button>
         </div>
       </div>
 
       <div id="price-global" class="pricing-cards" style="display:none;">
         <div class="price-box">
           <span class="badge badge-slate">Annual Pro</span>
-          <div class="price-num">$19 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ mo (billed $228/yr)</span></div>
-          <div style="font-size:12px;color:var(--muted);">Or $29/mo monthly · Agency $79/mo</div>
+          <div class="price-num" id="gl-p1">$4.99 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ yr</span></div>
+          <div style="font-size:12px;color:var(--muted);">Multi-account inbox &amp; 24/7 lead radar</div>
           <ul class="offer-list">
-            <li>Unlimited private inboxes &amp; 24/7 lead radar</li>
+            <li>Up to 10 isolated marketplace &amp; social accounts</li>
             <li>Instant Slack, Telegram &amp; Discord push alerts</li>
             <li>Zero-polling safe native workspace engine</li>
           </ul>
+          <button class="btn" id="mas-buy-yearly-gl" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.yearly')"> Subscribe via Apple ($4.99/yr)</button>
         </div>
         <div class="price-box featured">
           <span class="badge badge-green">🔥 Most Popular · Pay Once</span>
-          <div class="price-num">$69 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ Lifetime</span></div>
-          <div style="font-size:12px;color:var(--primary);font-weight:600;">Own ReplyRadar Desktop forever · 2 Macs</div>
+          <div class="price-num" id="gl-p2">$14.99 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ Lifetime</span></div>
+          <div style="font-size:12px;color:var(--primary);font-weight:600;" id="gl-p2-sub">Unlimited isolated accounts · Own forever</div>
           <ul class="offer-list">
-            <li><strong>Unlimited inboxes (zero Chrome extension needed)</strong></li>
+            <li><strong>Unlimited isolated cookie sandboxes per platform</strong></li>
             <li>🎁 <strong>Free Bonus</strong>: High-Converting Cold Reply Playbook</li>
             <li>🛡️ <strong>14-Day Guarantee</strong>: Catch a real lead or 100% refund</li>
           </ul>
-          <a class="btn primary" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">Get Instant License Key →</a>
+          <a class="btn primary" id="direct-buy-gl" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">Get Instant License Key →</a>
+          <button class="btn primary" id="mas-buy-life-gl" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.lifetime')"> Unlock Lifetime via Apple ($14.99)</button>
         </div>
       </div>
 
-      <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:10px;">
+      <div id="mas-restore-bar" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted);">
+        <button class="sm" onclick="restoreMasIap()" id="btn-mas-restore">🔄 恢复已购项目 / Restore Purchases</button>
+        <div>
+          <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="text-decoration:underline;">使用条款 (EULA)</a> ·
+          <a href="https://a3152557994-ship-it.github.io/tabpulse/privacy.html" target="_blank" style="text-decoration:underline;">隐私政策 (Privacy)</a>
+        </div>
+      </div>
+
+      <div id="direct-license-bar" style="border-top:1px solid var(--border);padding-top:12px;margin-top:10px;">
         <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;" id="lbl-lic-input">已有正版激活码？粘贴到下方立即解锁：</label>
         <div style="display:flex;gap:8px;">
           <input id="license-input" style="flex:1;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;font-size:12.5px;" placeholder="TP1...." />
@@ -409,7 +422,9 @@
     let appState = { watches: [], stats: {}, license: { valid: false, plan: "free" }, settings: { lang: "zh", webhookUrl: "" } };
     let presetPacks = [];
     let currentLang = (navigator.language || "zh").toLowerCase().startsWith("zh") ? "zh" : "en";
-    const isNativeApp = Boolean(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tabpulse);
+    const isMacNative = Boolean(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tabpulse);
+    const isWinNative = Boolean(window.chrome && window.chrome.webview);
+    const isNativeApp = isMacNative || isWinNative;
 
     const CAT_EN = {
       "接单外包": "Freelance & Client Leads",
@@ -427,9 +442,15 @@
     }
 
     function nativePost(action, payload = {}) {
-      if (!isNativeApp) return false;
-      window.webkit.messageHandlers.tabpulse.postMessage({ action, ...payload });
-      return true;
+      if (isMacNative) {
+        window.webkit.messageHandlers.tabpulse.postMessage({ action, ...payload });
+        return true;
+      }
+      if (isWinNative) {
+        window.chrome.webview.postMessage(JSON.stringify({ action, ...payload }));
+        return true;
+      }
+      return false;
     }
 
     async function apiCall(method, path, body) {
@@ -643,11 +664,47 @@
       showToast(en ? "Preset pack added!" : "已成功导入常用平台包！");
     }
 
-    function openSiteLogin(url, name, id = "") {
+    function openSiteLogin(url, name, id = "", profileUuid = "") {
       if (isNativeApp) {
-        nativePost("openLoginSheet", { url, name, id });
+        nativePost("openLoginSheet", { url, name, id, profileUuid, isolatedProfile: true });
       } else {
         window.open(url, "_blank", "noopener");
+      }
+    }
+
+    async function cloneMultiAccount(sourceId) {
+      const en = currentLang === "en";
+      const src = (appState.watches || []).find((x) => x.id === sourceId);
+      if (!src) return;
+      if (!isProUnlocked() && (appState.watches || []).length >= 2) {
+        openPaywallModal(
+          en
+            ? "Free tier supports up to 2 accounts. Unlock Pro to run unlimited isolated accounts on the same site simultaneously!"
+            : "免费版支持同时挂 2 个账号。解锁专业版即可在同一平台无限多开独立防串号账号（如同时挂 5 个闲鱼号 + 5 个小红书号）！"
+        );
+        return;
+      }
+      const nextNum = (appState.watches || []).filter((x) => x.url === src.url).length + 1;
+      const defaultLabel = en ? `${src.name} (#${nextNum})` : `${src.name}（${nextNum}号店/副号）`;
+      const customName = prompt(
+        en ? "Enter a label for this isolated account (cookies are 100% separate):" : "给这个独立隔离的新账号起个好认的名字（Cookie 与原账号 100% 物理隔离绝不串号）：",
+        defaultLabel
+      );
+      if (!customName) return;
+      const created = await apiCall("POST", "/api/watches", {
+        name: customName.trim(),
+        url: src.url,
+        category: src.category,
+        publishTier: src.publishTier,
+        baseIntervalMinutes: src.baseIntervalMinutes || 60,
+        isolatedProfile: true,
+        allowDuplicateUrl: true,
+        contextSummary: en ? "Isolated multi-account container" : "独立防串号多开账号仓",
+      });
+      await refreshState();
+      showToast(en ? "Isolated account created! Sign in inside the new window." : "已创建独立防串号仓！正在打开专属登录窗...");
+      if (created && created.watch) {
+        openSiteLogin(created.watch.url, created.watch.name, created.watch.id, created.watch.profileUuid || "");
       }
     }
 
@@ -756,7 +813,10 @@
                 <div>
                   <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;">
                     <h3 class="card-title">${escapeHtml(w.name)}</h3>
-                    ${tierBadge}
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+                      ${w.isolatedProfile !== false ? `<span class="badge" style="background:var(--purple-bg);color:var(--purple);border:1px solid #ddd6fe;">${en ? "🔒 Isolated" : "🔒 独立防串号"}</span>` : ""}
+                      ${tierBadge}
+                    </div>
                   </div>
                   <div class="card-meta">${escapeHtml(w.url)}</div>
                   ${w.contextSummary ? `<div style="font-size:12px;color:#334155;margin-bottom:6px;">${escapeHtml(w.contextSummary)}</div>` : ""}
@@ -765,8 +825,11 @@
                   </div>
                 </div>
                 <div class="card-foot">
-                  <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}')">
-                    ${isNativeApp ? (en ? "🔓 Open Workspace" : "🔓 打开工作台") : (en ? "↗ Open Web" : "↗ 打开网页")}
+                  <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}', '${escapeAttr(w.profileUuid || "")}')">
+                    ${isNativeApp ? (en ? "🔓 Open Account" : "🔓 打开工作台") : (en ? "↗ Open Web" : "↗ 打开网页")}
+                  </button>
+                  <button class="sm" onclick="cloneMultiAccount('${escapeAttr(w.id)}')">
+                    ${en ? "➕ Add 2nd Acc" : "➕ 同站多开"}
                   </button>
                   ${w.publishTier !== "red" ? `<button class="sm" onclick="triggerNativeCheckNow('${escapeAttr(w.id)}', '${escapeAttr(w.name)}')">${en ? "⚡ Check" : "⚡ 测一下"}</button>` : ""}
                   ${w.status === "paused"
@@ -901,8 +964,40 @@
 
     function openPaywallModal(reasonText) {
       if (reasonText) document.getElementById("paywall-reason").textContent = reasonText;
+      const isMas = Boolean(window.__TABPULSE_MAS_MODE);
+      document.getElementById("direct-license-bar").style.display = isMas ? "none" : "block";
+      document.getElementById("mas-restore-bar").style.display = isMas ? "flex" : "none";
+      document.getElementById("direct-buy-cn").style.display = isMas ? "none" : "inline-flex";
+      document.getElementById("direct-buy-gl").style.display = isMas ? "none" : "inline-flex";
+      document.getElementById("mas-buy-yearly-cn").style.display = isMas ? "inline-flex" : "none";
+      document.getElementById("mas-buy-life-cn").style.display = isMas ? "inline-flex" : "none";
+      document.getElementById("mas-buy-yearly-gl").style.display = isMas ? "inline-flex" : "none";
+      document.getElementById("mas-buy-life-gl").style.display = isMas ? "inline-flex" : "none";
+      if (isMas) {
+        document.getElementById("cn-p2").innerHTML = '¥28 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 永久买断</span>';
+      }
       document.getElementById("modal-paywall").classList.add("open");
     }
+
+    function buyMasIap(productId) {
+      showToast(currentLang === "en" ? "Connecting to Apple App Store..." : "正在拉起 Apple 官方支付...");
+      nativePost("purchaseIap", { productId });
+    }
+
+    function restoreMasIap() {
+      showToast(currentLang === "en" ? "Restoring Apple purchases..." : "正在向 Apple 恢复已购项目...");
+      nativePost("restoreIap", {});
+    }
+
+    window.__onMasIapResult = function(res) {
+      if (res && res.ok) {
+        showToast(currentLang === "en" ? "🎉 Apple Pro Purchase Unlocked!" : "🎉 Apple 官方专业版已成功解锁！");
+        closeModals();
+        refreshState();
+      } else if (res && res.error) {
+        showToast(res.error);
+      }
+    };
 
     async function activateKey() {
       const en = currentLang === "en";

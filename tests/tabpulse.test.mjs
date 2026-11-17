@@ -126,7 +126,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
     assert.ok((await llmsRes.text()).includes("tabpulse_scan_buyer_leads"));
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
-    assert.deepEqual(health, { ok: true, version: "0.4.0" });
+    assert.deepEqual(health, { ok: true, version: "1.0.0" });
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },

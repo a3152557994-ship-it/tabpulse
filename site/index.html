@@ -191,10 +191,12 @@
       </p>
       <div class="cta-group">
         <a class="btn primary" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg" id="cta-dl">
-           免费下载 macOS 原生独立版 (.dmg)
+           免费下载《消息总管》苹果版 (.dmg)
         </a>
-        <a class="btn" href="#pricing" id="cta-buy">💎 查看 ¥168 永久买断方案</a>
-        <a class="btn" href="https://github.com/a3152557994-ship-it/tabpulse" target="_blank" rel="noopener">GitHub &amp; MCP</a>
+        <a class="btn primary" href="https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip" id="cta-dl-win" style="background:linear-gradient(135deg,#059669,#0d9488);">
+          🪟 免费下载《消息总管》Windows版 (.zip)
+        </a>
+        <a class="btn" href="#pricing" id="cta-buy">💎 查看 ¥39 多号买断版</a>
       </div>
       <div style="font-size:12.5px;color:var(--muted);" id="h-trust">
         支持 Apple Silicon (M1–M4) &amp; Intel · 免注册即开即用（免费盯 2 个平台）· Cookie 100% 留在本机绝不上传云端
@@ -402,6 +404,8 @@
   <script>
     const DL_CN = "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg";
     const DL_EN = "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg";
+    const DL_WIN_CN = "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip";
+    const DL_WIN_EN = "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip";
     let siteLang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
 
     function applySiteLang() {
@@ -426,11 +430,18 @@
       const ctaDl = document.getElementById("cta-dl");
       ctaDl.href = en ? DL_EN : DL_CN;
       ctaDl.textContent = en
-        ? " Download ReplyRadar for macOS (.dmg)"
-        : " 免费下载《消息总管》苹果电脑版 (.dmg)";
+        ? " Download for macOS (.dmg)"
+        : " 免费下载《消息总管》苹果版 (.dmg)";
+      const ctaWin = document.getElementById("cta-dl-win");
+      if (ctaWin) {
+        ctaWin.href = en ? DL_WIN_EN : DL_WIN_CN;
+        ctaWin.textContent = en
+          ? "🪟 Download for Windows (.zip)"
+          : "🪟 免费下载《消息总管》Windows版 (.zip)";
+      }
       document.getElementById("cta-buy").textContent = en
-        ? "💎 Get Lifetime Pro ($69)"
-        : "💎 查看 ¥168 永久买断方案";
+        ? "💎 Lifetime Multi-Account ($14.99)"
+        : "💎 查看 ¥39 多开买断版";
       document.getElementById("sc-title").textContent = en
         ? "Free Live Tool: Last 24–72h Buyer-Intent Lead Scanner"
         : "免费在线实测：《过去 24～72 小时全网漏单与求购扫描器》";

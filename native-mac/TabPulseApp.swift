@@ -2,6 +2,22 @@ import Cocoa
 import CryptoKit
 import Foundation
 import WebKit
+#if MAS_BUILD
+import StoreKit
+#endif
+
+func deterministicProfileUUID(_ seed: String) -> UUID {
+    let digest = Insecure.SHA1.hash(data: Data("tabpulse-profile:\(seed)".utf8))
+    var bytes = Array(digest.prefix(16))
+    bytes[6] = (bytes[6] & 0x0F) | 0x40
+    bytes[8] = (bytes[8] & 0x3F) | 0x80
+    return UUID(uuid: (
+        bytes[0], bytes[1], bytes[2], bytes[3],
+        bytes[4], bytes[5], bytes[6], bytes[7],
+        bytes[8], bytes[9], bytes[10], bytes[11],
+        bytes[12], bytes[13], bytes[14], bytes[15]
+    ))
+}
 
 // MARK: - Ed25519 Offline License Verifier (Matches hub/license.mjs)
 struct LicenseVerifier {
@@ -194,12 +210,16 @@ final class StandaloneStore {
         let unreadTotal = unreadList.reduce(0) { $0 + (($1["unreadCount"] as? Int) ?? 0) }
 
         var licOut: [String: Any] = ["valid": false, "plan": "free"]
-        if let licObj = st["license"] as? [String: Any], let key = licObj["key"] as? String {
-            licOut = LicenseVerifier.verify(key)
+        if let licObj = st["license"] as? [String: Any] {
+            if (licObj["iapUnlocked"] as? Bool) == true {
+                licOut = ["valid": true, "plan": (licObj["plan"] as? String) ?? "lifetime", "serial": "APPLE-IAP"]
+            } else if let key = licObj["key"] as? String {
+                licOut = LicenseVerifier.verify(key)
+            }
         }
 
         return [
-            "version": "0.4.0",
+            "version": "1.0.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -398,6 +418,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     func detectHubAndLoadDashboard() {
+        #if MAS_BUILD
+        useExternalHub = false
+        loadStandaloneUI()
+        refreshStoreKitEntitlements()
+        return
+        #else
         guard let healthURL = URL(string: "http://127.0.0.1:17890/api/health") else {
             loadStandaloneUI()
             return
@@ -415,11 +441,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 }
             }
         }.resume()
+        #endif
     }
 
     func loadStandaloneUI() {
+        #if MAS_BUILD
+        let modeSrc = "window.__TABPULSE_STANDALONE_MODE = true; window.__TABPULSE_MAS_MODE = true;"
+        #else
+        let modeSrc = "window.__TABPULSE_STANDALONE_MODE = true;"
+        #endif
         let script = WKUserScript(
-            source: "window.__TABPULSE_STANDALONE_MODE = true;",
+            source: modeSrc,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )
@@ -454,7 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         return nil
     }
 
-    func openLoginSheet(urlStr: String, name: String, watchId: String = "") {
+    func openLoginSheet(urlStr: String, name: String, watchId: String = "", profileUuidStr: String = "", isolated: Bool = true) {
         guard let u = URL(string: urlStr) else { return }
         activeLoginWatchId = watchId.isEmpty ? nil : watchId
 
@@ -464,7 +496,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             wv = existing
         } else {
             let cfg = WKWebViewConfiguration()
-            cfg.websiteDataStore = .default()
+            if isolated, !watchId.isEmpty, #available(macOS 14.0, *) {
+                let targetUUID = UUID(uuidString: profileUuidStr) ?? deterministicProfileUUID(watchId)
+                cfg.websiteDataStore = WKWebsiteDataStore(forIdentifier: targetUUID)
+            } else {
+                cfg.websiteDataStore = .default()
+            }
             cfg.userContentController.add(self, name: "tabpulsePassive")
             if let obsURL = Bundle.main.url(forResource: "passive-observer", withExtension: "js"),
                let obsJS = try? String(contentsOf: obsURL, encoding: .utf8) {
@@ -530,9 +567,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let url = (body["url"] as? String) ?? ""
             let name = (body["name"] as? String) ?? "平台"
             let id = (body["id"] as? String) ?? ""
-            openLoginSheet(urlStr: url, name: name, watchId: id)
+            let pUuid = (body["profileUuid"] as? String) ?? ""
+            let iso = (body["isolatedProfile"] as? Bool) ?? true
+            openLoginSheet(urlStr: url, name: name, watchId: id, profileUuidStr: pUuid, isolated: iso)
             return
         }
+        #if MAS_BUILD
+        if action == "purchaseIap" {
+            let pid = (body["productId"] as? String) ?? "com.yanghe.replyradar.pro.lifetime"
+            handleMasPurchase(productId: pid)
+            return
+        }
+        if action == "restoreIap" {
+            handleMasRestore()
+            return
+        }
+        #endif
         if action == "checkNow" {
             let tid = (body["targetId"] as? String) ?? ""
             runSilentCheckCycle(forceImmediate: true, targetId: tid)
@@ -615,12 +665,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let url = (payload?["url"] as? String) ?? ""
             let id = (payload?["id"] as? String) ?? "watch-\(Int(Date().timeIntervalSince1970))-\(Int.random(in: 100...999))"
             let mins = (payload?["baseIntervalMinutes"] as? Int) ?? 60
+            let allowDup = (payload?["allowDuplicateUrl"] as? Bool) ?? false
+            let pUuid = deterministicProfileUUID(id).uuidString.lowercased()
             let newItem: [String: Any] = [
                 "id": id,
                 "name": (payload?["name"] as? String) ?? url,
                 "url": url,
                 "category": (payload?["category"] as? String) ?? "接单外包",
                 "publishTier": (payload?["publishTier"] as? String) ?? "yellow",
+                "isolatedProfile": true,
+                "profileUuid": pUuid,
                 "contextSummary": (payload?["contextSummary"] as? String) ?? "",
                 "baseIntervalMinutes": mins,
                 "status": "idle",
@@ -629,7 +683,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 "lastDraft": "",
                 "nextCheckAt": StandaloneStore.shared.computeNextCheckISO(baseMinutes: mins)
             ]
-            if let idx = watches.firstIndex(where: { ($0["id"] as? String) == id || ($0["url"] as? String) == url }) {
+            if let idx = watches.firstIndex(where: { ($0["id"] as? String) == id || (!allowDup && ($0["url"] as? String) == url) }) {
                 watches[idx] = newItem
             } else {
                 watches.append(newItem)
@@ -697,6 +751,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
         }
     }
+
+    #if MAS_BUILD
+    func sendMasJsResult(_ obj: [String: Any]) {
+        guard let d = try? JSONSerialization.data(withJSONObject: obj),
+              let s = String(data: d, encoding: .utf8) else { return }
+        DispatchQueue.main.async {
+            self.dashboardWebView.evaluateJavaScript("if(window.__onMasIapResult) window.__onMasIapResult(\(s));", completionHandler: nil)
+        }
+    }
+
+    func refreshStoreKitEntitlements() {
+        Task {
+            for await result in Transaction.currentEntitlements {
+                if case .verified(let tx) = result {
+                    if tx.productID == "com.yanghe.replyradar.pro.lifetime" || tx.productID == "com.yanghe.replyradar.pro.yearly" {
+                        var st = StandaloneStore.shared.loadState()
+                        st["license"] = ["iapUnlocked": true, "plan": "lifetime", "productId": tx.productID]
+                        StandaloneStore.shared.saveState(st)
+                    }
+                }
+            }
+        }
+    }
+
+    func handleMasPurchase(productId: String) {
+        Task {
+            do {
+                let products = try await Product.products(for: [productId])
+                guard let product = products.first else {
+                    sendMasJsResult(["ok": false, "error": isChineseSystem ? "商品正在同步审核中，请稍后再试" : "Product syncing with App Store"])
+                    return
+                }
+                let result = try await product.purchase()
+                switch result {
+                case .success(let verification):
+                    if case .verified(let tx) = verification {
+                        await tx.finish()
+                        var st = StandaloneStore.shared.loadState()
+                        st["license"] = ["iapUnlocked": true, "plan": "lifetime", "productId": tx.productID]
+                        StandaloneStore.shared.saveState(st)
+                        sendMasJsResult(["ok": true])
+                    } else {
+                        sendMasJsResult(["ok": false, "error": "Verification failed"])
+                    }
+                case .userCancelled:
+                    sendMasJsResult(["ok": false, "error": isChineseSystem ? "已取消支付" : "Purchase cancelled"])
+                default:
+                    sendMasJsResult(["ok": false, "error": isChineseSystem ? "交易处理中" : "Purchase pending"])
+                }
+            } catch {
+                sendMasJsResult(["ok": false, "error": error.localizedDescription])
+            }
+        }
+    }
+
+    func handleMasRestore() {
+        Task {
+            do {
+                try await AppStore.sync()
+                var unlocked = false
+                for await result in Transaction.currentEntitlements {
+                    if case .verified(let tx) = result,
+                       (tx.productID == "com.yanghe.replyradar.pro.lifetime" || tx.productID == "com.yanghe.replyradar.pro.yearly") {
+                        unlocked = true
+                        var st = StandaloneStore.shared.loadState()
+                        st["license"] = ["iapUnlocked": true, "plan": "lifetime", "productId": tx.productID]
+                        StandaloneStore.shared.saveState(st)
+                    }
+                }
+                sendMasJsResult(unlocked
+                    ? ["ok": true]
+                    : ["ok": false, "error": isChineseSystem ? "未找到可恢复的购买记录" : "No previous purchases found"])
+            } catch {
+                sendMasJsResult(["ok": false, "error": error.localizedDescription])
+            }
+        }
+    }
+    #endif
 
     func handlePassiveEvent(watchId: String, unreadCount: Int, snippet: String) {
         if useExternalHub, let repURL = URL(string: "http://127.0.0.1:17890/api/report") {
