@@ -1,9 +1,11 @@
 {
-  "latestVersion": "0.4.0",
+  "latestVersion": "1.0.0",
   "publishedAt": "2026-11-17",
   "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg",
-  "notesZh": "全新推出国内纯中文版《消息总管》与海外纯英文版《ReplyRadar》独立安装包，零刷页常驻防封保护。",
-  "notesEn": "Dedicated native installers: ReplyRadar.app (English) and 消息总管.app (Chinese) with zero-reload passive workspace protection."
+  "downloadUrlWinCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip",
+  "downloadUrlWinEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
+  "notesZh": "v1.0.0 正式版：新增「同平台多账号独立防串号多开仓」、Windows 电脑独立版与苹果 Mac App Store 官方商店包。",
+  "notesEn": "v1.0.0 Official Release: Multi-account isolated cookie containers, native Windows edition, and Mac App Store package."
 }
