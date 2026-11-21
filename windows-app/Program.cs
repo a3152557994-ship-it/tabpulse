@@ -79,7 +79,7 @@ internal sealed class MainDashboardForm : Form
         Directory.CreateDirectory(Path.Combine(_appRoot, "profiles"));
         _stateFile = Path.Combine(_appRoot, "state.json");
 
-        Text = _isZh ? "消息总管 — 多平台未读消息提醒与多开防串号盒子 (v1.0.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v1.0.0)";
+        Text = _isZh ? "消息总管 — 多平台未读消息提醒与多开防串号盒子 (v2.0.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v2.0.0)";
         Width = 1200;
         Height = 800;
         StartPosition = FormStartPosition.CenterScreen;
@@ -151,15 +151,52 @@ internal sealed class MainDashboardForm : Form
         }
         var init = new JsonObject
         {
-            ["version"] = "1.0.0",
+            ["version"] = "2.0.0",
             ["settings"] = new JsonObject { ["webhookUrl"] = "", ["lang"] = _isZh ? "zh" : "en" },
-            ["watches"] = watches
+            ["watches"] = watches,
+            ["quickReplies"] = new JsonArray()
         };
         SaveState(init);
         return init;
     }
 
     private void SaveState(JsonObject st) => File.WriteAllText(_stateFile, st.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+
+    private static void SendWebhookPush(string webhookUrl, string siteName, int count, string snippet, string siteUrl, bool isZh)
+    {
+        var trimmed = (webhookUrl ?? "").Trim();
+        if (string.IsNullOrEmpty(trimmed) || !Uri.TryCreate(trimmed, UriKind.Absolute, out _)) return;
+        var title = isZh ? $"🔔【消息总管】{siteName} 有 {count} 条新消息" : $"🔔 [ReplyRadar] {count} new unread in {siteName}";
+        var bodyText = string.IsNullOrEmpty(snippet) ? siteUrl : $"{snippet}\n{siteUrl}";
+        var full = $"{title}\n{bodyText}";
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (trimmed.Contains("api.day.app/") && trimmed.Split('/').Length == 4)
+                {
+                    await Http.GetAsync($"{trimmed}/{Uri.EscapeDataString(title)}/{Uri.EscapeDataString(bodyText)}");
+                    return;
+                }
+                JsonObject payload;
+                if (trimmed.Contains("feishu.cn") || trimmed.Contains("larksuite.com"))
+                    payload = new JsonObject { ["msg_type"] = "text", ["content"] = new JsonObject { ["text"] = full } };
+                else if (trimmed.Contains("qyapi.weixin.qq.com"))
+                    payload = new JsonObject { ["msgtype"] = "text", ["text"] = new JsonObject { ["content"] = full } };
+                else if (trimmed.Contains("discord.com/api/webhooks"))
+                    payload = new JsonObject { ["content"] = full };
+                else if (trimmed.Contains("sctapi.ftqq.com"))
+                    payload = new JsonObject { ["title"] = title, ["desp"] = bodyText };
+                else
+                    payload = new JsonObject { ["text"] = full, ["title"] = title, ["unreadCount"] = count };
+
+                using var content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
+                await Http.PostAsync(trimmed, content);
+            }
+            catch { }
+        });
+    }
 
     private async Task HandleJsMessageAsync(string raw)
     {
@@ -211,12 +248,32 @@ internal sealed class MainDashboardForm : Form
         var form = new Form
         {
             Text = _isZh ? $"独立防串号工作台 — {name}（关掉窗口后后台照常收听新消息）" : $"Isolated Account Workspace — {name}",
-            Width = 1060,
-            Height = 760,
+            Width = 1120,
+            Height = 780,
             StartPosition = FormStartPosition.CenterParent
         };
         var wv = new WebView2 { Dock = DockStyle.Fill };
+        var bar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 40,
+            Padding = new Padding(6, 5, 6, 4),
+            BackColor = System.Drawing.Color.FromArgb(241, 245, 249)
+        };
+        var btnBack = new Button { Text = "←", Width = 38, Height = 28 };
+        var btnFwd = new Button { Text = "→", Width = 38, Height = 28 };
+        var btnReload = new Button { Text = "↻", Width = 38, Height = 28 };
+        var btnHome = new Button { Text = _isZh ? "🏠 消息页" : "🏠 Inbox", Width = 90, Height = 28 };
+        var btnDash = new Button { Text = _isZh ? "📊 回总控台" : "📊 Dashboard", Width = 104, Height = 28 };
+        btnBack.Click += (_, _) => { if (wv.CoreWebView2?.CanGoBack == true) wv.CoreWebView2.GoBack(); };
+        btnFwd.Click += (_, _) => { if (wv.CoreWebView2?.CanGoForward == true) wv.CoreWebView2.GoForward(); };
+        btnReload.Click += (_, _) => wv.CoreWebView2?.Reload();
+        btnHome.Click += (_, _) => wv.CoreWebView2?.Navigate(url);
+        btnDash.Click += (_, _) => { Show(); WindowState = FormWindowState.Normal; Activate(); };
+        bar.Controls.AddRange(new Control[] { btnBack, btnFwd, btnReload, btnHome, btnDash });
+
         form.Controls.Add(wv);
+        form.Controls.Add(bar);
         form.FormClosing += (_, e) =>
         {
             if (e.CloseReason == CloseReason.UserClosing)
@@ -230,12 +287,31 @@ internal sealed class MainDashboardForm : Form
 
         var env = await CoreWebView2Environment.CreateAsync(null, profileDir);
         await wv.EnsureCoreWebView2Async(env);
+        var obsPath = Path.Combine(AppContext.BaseDirectory, "resources", "passive-observer.js");
+        if (File.Exists(obsPath))
+        {
+            await wv.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(obsPath));
+        }
+        wv.CoreWebView2.WebMessageReceived += (_, args) =>
+        {
+            try
+            {
+                var p = JsonNode.Parse(args.TryGetWebMessageAsString())?.AsObject();
+                if (p?["action"]?.GetValue<string>() == "passiveUnread")
+                {
+                    var cnt = p["unreadCount"]?.GetValue<int>() ?? 0;
+                    var snip = p["snippet"]?.GetValue<string>() ?? "";
+                    UpdateWatchUnread(watchId, cnt, snip);
+                }
+            }
+            catch { }
+        };
         wv.CoreWebView2.DocumentTitleChanged += (_, _) =>
         {
             var title = wv.CoreWebView2.DocumentTitle ?? "";
             var m = System.Text.RegularExpressions.Regex.Match(title, @"(?:\(|\[|【)\s*(\d{1,4})\s*(?:\)|\]|条)");
             var count = m.Success && int.TryParse(m.Groups[1].Value, out var n) ? n : 0;
-            UpdateWatchUnread(watchId, count, count > 0 ? title : "");
+            if (count > 0) UpdateWatchUnread(watchId, count, title);
         };
         wv.CoreWebView2.Navigate(url);
     }
@@ -250,11 +326,18 @@ internal sealed class MainDashboardForm : Form
             var obj = node?.AsObject();
             if (obj?["id"]?.GetValue<string>() == watchId)
             {
+                var prev = obj["unreadCount"]?.GetValue<int>() ?? 0;
                 obj["unreadCount"] = count;
                 obj["status"] = count > 0 ? "unread" : "idle";
                 obj["snippet"] = snippet;
-                if (count > 0)
-                    _tray.ShowBalloonTip(4000, _isZh ? "消息总管新消息提醒" : "ReplyRadar Unread Alert", $"{obj["name"]}: {count}", ToolTipIcon.Info);
+                if (count > 0 && count > prev)
+                {
+                    var siteName = obj["name"]?.GetValue<string>() ?? watchId;
+                    var siteUrl = obj["url"]?.GetValue<string>() ?? "";
+                    _tray.ShowBalloonTip(4000, _isZh ? "消息总管新消息提醒" : "ReplyRadar Unread Alert", $"{siteName}: {count}", ToolTipIcon.Info);
+                    var wh = st["settings"]?["webhookUrl"]?.GetValue<string>() ?? "";
+                    SendWebhookPush(wh, siteName, count, snippet, siteUrl, _isZh);
+                }
                 break;
             }
         }
@@ -274,12 +357,20 @@ internal sealed class MainDashboardForm : Form
             var lic = string.IsNullOrEmpty(licKey) ? new JsonObject { ["valid"] = false, ["plan"] = "free" } : LicenseCheck.Verify(licKey);
             return new JsonObject
             {
-                ["version"] = "1.0.0",
+                ["version"] = "2.0.0",
                 ["license"] = lic,
                 ["settings"] = st["settings"]?.DeepClone() ?? new JsonObject(),
                 ["stats"] = new JsonObject { ["total"] = watches.Count, ["unreadCount"] = unreadWatches, ["unreadMessagesTotal"] = unreadTotal, ["activeCount"] = watches.Count },
-                ["watches"] = watches.DeepClone()
+                ["watches"] = watches.DeepClone(),
+                ["quickReplies"] = st["quickReplies"]?.DeepClone() ?? new JsonArray()
             };
+        }
+        if (method == "POST" && path == "/api/quick-replies")
+        {
+            var qrs = payload?["quickReplies"]?.AsArray()?.DeepClone() ?? new JsonArray();
+            st["quickReplies"] = qrs;
+            SaveState(st);
+            return new JsonObject { ["ok"] = true, ["quickReplies"] = qrs.DeepClone() };
         }
         if (path == "/api/presets")
         {
@@ -295,7 +386,7 @@ internal sealed class MainDashboardForm : Form
             var leads = new JsonArray();
             try
             {
-                Http.DefaultRequestHeaders.UserAgent.ParseAdd("ReplyRadar-Win/1.0");
+                Http.DefaultRequestHeaders.UserAgent.ParseAdd("ReplyRadar-Win/2.0");
                 var hn = await Http.GetStringAsync($"https://hn.algolia.com/api/v1/search_by_date?query={Uri.EscapeDataString(q + " hiring freelance")}&tags=(story,comment)&hitsPerPage=8");
                 var hits = JsonNode.Parse(hn)?["hits"]?.AsArray();
                 if (hits != null)
@@ -360,6 +451,11 @@ internal sealed class MainDashboardForm : Form
         if (method == "DELETE" && path.StartsWith("/api/watches/"))
         {
             var delId = Uri.UnescapeDataString(path["/api/watches/".Length..]);
+            if (_workspaceForms.TryGetValue(delId, out var wf))
+            {
+                _workspaceForms.Remove(delId);
+                try { wf.Dispose(); } catch { }
+            }
             for (int i = watches.Count - 1; i >= 0; i--)
                 if (watches[i]?["id"]?.GetValue<string>() == delId) watches.RemoveAt(i);
             SaveState(st);
@@ -377,6 +473,18 @@ internal sealed class MainDashboardForm : Form
                     o["status"] = act == "pause" ? "paused" : "idle";
                     if (act != "pause") o["unreadCount"] = 0;
                 }
+            }
+            SaveState(st);
+            return new JsonObject { ["ok"] = true };
+        }
+        if (method == "POST" && path.EndsWith("/draft"))
+        {
+            var targetId = Uri.UnescapeDataString(path.Replace("/api/watches/", "").Replace("/draft", ""));
+            var draft = payload?["draft"]?.GetValue<string>() ?? "";
+            foreach (var w in watches)
+            {
+                var o = w?.AsObject();
+                if (o?["id"]?.GetValue<string>() == targetId) o["lastDraft"] = draft;
             }
             SaveState(st);
             return new JsonObject { ["ok"] = true };

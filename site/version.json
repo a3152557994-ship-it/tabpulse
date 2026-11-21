@@ -1,11 +1,12 @@
 {
-  "latestVersion": "1.0.0",
-  "publishedAt": "2026-11-17",
+  "latestVersion": "2.0.0",
+  "publishedAt": "2026-11-21",
   "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg",
   "downloadUrlWinCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip",
   "downloadUrlWinEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
-  "notesZh": "v1.0.0 正式版：新增「同平台多账号独立防串号多开仓」、Windows 电脑独立版与苹果 Mac App Store 官方商店包。",
-  "notesEn": "v1.0.0 Official Release: Multi-account isolated cookie containers, native Windows edition, and Mac App Store package."
+  "notesCn": "v2.0.0 旗舰版：新增「防封快捷话术 + 随机同义变体 + 违禁引流词实时避雷针」、多账号工作台顶部一键切换栏与手机飞书/企微/Bark秒级推送！",
+  "notesZh": "v2.0.0 旗舰版：新增「防封快捷话术 + 随机同义变体 + 违禁引流词实时避雷针」、多账号工作台顶部一键切换栏与手机飞书/企微/Bark秒级推送！",
+  "notesEn": "v2.0.0 Flagship Release: Anti-ban Spintax quick replies, pre-send spam/off-platform trigger detector, instant multi-account workspace switcher toolbar, and real-time webhook push."
 }

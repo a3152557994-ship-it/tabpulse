@@ -214,6 +214,7 @@
 
     <div class="nav-tabs">
       <button class="nav-tab active" id="tab-inbox" onclick="switchTab('inbox')">📬 我的各平台消息</button>
+      <button class="nav-tab" id="tab-replies" onclick="switchTab('replies')">⚡ 防封快捷话术与违禁词检测</button>
       <button class="nav-tab" id="tab-scanner" onclick="switchTab('scanner')">🎯 实时找单扫描器</button>
       <button class="nav-tab" id="tab-playbook" onclick="openPlaybook()">🎁 高成交回复话术库</button>
     </div>
@@ -222,6 +223,56 @@
       <div class="packs-bar" id="packs-bar"></div>
       <div id="alerts-section"></div>
       <div id="categories-section"></div>
+    </div>
+
+    <div id="view-replies" style="display:none;">
+      <div class="scanner-box">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h2 style="margin:0 0 4px;font-size:18px;" id="qr-heading">⚡ 防封快捷话术 · 随机同义变体 &amp; 违禁词避雷针</h2>
+            <div style="font-size:13px;color:var(--muted);" id="qr-desc">
+              支持 <code>{你好|哈喽|亲}</code> 随机变体（每次复制自动换词防平台判重限流），永久免费 JSON 导出备份，绝不锁死你的话术资产。
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="sm" onclick="exportQuickReplies()" id="btn-qr-export">💾 导出备份 (JSON)</button>
+            <button class="sm" onclick="document.getElementById('qr-import-file').click()" id="btn-qr-import">📂 导入备份</button>
+            <input type="file" id="qr-import-file" accept=".json,application/json" style="display:none" onchange="importQuickReplies(event)" />
+            <button class="sm primary" onclick="openNewQuickReplyForm()" id="btn-qr-new">+ 新增快捷话术</button>
+          </div>
+        </div>
+
+        <!-- Real-Time Sensitive / Ban-Word Detector -->
+        <div style="margin-top:14px;background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+            <strong style="font-size:13px;" id="guard-title">🛡️ 发送前违禁词 / 导流敏感词实时避雷针（防闲鱼/小红书吞评封号）</strong>
+            <button class="sm" onclick="copyCheckedSafeDraft()" id="btn-guard-copy">📋 复制检测后内容</button>
+          </div>
+          <textarea id="qr-draft-check" class="draft-area" style="margin-top:0;min-height:64px;background:#fff;" oninput="runBanWordCheck()" placeholder="把准备发给客户的话粘贴到这里检测（自动识别微信号、站外导流词、极限广告词并给出安全替代表达）..."></textarea>
+          <div id="qr-guard-result" style="font-size:12.5px;margin-top:6px;color:var(--green);font-weight:600;">🟢 未检测到平台高危导流词或极限违禁词</div>
+        </div>
+
+        <!-- New Quick Reply Inline Editor -->
+        <div id="qr-editor" style="display:none;margin-top:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <input id="qr-edit-title" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" placeholder="话术标题（如：首句秒回 / 报价逼单）" />
+            <input id="qr-edit-cat" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" placeholder="分组标签（如：售前秒回 / 防封导流）" />
+          </div>
+          <textarea id="qr-edit-body" class="draft-area" style="background:#fff;min-height:70px;" placeholder="话术正文，可用 {你好呀|哈喽|嗨} 写同义词变体，每次复制自动随机抽一个词防重复判罚！"></textarea>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap;">
+            <button class="sm" onclick="pasteClipboardToQrEditor()" id="btn-qr-clip">📋 粘贴剪贴板文字</button>
+            <div style="display:flex;gap:8px;">
+              <button class="sm" onclick="document.getElementById('qr-editor').style.display='none'">取消</button>
+              <button class="sm primary" onclick="saveQuickReplyItem()">💾 保存话术</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="search-row" style="margin-top:12px;">
+          <input id="qr-search" oninput="renderQuickReplies()" placeholder="🔍 输入关键词秒搜话术（如：报价、发货、售后、价格）..." />
+        </div>
+      </div>
+      <div id="qr-list" class="grid"></div>
     </div>
 
     <div id="view-scanner" style="display:none;">
@@ -392,6 +443,37 @@
     </div>
   </div>
 
+  <!-- MODAL: CLONE MULTI-ACCOUNT (REPLACES JS PROMPT) -->
+  <div class="modal-backdrop" id="modal-clone">
+    <div class="modal" style="max-width:480px;">
+      <h2 id="clone-title">➕ 创建同平台独立防串号新仓</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="clone-desc">
+        新账号将分配 100% 物理隔离的专属登录存储池，与原账号 Cookie、缓存完全隔绝，同台电脑挂多个闲鱼/小红书号绝不串号。
+      </p>
+      <input type="hidden" id="clone-src-id" />
+      <div class="form-row">
+        <label id="clone-lbl-name">给新账号起个好认的备注名</label>
+        <input id="clone-name-input" onkeydown="if(event.key==='Enter')confirmCloneMultiAccount()" />
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button onclick="closeModals()" id="btn-cancel-clone">取消</button>
+        <button class="primary" onclick="confirmCloneMultiAccount()" id="btn-confirm-clone">立即创建并打开登录</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: UPDATE AVAILABLE (REPLACES JS CONFIRM) -->
+  <div class="modal-backdrop" id="modal-update">
+    <div class="modal" style="max-width:460px;">
+      <h2 id="upd-title">🎉 发现新版本</h2>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;" id="upd-desc"></p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+        <button onclick="closeModals()" id="btn-cancel-upd">稍后再说</button>
+        <a class="btn primary" id="btn-go-upd" href="#" target="_blank" onclick="closeModals()">立即前往下载新版 →</a>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: FIRST-RUN CONSENT -->
   <div class="modal-backdrop" id="modal-consent">
     <div class="modal" style="max-width:560px;">
@@ -491,8 +573,39 @@
       document.getElementById("btn-add").textContent = en ? "+ Add Site" : "+ 添加平台";
 
       document.getElementById("tab-inbox").textContent = en ? "📬 Watched Inboxes" : "📬 我的各平台消息";
+      document.getElementById("tab-replies").textContent = en ? "⚡ Spintax Quick Replies & Anti-Ban Guard" : "⚡ 防封快捷话术与违禁词检测";
       document.getElementById("tab-scanner").textContent = en ? "🎯 24h Buyer Lead Scanner" : "🎯 实时找单扫描器";
       document.getElementById("tab-playbook").textContent = en ? "🎁 Cold-Reply Playbook" : "🎁 高成交回复话术库";
+
+      document.getElementById("qr-heading").textContent = en
+        ? "⚡ Anti-Ban Quick Replies · Spintax Variations & Spam-Trigger Guard"
+        : "⚡ 防封快捷话术 · 随机同义变体 & 违禁词避雷针";
+      document.getElementById("qr-desc").innerHTML = en
+        ? "Use <code>{Hey|Hi there|Hello}</code> spintax to rotate wording automatically on every copy so platforms never flag repetitive replies. 100% free JSON backup export."
+        : "支持 <code>{你好|哈喽|亲}</code> 随机变体（每次复制自动换词防平台判重限流），永久免费 JSON 导出备份，绝不锁死你的话术资产。";
+      document.getElementById("btn-qr-export").textContent = en ? "💾 Export JSON" : "💾 导出备份 (JSON)";
+      document.getElementById("btn-qr-import").textContent = en ? "📂 Import JSON" : "📂 导入备份";
+      document.getElementById("btn-qr-new").textContent = en ? "+ New Quick Reply" : "+ 新增快捷话术";
+      document.getElementById("guard-title").textContent = en
+        ? "🛡️ Pre-Send Sensitive & Off-Platform Trigger Detector"
+        : "🛡️ 发送前违禁词 / 导流敏感词实时避雷针（防闲鱼/小红书吞评封号）";
+      document.getElementById("btn-guard-copy").textContent = en ? "📋 Copy Draft" : "📋 复制检测后内容";
+      document.getElementById("qr-draft-check").placeholder = en
+        ? "Paste your reply draft here to check for off-platform solicitation or spam trigger phrases before sending..."
+        : "把准备发给客户的话粘贴到这里检测（自动识别微信号、站外导流词、极限广告词并给出安全替代表达）...";
+      document.getElementById("qr-search").placeholder = en
+        ? "🔍 Search quick replies by keyword (e.g. quote, delivery, intro)..."
+        : "🔍 输入关键词秒搜话术（如：报价、发货、售后、价格）...";
+
+      document.getElementById("clone-title").textContent = en
+        ? "➕ Create Isolated Multi-Account Sandbox"
+        : "➕ 创建同平台独立防串号新仓";
+      document.getElementById("clone-desc").textContent = en
+        ? "Assigns a 100% physically isolated cookie & storage container so you can run multiple accounts on the same site simultaneously without session crossover."
+        : "新账号将分配 100% 物理隔离的专属登录存储池，与原账号 Cookie、缓存完全隔绝，同台电脑挂多个闲鱼/小红书号绝不串号。";
+      document.getElementById("clone-lbl-name").textContent = en ? "Account Label" : "给新账号起个好认的备注名";
+      document.getElementById("btn-cancel-clone").textContent = en ? "Cancel" : "取消";
+      document.getElementById("btn-confirm-clone").textContent = en ? "Create & Sign In" : "立即创建并打开登录";
 
       document.getElementById("scan-heading").textContent = en
         ? "Scan Fresh Freelance & Buyer-Intent Posts (Last 24–72 Hours)"
@@ -619,13 +732,13 @@
       renderPacks();
       renderAlerts();
       renderGrid();
+      renderQuickReplies();
     }
 
     function renderPacks() {
       const en = currentLang === "en";
       const el = document.getElementById("packs-bar");
       if (!presetPacks.length) { el.innerHTML = ""; return; }
-      // Show matching market pack first, or only matching pack for clean native feel!
       const ordered = en ? [...presetPacks].reverse() : presetPacks;
       el.innerHTML = ordered.map((p) => `
         <div class="pack-card">
@@ -650,10 +763,11 @@
           await apiCall("POST", "/api/watches", item);
         }
         await refreshState();
+        const priceZh = window.__TABPULSE_MAS_MODE ? "¥28" : "¥39";
         openPaywallModal(
           en
-            ? `Added ${slots} free inbox(es)! Upgrade to Pro ($69 Lifetime) to monitor all ${pack.items.length} platforms at once.`
-            : `已免费为你添加前 ${slots} 个平台！解锁专业版（¥168 永久买断）即可一次性添加全部平台。`
+            ? `Added ${slots} free inbox(es)! Upgrade to Pro ($14.99 Lifetime) to monitor all ${pack.items.length} platforms at once.`
+            : `已免费为你添加前 ${slots} 个平台！解锁专业版（${priceZh} 永久买断）即可一次性添加全部平台。`
         );
         return;
       }
@@ -672,27 +786,36 @@
       }
     }
 
-    async function cloneMultiAccount(sourceId) {
+    function cloneMultiAccount(sourceId) {
       const en = currentLang === "en";
       const src = (appState.watches || []).find((x) => x.id === sourceId);
       if (!src) return;
       if (!isProUnlocked() && (appState.watches || []).length >= 2) {
         openPaywallModal(
           en
-            ? "Free tier supports up to 2 accounts. Unlock Pro to run unlimited isolated accounts on the same site simultaneously!"
+            ? "Free tier supports up to 2 accounts. Unlock Pro ($14.99 Lifetime) to run unlimited isolated accounts on the same site simultaneously!"
             : "免费版支持同时挂 2 个账号。解锁专业版即可在同一平台无限多开独立防串号账号（如同时挂 5 个闲鱼号 + 5 个小红书号）！"
         );
         return;
       }
       const nextNum = (appState.watches || []).filter((x) => x.url === src.url).length + 1;
       const defaultLabel = en ? `${src.name} (#${nextNum})` : `${src.name}（${nextNum}号店/副号）`;
-      const customName = prompt(
-        en ? "Enter a label for this isolated account (cookies are 100% separate):" : "给这个独立隔离的新账号起个好认的名字（Cookie 与原账号 100% 物理隔离绝不串号）：",
-        defaultLabel
-      );
-      if (!customName) return;
+      document.getElementById("clone-src-id").value = sourceId;
+      const input = document.getElementById("clone-name-input");
+      input.value = defaultLabel;
+      document.getElementById("modal-clone").classList.add("open");
+      setTimeout(() => { input.focus(); input.select(); }, 60);
+    }
+
+    async function confirmCloneMultiAccount() {
+      const en = currentLang === "en";
+      const sourceId = document.getElementById("clone-src-id").value;
+      const customName = document.getElementById("clone-name-input").value.trim();
+      const src = (appState.watches || []).find((x) => x.id === sourceId);
+      if (!src || !customName) return;
+      closeModals();
       const created = await apiCall("POST", "/api/watches", {
-        name: customName.trim(),
+        name: customName,
         url: src.url,
         category: src.category,
         publishTier: src.publishTier,
@@ -702,7 +825,7 @@
         contextSummary: en ? "Isolated multi-account container" : "独立防串号多开账号仓",
       });
       await refreshState();
-      showToast(en ? "Isolated account created! Sign in inside the new window." : "已创建独立防串号仓！正在打开专属登录窗...");
+      showToast(en ? "Isolated account created! Opening workspace..." : "已创建独立防串号仓！正在打开专属工作台...");
       if (created && created.watch) {
         openSiteLogin(created.watch.url, created.watch.name, created.watch.id, created.watch.profileUuid || "");
       }
@@ -871,13 +994,275 @@
 
     function switchTab(tab) {
       document.getElementById("tab-inbox").classList.toggle("active", tab === "inbox");
+      document.getElementById("tab-replies").classList.toggle("active", tab === "replies");
       document.getElementById("tab-scanner").classList.toggle("active", tab === "scanner");
       document.getElementById("view-inbox").style.display = tab === "inbox" ? "block" : "none";
+      document.getElementById("view-replies").style.display = tab === "replies" ? "block" : "none";
       document.getElementById("view-scanner").style.display = tab === "scanner" ? "block" : "none";
+      if (tab === "replies") {
+        renderQuickReplies();
+      }
       if (tab === "scanner" && !window.__scannedOnce) {
         window.__scannedOnce = true;
         runLeadScan();
       }
+    }
+
+    const DEFAULT_LOCAL_QR = [
+      {
+        id: "qr_greet",
+        category: "售前秒回",
+        title: "闲鱼/小红书首句秒回（带防重变体）",
+        body: "{你好呀|哈喽|嗨亲}~ 看到你的留言啦！这款{目前还在的|现在可以直接拍|今天就能安排}，请问你是{自用还是商用|什么时候需要用到}呢？我给你发对应实拍细节~",
+      },
+      {
+        id: "qr_quote",
+        category: "外包报价",
+        title: "接单清边界一口价话术",
+        body: "{你好|哈喽}！刚仔细看了你的需求，核心关键是先把交付清单定清防返工。我近期刚做过同类项目，包含：{1. 全套源码与部署|1. 成品交付与调试} + 7天免费售后保障，一口价透明无增项，需要我发个演示给你看下吗？",
+      },
+      {
+        id: "qr_safe_contact",
+        category: "防封导流",
+        title: "平台内合规发资料引导（零违禁词）",
+        body: "{放心哈|没问题的}，咱们全程在平台内沟通留痕保障双方权益！如果文件比较大，你拍下后我在订单说明里把完整说明文档发你~",
+      },
+      {
+        id: "qr_en_pitch",
+        category: "Global Freelance",
+        title: "Reddit / Upwork Fast Scope Reply",
+        body: "{Hey there|Hi|Hello}! Just read through your post — I shipped a very similar setup recently and know the exact edge cases to watch out for. Happy to share a 3-bullet fixed-price scope {today|right away} if you're still looking!",
+      },
+    ];
+
+    function getQuickRepliesList() {
+      const list = appState.quickReplies;
+      return Array.isArray(list) && list.length ? list : DEFAULT_LOCAL_QR;
+    }
+
+    function resolveSpintax(template) {
+      return String(template || "").replace(/\{([^{}]+)\}/g, (_, group) => {
+        const opts = group.split("|").map((x) => x.trim()).filter(Boolean);
+        if (!opts.length) return "";
+        return opts[Math.floor(Math.random() * opts.length)];
+      });
+    }
+
+    const BAN_RULES_ZH = [
+      { re: /微信|微信号|加V|加v|\bvx\b|\bVX\b|威信|徽信|绿泡泡/g, label: "站外导流高危词（微信变体）", tip: "闲鱼/小红书极易吞评禁言，建议改用「平台内直接发需求文档」或订单内交付" },
+      { re: /支付宝|私下转账|打款|走线下|红包转账|口令红包/g, label: "站外私下交易词", tip: "极易触发反诈风控冻结账号，请改为「直接拍平台链接担保交易」" },
+      { re: /加QQ|企鹅号|扣扣号|手机号|电话联系/g, label: "站外联系方式导流", tip: "建议删去外部号码，引导客户先在当前聊天窗确认需求" },
+      { re: /最便宜|全网第一|国家级|绝对有效|100%包过|永久包赚|稳赚不赔/g, label: "广告法极限违禁词", tip: "易被审核拦截限流，建议替换为「高性价比 / 实测稳定 / 14天售后保障」" },
+    ];
+
+    const BAN_RULES_EN = [
+      { re: /\b(pay outside|off-platform|wire transfer|friends and family|whatsapp me|telegram me)\b/gi, label: "Off-platform payment/contact trigger", tip: "Marketplaces like Upwork/Fiverr auto-flag off-platform solicitation; keep initial scope chat on-platform." },
+      { re: /\b(100% guaranteed profit|get rich|zero risk forever)\b/gi, label: "Spam filter trigger phrase", tip: "Replace hype claims with concrete deliverables and a clear refund policy." },
+    ];
+
+    function runBanWordCheck() {
+      const en = currentLang === "en";
+      const text = document.getElementById("qr-draft-check")?.value || "";
+      const out = document.getElementById("qr-guard-result");
+      if (!out) return;
+      if (!text.trim()) {
+        out.style.color = "var(--green)";
+        out.innerHTML = en
+          ? "🟢 Ready — no off-platform or spam trigger words detected"
+          : "🟢 未检测到平台高危导流词或极限违禁词";
+        return;
+      }
+      const hits = [];
+      const rules = [...BAN_RULES_ZH, ...BAN_RULES_EN];
+      for (const r of rules) {
+        const matches = text.match(r.re);
+        if (matches && matches.length) {
+          const uniq = [...new Set(matches)].join("、");
+          hits.push(`<div>🔴 <strong>${escapeHtml(r.label)}</strong>：命中「<code>${escapeHtml(uniq)}</code>」 → <span style="color:#475569;">${escapeHtml(r.tip)}</span></div>`);
+        }
+      }
+      // Also detect bare 11-digit mainland mobile numbers
+      const phoneMatch = text.match(/(?<!\d)1[3-9]\d{9}(?!\d)/g);
+      if (phoneMatch) {
+        hits.push(`<div>🟠 <strong>疑似手机号串</strong>：命中「<code>${escapeHtml(phoneMatch.join(", "))}</code>」 → <span style="color:#475569;">公域私信直接发手机号易被系统屏蔽</span></div>`);
+      }
+      if (!hits.length) {
+        out.style.color = "var(--green)";
+        out.innerHTML = en
+          ? "🟢 Clean & safe! No risky platform trigger words found."
+          : "🟢 检测通过！未发现站外导流词或极限违禁词，可放心复制发送。";
+      } else {
+        out.style.color = "var(--red)";
+        out.innerHTML = hits.join("");
+      }
+    }
+
+    async function copyCheckedSafeDraft() {
+      const raw = document.getElementById("qr-draft-check")?.value || "";
+      if (!raw.trim()) return;
+      const spun = resolveSpintax(raw);
+      await navigator.clipboard.writeText(spun);
+      showToast(currentLang === "en" ? "Copied to clipboard!" : "已复制检测后的回复内容！");
+    }
+
+    function renderQuickReplies() {
+      const en = currentLang === "en";
+      const container = document.getElementById("qr-list");
+      if (!container) return;
+      const kw = (document.getElementById("qr-search")?.value || "").trim().toLowerCase();
+      const list = getQuickRepliesList().filter((item) => {
+        if (!kw) return true;
+        return (
+          String(item.title || "").toLowerCase().includes(kw) ||
+          String(item.category || "").toLowerCase().includes(kw) ||
+          String(item.body || "").toLowerCase().includes(kw)
+        );
+      });
+      if (!list.length) {
+        container.innerHTML = `<div class="scanner-box" style="grid-column:1/-1;text-align:center;color:var(--muted);">${en ? "No matching quick replies. Click '+ New Quick Reply' to add one." : "没有匹配的话术，点击右上角「+ 新增快捷话术」添加即可。"}</div>`;
+        return;
+      }
+      container.innerHTML = list.map((item) => `
+        <div class="card">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">
+              <h3 class="card-title">${escapeHtml(item.title)}</h3>
+              <span class="badge badge-slate">${escapeHtml(item.category || (en ? "General" : "常用"))}</span>
+            </div>
+            <div class="snippet-box" style="margin:6px 0;white-space:pre-wrap;">${escapeHtml(item.body)}</div>
+          </div>
+          <div class="card-foot">
+            <button class="sm primary" onclick="copySpintaxReply('${escapeAttr(item.id)}')">
+              ${en ? "🎲 Spin & Copy" : "🎲 随机变体复制"}
+            </button>
+            <button class="sm" onclick="sendQrToGuard('${escapeAttr(item.id)}')">
+              ${en ? "🛡️ Check Safety" : "🛡️ 违禁词体检"}
+            </button>
+            <button class="sm danger" onclick="deleteQuickReply('${escapeAttr(item.id)}')">
+              ${en ? "Delete" : "删除"}
+            </button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    async function copySpintaxReply(id) {
+      const item = getQuickRepliesList().find((x) => x.id === id);
+      if (!item) return;
+      const resolved = resolveSpintax(item.body);
+      await navigator.clipboard.writeText(resolved);
+      showToast(
+        currentLang === "en"
+          ? `Copied variation: "${resolved.slice(0, 34)}..."`
+          : `已生成防重变体并复制：「${resolved.slice(0, 22)}...」`
+      );
+    }
+
+    function sendQrToGuard(id) {
+      const item = getQuickRepliesList().find((x) => x.id === id);
+      if (!item) return;
+      const resolved = resolveSpintax(item.body);
+      const box = document.getElementById("qr-draft-check");
+      if (box) {
+        box.value = resolved;
+        runBanWordCheck();
+        box.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+
+    function openNewQuickReplyForm() {
+      const en = currentLang === "en";
+      const list = getQuickRepliesList();
+      if (!isProUnlocked() && list.length >= 6) {
+        openPaywallModal(
+          en
+            ? "Free tier includes up to 6 quick-reply templates (with 100% free JSON export). Unlock Pro ($14.99 Lifetime) for unlimited templates!"
+            : "免费版支持保存 6 条快捷话术（且永久免费开放 JSON 导出备份绝不锁数据）。升级专业版即可添加无限条分类话术！"
+        );
+        return;
+      }
+      document.getElementById("qr-editor").style.display = "block";
+      document.getElementById("qr-edit-title").focus();
+    }
+
+    async function pasteClipboardToQrEditor() {
+      try {
+        const txt = await navigator.clipboard.readText();
+        if (txt) document.getElementById("qr-edit-body").value = txt;
+      } catch {
+        showToast(currentLang === "en" ? "Please press Cmd/Ctrl+V inside the text box" : "请在输入框内按 Cmd+V / Ctrl+V 粘贴");
+      }
+    }
+
+    async function saveQuickReplyItem() {
+      const en = currentLang === "en";
+      const title = document.getElementById("qr-edit-title").value.trim();
+      const category = document.getElementById("qr-edit-cat").value.trim() || (en ? "Custom" : "自定义话术");
+      const body = document.getElementById("qr-edit-body").value.trim();
+      if (!body) {
+        showToast(en ? "Please enter reply text" : "请填写话术正文内容");
+        return;
+      }
+      const next = [
+        {
+          id: "qr_" + Date.now().toString(36),
+          title: title || body.slice(0, 18),
+          category,
+          body,
+        },
+        ...getQuickRepliesList(),
+      ];
+      const res = await apiCall("POST", "/api/quick-replies", { quickReplies: next });
+      appState.quickReplies = (res && res.quickReplies) || next;
+      document.getElementById("qr-edit-title").value = "";
+      document.getElementById("qr-edit-body").value = "";
+      document.getElementById("qr-editor").style.display = "none";
+      renderQuickReplies();
+      showToast(en ? "Quick reply saved!" : "快捷话术已保存！");
+    }
+
+    async function deleteQuickReply(id) {
+      const next = getQuickRepliesList().filter((x) => x.id !== id);
+      const res = await apiCall("POST", "/api/quick-replies", { quickReplies: next });
+      appState.quickReplies = (res && res.quickReplies) || next;
+      renderQuickReplies();
+      showToast(currentLang === "en" ? "Removed" : "已删除该条话术");
+    }
+
+    function exportQuickReplies() {
+      const data = JSON.stringify({ exportedAt: new Date().toISOString(), quickReplies: getQuickRepliesList() }, null, 2);
+      const blob = new Blob([data], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = currentLang === "en" ? "replyradar-quick-replies.json" : "消息总管-快捷话术备份.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(currentLang === "en" ? "Exported JSON backup!" : "已导出 JSON 话术备份文件！");
+    }
+
+    function importQuickReplies(ev) {
+      const file = ev.target?.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const parsed = JSON.parse(String(reader.result || "{}"));
+          const arr = Array.isArray(parsed) ? parsed : parsed.quickReplies;
+          if (!Array.isArray(arr) || !arr.length) throw new Error("empty");
+          const merged = [...arr, ...getQuickRepliesList()].slice(0, 300);
+          const res = await apiCall("POST", "/api/quick-replies", { quickReplies: merged });
+          appState.quickReplies = (res && res.quickReplies) || merged;
+          renderQuickReplies();
+          showToast(currentLang === "en" ? `Imported ${arr.length} templates!` : `成功导入 ${arr.length} 条快捷话术！`);
+        } catch {
+          showToast(currentLang === "en" ? "Invalid JSON backup file" : "备份文件格式不正确，请选择导出的 .json 文件");
+        }
+        ev.target.value = "";
+      };
+      reader.readAsText(file);
     }
 
     function quickScan(kw) {
@@ -934,10 +1319,11 @@
     function openAddModal() {
       const en = currentLang === "en";
       if (!isProUnlocked() && (appState.watches || []).length >= 2) {
+        const priceZh = window.__TABPULSE_MAS_MODE ? "¥28" : "¥39";
         openPaywallModal(
           en
-            ? "Free tier watches up to 2 platforms. Unlock ReplyRadar Pro ($69 Lifetime) for unlimited platforms!"
-            : "免费版支持同时看护 2 个网站。升级《消息总管》专业版（¥168 永久买断）即可解锁无限个平台！"
+            ? "Free tier watches up to 2 platforms. Unlock ReplyRadar Pro ($14.99 Lifetime) for unlimited platforms!"
+            : `免费版支持同时看护 2 个网站。升级《消息总管》专业版（${priceZh} 永久买断）即可解锁无限个平台！`
         );
         return;
       }
@@ -1048,16 +1434,24 @@
 
     async function checkAppUpdate() {
       const en = currentLang === "en";
-      const currentVer = appState.version || "0.4.0";
+      const currentVer = appState.version || "2.0.0";
       showToast(en ? "Checking for updates..." : "正在检查新版本...");
       try {
         const res = await fetch("https://a3152557994-ship-it.github.io/tabpulse/version.json?t=" + Date.now());
         const info = await res.json();
         if (info.latestVersion && info.latestVersion !== currentVer) {
           const dl = en ? (info.downloadUrlEn || info.downloadUrl) : (info.downloadUrlCn || info.downloadUrl);
-          if (confirm(en ? `New version v${info.latestVersion} available!\n\nDownload now?` : `发现新版本 v${info.latestVersion}！\n\n是否立即下载更新？`)) {
-            window.open(dl, "_blank");
-          }
+          document.getElementById("upd-title").textContent = en
+            ? `🎉 New Version v${info.latestVersion} Available`
+            : `🎉 发现新版本 v${info.latestVersion}`;
+          document.getElementById("upd-desc").textContent = en
+            ? (info.notesEn || `Upgrade from v${currentVer} to v${info.latestVersion} for the latest workspace & anti-ban tools.`)
+            : (info.notesCn || info.notes || `当前版本 v${currentVer}，建议立即免费升级至 v${info.latestVersion}。`);
+          document.getElementById("btn-cancel-upd").textContent = en ? "Later" : "稍后再说";
+          const goBtn = document.getElementById("btn-go-upd");
+          goBtn.textContent = en ? "Download Update →" : "立即前往下载新版 →";
+          goBtn.href = dl;
+          document.getElementById("modal-update").classList.add("open");
         } else {
           showToast(en ? `🟢 Up to date (v${currentVer})` : `🟢 当前已是最新版 (v${currentVer})`);
         }

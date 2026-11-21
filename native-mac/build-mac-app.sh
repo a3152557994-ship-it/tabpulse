@@ -48,20 +48,20 @@ BIN_TMP="$(mktemp -d)"
 
 # Direct Universal Binary
 /usr/bin/swiftc -O -target arm64-apple-macos12.0 \
-  -framework Cocoa -framework WebKit -framework CryptoKit \
+  -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications \
   "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/direct-arm64"
 /usr/bin/swiftc -O -target x86_64-apple-macos12.0 \
-  -framework Cocoa -framework WebKit -framework CryptoKit \
+  -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications \
   "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/direct-x86_64"
 UNIVERSAL_DIRECT="$BIN_TMP/DirectExec"
 /usr/bin/lipo -create "$BIN_TMP/direct-arm64" "$BIN_TMP/direct-x86_64" -output "$UNIVERSAL_DIRECT"
 
 # MAS StoreKit2 Universal Binary
 /usr/bin/swiftc -O -DMAS_BUILD -target arm64-apple-macos12.0 \
-  -framework Cocoa -framework WebKit -framework CryptoKit -framework StoreKit \
+  -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications -framework StoreKit \
   "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/mas-arm64"
 /usr/bin/swiftc -O -DMAS_BUILD -target x86_64-apple-macos12.0 \
-  -framework Cocoa -framework WebKit -framework CryptoKit -framework StoreKit \
+  -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications -framework StoreKit \
   "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/mas-x86_64"
 UNIVERSAL_MAS="$BIN_TMP/MasExec"
 /usr/bin/lipo -create "$BIN_TMP/mas-arm64" "$BIN_TMP/mas-x86_64" -output "$UNIVERSAL_MAS"
@@ -82,6 +82,8 @@ populate_bundle() {
   local bundle_id="$4"
   local dev_region="$5"
   local src_bin="$6"
+  local short_ver="${7:-2.0.0}"
+  local build_num="${8:-2}"
 
   mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources/zh-Hans.lproj" "$app_dir/Contents/Resources/en.lproj"
   cp "$src_bin" "$app_dir/Contents/MacOS/$exec_name"
@@ -118,9 +120,9 @@ populate_bundle() {
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.0</string>
+  <string>${short_ver}</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>${build_num}</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.productivity</string>
   <key>LSHasLocalizedDisplayName</key>
@@ -142,10 +144,10 @@ PLIST
 }
 
 echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
-populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT"
+populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "2.0.0" "2"
 /usr/bin/codesign --force --deep --sign - "$DIST_DIR/消息总管.app"
 
-populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT"
+populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "2.0.0" "2"
 /usr/bin/codesign --force --deep --sign - "$DIST_DIR/ReplyRadar.app"
 
 echo "[4/6] Running self-tests on compiled Universal binaries..."
@@ -158,7 +160,7 @@ if [ -f "$MAS_DIR/embedded.provisionprofile" ] && security find-identity -v | gr
   MAS_STAGE="$BIN_TMP/mas-stage"
   mkdir -p "$MAS_STAGE"
   MAS_APP="$MAS_STAGE/ReplyRadar.app"
-  populate_bundle "$MAS_APP" "ReplyRadar" "ReplyRadar" "com.yanghe.replyradar" "zh_CN" "$UNIVERSAL_MAS"
+  populate_bundle "$MAS_APP" "ReplyRadar" "ReplyRadar" "com.yanghe.replyradar" "zh_CN" "$UNIVERSAL_MAS" "1.0.0" "2"
   cp "$MAS_DIR/embedded.provisionprofile" "$MAS_APP/Contents/embedded.provisionprofile"
 
   ENT_FILE="$MAS_DIR/ReplyRadar-MAS.entitlements"

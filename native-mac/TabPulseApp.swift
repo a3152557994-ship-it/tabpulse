@@ -1,10 +1,76 @@
 import Cocoa
 import CryptoKit
 import Foundation
+import UserNotifications
 import WebKit
 #if MAS_BUILD
 import StoreKit
 #endif
+
+func resolveSpintaxSwift(_ raw: String) -> String {
+    guard let regex = try? NSRegularExpression(pattern: "\\{([^{}]+)\\}") else { return raw }
+    var result = raw
+    while let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)),
+          let fullRange = Range(match.range(at: 0), in: result),
+          let innerRange = Range(match.range(at: 1), in: result) {
+        let options = result[innerRange]
+            .split(separator: "|")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let chosen = options.randomElement() ?? ""
+        result.replaceSubrange(fullRange, with: chosen)
+    }
+    return result
+}
+
+enum WebhookDispatcher {
+    static func send(webhookUrlStr: String, siteName: String, unreadCount: Int, snippet: String, siteUrl: String) {
+        let trimmed = webhookUrlStr.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
+        let title = isChineseSystem
+            ? "🔔【消息总管】\(siteName) 有 \(unreadCount) 条新消息"
+            : "🔔 [ReplyRadar] \(unreadCount) new unread in \(siteName)"
+        let cleanSnippet = snippet.isEmpty ? siteUrl : "\(snippet)\n\(siteUrl)"
+        let fullText = "\(title)\n\(cleanSnippet)"
+
+        // Bark GET-style push URL support (https://api.day.app/<key>)
+        if trimmed.contains("api.day.app/") && trimmed.split(separator: "/").count == 3 {
+            let tEnc = title.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "ReplyRadar"
+            let bEnc = cleanSnippet.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""
+            if let barkURL = URL(string: "\(trimmed)/\(tEnc)/\(bEnc)") {
+                URLSession.shared.dataTask(with: barkURL).resume()
+                return
+            }
+        }
+
+        var req = URLRequest(url: url, timeoutInterval: 8.0)
+        req.httpMethod = "POST"
+        req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+
+        let payload: [String: Any]
+        if trimmed.contains("feishu.cn") || trimmed.contains("larksuite.com") {
+            payload = ["msg_type": "text", "content": ["text": fullText]]
+        } else if trimmed.contains("qyapi.weixin.qq.com") {
+            payload = ["msgtype": "text", "text": ["content": fullText]]
+        } else if trimmed.contains("discord.com/api/webhooks") {
+            payload = ["content": fullText]
+        } else if trimmed.contains("sctapi.ftqq.com") {
+            payload = ["title": title, "desp": cleanSnippet]
+        } else {
+            // Slack + generic JSON webhooks
+            payload = [
+                "text": fullText,
+                "title": title,
+                "site": siteName,
+                "unreadCount": unreadCount,
+                "snippet": snippet,
+                "url": siteUrl
+            ]
+        }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        URLSession.shared.dataTask(with: req).resume()
+    }
+}
 
 func deterministicProfileUUID(_ seed: String) -> UUID {
     let digest = Insecure.SHA1.hash(data: Data("tabpulse-profile:\(seed)".utf8))
@@ -169,11 +235,38 @@ final class StandaloneStore {
                 "nextCheckAt": ISO8601DateFormatter().string(from: Date().addingTimeInterval(1800))
             ]
         ]
+        let defaultQuickReplies: [[String: Any]] = [
+            [
+                "id": "qr_greet",
+                "category": "售前秒回",
+                "title": "闲鱼/小红书首句秒回（带防重变体）",
+                "body": "{你好呀|哈喽|嗨亲}~ 看到你的留言啦！这款{目前还在的|现在可以直接拍|今天就能安排}，请问你是{自用还是商用|什么时候需要用到}呢？我给你发对应实拍细节~"
+            ],
+            [
+                "id": "qr_quote",
+                "category": "外包报价",
+                "title": "接单清边界一口价话术",
+                "body": "{你好|哈喽}！刚仔细看了你的需求，核心关键是先把交付清单定清防返工。我近期刚做过同类项目，包含：{1. 全套源码与部署|1. 成品交付与调试} + 7天免费售后保障，一口价透明无增项，需要我发个演示给你看下吗？"
+            ],
+            [
+                "id": "qr_safe_contact",
+                "category": "防封导流",
+                "title": "平台内合规发资料引导（零违禁词）",
+                "body": "{放心哈|没问题的}，咱们全程在平台内沟通留痕保障双方权益！如果文件比较大，你拍下后我在订单说明里把完整说明文档发你~"
+            ],
+            [
+                "id": "qr_en_pitch",
+                "category": "Global Freelance",
+                "title": "Reddit / Upwork Fast Scope Reply",
+                "body": "{Hey there|Hi|Hello}! Just read through your post — I shipped a very similar setup recently and know the exact edge cases to watch out for. Happy to share a 3-bullet fixed-price scope {today|right away} if you're still looking!"
+            ]
+        ]
         let initial: [String: Any] = [
-            "version": "0.4.0",
+            "version": "2.0.0",
             "license": NSNull(),
             "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
-            "watches": defaultWatches
+            "watches": defaultWatches,
+            "quickReplies": defaultQuickReplies
         ]
         saveState(initial)
         return initial
@@ -204,6 +297,7 @@ final class StandaloneStore {
     func publicSummary() -> [String: Any] {
         let st = loadState()
         let watches = (st["watches"] as? [[String: Any]]) ?? []
+        let quickReplies = (st["quickReplies"] as? [[String: Any]]) ?? []
         let unreadList = watches.filter { ($0["status"] as? String) == "unread" }
         let authList = watches.filter { ($0["status"] as? String) == "auth_expired" }
         let pausedList = watches.filter { ($0["status"] as? String) == "paused" }
@@ -219,7 +313,7 @@ final class StandaloneStore {
         }
 
         return [
-            "version": "1.0.0",
+            "version": "2.0.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -230,7 +324,8 @@ final class StandaloneStore {
                 "pausedCount": pausedList.count,
                 "activeCount": watches.count - pausedList.count
             ],
-            "watches": watches
+            "watches": watches,
+            "quickReplies": quickReplies
         ]
     }
 }
@@ -313,12 +408,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var mainWindow: NSWindow!
     var dashboardWebView: WKWebView!
     var probeHostWindow: NSWindow!
+    var backgroundTabsContainer: NSView!
     var probeWebView: WKWebView!
     var loginWindow: NSWindow?
+    var workspaceRootView: NSView?
+    var workspaceHostView: NSView?
+    var accountSwitcherPopup: NSPopUpButton?
+    var quickReplyPopup: NSPopUpButton?
+    var toolbarStatusLabel: NSTextField?
     var loginWebView: WKWebView?
     var liveTabs: [String: WKWebView] = [:]
+    var tabMeta: [String: (name: String, url: String, profileUuid: String)] = [:]
     var webViewToWatchId: [ObjectIdentifier: String] = [:]
     var activeLoginWatchId: String?
+    var activeHomeURL: String?
     var statusItem: NSStatusItem!
     var sentinelTimer: Timer?
     var useExternalHub = false
@@ -326,6 +429,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var currentProbeTargetName: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         setupMainMenu()
         setupStatusBar()
         setupMainWindow()
@@ -335,6 +439,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         sentinelTimer = Timer.scheduledTimer(withTimeInterval: 55.0, repeats: true) { [weak self] _ in
             self?.runSilentCheckCycle()
         }
+    }
+
+    func postLocalNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let req = UNNotificationRequest(identifier: "tp-\(UUID().uuidString)", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -406,7 +519,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         cfg.websiteDataStore = .default()
         probeWebView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: cfg)
         probeWebView.navigationDelegate = self
-        // Host inside a real backing NSWindow so window.outerWidth/outerHeight match normal Safari window metrics
+
+        backgroundTabsContainer = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
+        backgroundTabsContainer.addSubview(probeWebView)
+
+        // Host inside a real backing NSWindow so ALL background liveTabs keep active WebSockets & DOM timers simultaneously!
         probeHostWindow = NSWindow(
             contentRect: NSRect(x: -10000, y: -10000, width: 1280, height: 800),
             styleMask: [.titled],
@@ -414,7 +531,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             defer: true
         )
         probeHostWindow.isReleasedWhenClosed = false
-        probeHostWindow.contentView = probeWebView
+        probeHostWindow.contentView = backgroundTabsContainer
+    }
+
+    func parkWebViewInBackground(_ wv: WKWebView) {
+        wv.removeFromSuperview()
+        wv.frame = NSRect(x: 0, y: 0, width: 1280, height: 800)
+        backgroundTabsContainer.addSubview(wv)
     }
 
     func detectHubAndLoadDashboard() {
@@ -470,29 +593,222 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         runSilentCheckCycle(forceImmediate: true)
     }
 
+    // MARK: - WKUIDelegate Native Alert / Confirm / Prompt Dialogs
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.messageText = isChineseSystem ? "消息总管提示" : "ReplyRadar Notice"
+        alert.informativeText = message
+        alert.addButton(withTitle: isChineseSystem ? "确定" : "OK")
+        alert.runModal()
+        completionHandler()
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = isChineseSystem ? "请确认操作" : "Confirm Action"
+        alert.informativeText = message
+        alert.addButton(withTitle: isChineseSystem ? "确定" : "Confirm")
+        alert.addButton(withTitle: isChineseSystem ? "取消" : "Cancel")
+        completionHandler(alert.runModal() == .alertFirstButtonReturn)
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = prompt
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 26))
+        input.stringValue = defaultText ?? ""
+        alert.accessoryView = input
+        alert.addButton(withTitle: isChineseSystem ? "确定" : "OK")
+        alert.addButton(withTitle: isChineseSystem ? "取消" : "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            completionHandler(input.stringValue)
+        } else {
+            completionHandler(nil)
+        }
+    }
+
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard let targetURL = navigationAction.request.url else { return nil }
-        // Inside login window: load OAuth / SSO popup in place so session cookies stay connected
         if webView == loginWebView {
             loginWebView?.load(URLRequest(url: targetURL))
             return nil
         }
-        // Inside dashboard: local bonus playbook opens in built-in sheet; external links open in system browser
         if targetURL.host == "127.0.0.1" || targetURL.host == "localhost" || targetURL.isFileURL {
-            openLoginSheet(urlStr: targetURL.absoluteString, name: "万站回音", watchId: "")
+            openLoginSheet(urlStr: targetURL.absoluteString, name: isChineseSystem ? "高成交回复话术库" : "Cold-Reply Playbook", watchId: "")
         } else {
             NSWorkspace.shared.open(targetURL)
         }
         return nil
     }
 
+    // MARK: - Unified Multi-Account Workspace Window + Top Toolbar + 1-Click Spintax Quick Replies
+    func ensureWorkspaceWindow() {
+        if loginWindow != nil { return }
+        let winW: CGFloat = 1160
+        let winH: CGFloat = 780
+        let barH: CGFloat = 44
+
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: winW, height: winH))
+        root.autoresizingMask = [.width, .height]
+
+        let toolbar = NSView(frame: NSRect(x: 0, y: winH - barH, width: winW, height: barH))
+        toolbar.autoresizingMask = [.width, .minYMargin]
+        toolbar.wantsLayer = true
+        toolbar.layer?.backgroundColor = NSColor(calibratedRed: 0.95, green: 0.96, blue: 0.98, alpha: 1.0).cgColor
+
+        func makeBtn(_ title: String, x: CGFloat, w: CGFloat, action: Selector) -> NSButton {
+            let b = NSButton(frame: NSRect(x: x, y: 7, width: w, height: 30))
+            b.title = title
+            b.bezelStyle = .rounded
+            b.font = NSFont.systemFont(ofSize: 12.5, weight: .medium)
+            b.target = self
+            b.action = action
+            return b
+        }
+
+        toolbar.addSubview(makeBtn("←", x: 10, w: 38, action: #selector(wsBack)))
+        toolbar.addSubview(makeBtn("→", x: 50, w: 38, action: #selector(wsForward)))
+        toolbar.addSubview(makeBtn("↻", x: 90, w: 38, action: #selector(wsReload)))
+        toolbar.addSubview(makeBtn(isChineseSystem ? "🏠 消息页" : "🏠 Inbox", x: 132, w: 86, action: #selector(wsGoHome)))
+
+        let accPop = NSPopUpButton(frame: NSRect(x: 224, y: 7, width: 250, height: 30), pullsDown: false)
+        accPop.font = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
+        accPop.target = self
+        accPop.action = #selector(wsSwitchAccountChanged(_:))
+        toolbar.addSubview(accPop)
+        accountSwitcherPopup = accPop
+
+        let qrPop = NSPopUpButton(frame: NSRect(x: 482, y: 7, width: 250, height: 30), pullsDown: true)
+        qrPop.font = NSFont.systemFont(ofSize: 12.5, weight: .medium)
+        qrPop.target = self
+        qrPop.action = #selector(wsQuickReplyPicked(_:))
+        toolbar.addSubview(qrPop)
+        quickReplyPopup = qrPop
+
+        let statusLbl = NSTextField(labelWithString: isChineseSystem ? "🛡️ 独立防串号隔离仓运行中" : "🛡️ Isolated Cookie Sandbox")
+        statusLbl.frame = NSRect(x: 740, y: 13, width: 270, height: 18)
+        statusLbl.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        statusLbl.textColor = NSColor(calibratedRed: 0.08, green: 0.50, blue: 0.24, alpha: 1.0)
+        statusLbl.lineBreakMode = .byTruncatingTail
+        toolbar.addSubview(statusLbl)
+        toolbarStatusLabel = statusLbl
+
+        let dashBtn = makeBtn(isChineseSystem ? "📊 回总控台" : "📊 Dashboard", x: winW - 116, w: 106, action: #selector(showMainWindow))
+        dashBtn.autoresizingMask = [.minXMargin]
+        toolbar.addSubview(dashBtn)
+
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: winW, height: winH - barH))
+        host.autoresizingMask = [.width, .height]
+
+        root.addSubview(host)
+        root.addSubview(toolbar)
+
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: winW, height: winH),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        win.center()
+        win.isReleasedWhenClosed = false
+        win.delegate = self
+        win.contentView = root
+
+        workspaceRootView = root
+        workspaceHostView = host
+        loginWindow = win
+    }
+
+    @objc func wsBack() { loginWebView?.goBack() }
+    @objc func wsForward() { loginWebView?.goForward() }
+    @objc func wsReload() { loginWebView?.reload() }
+    @objc func wsGoHome() {
+        if let h = activeHomeURL, let u = URL(string: h) {
+            loginWebView?.load(URLRequest(url: u))
+        }
+    }
+
+    func refreshWorkspaceToolbarMenus() {
+        let st = StandaloneStore.shared.loadState()
+        let watches = (st["watches"] as? [[String: Any]]) ?? []
+        for w in watches {
+            if let wid = w["id"] as? String, let nm = w["name"] as? String, let u = w["url"] as? String {
+                let pUuid = (w["profileUuid"] as? String) ?? ""
+                tabMeta[wid] = (name: nm, url: u, profileUuid: pUuid)
+            }
+        }
+
+        if let pop = accountSwitcherPopup {
+            pop.removeAllItems()
+            var orderedIds = Array(liveTabs.keys).sorted()
+            for w in watches {
+                if let wid = w["id"] as? String, !orderedIds.contains(wid) {
+                    orderedIds.append(wid)
+                }
+            }
+            for wid in orderedIds {
+                guard let meta = tabMeta[wid] else { continue }
+                let isLive = liveTabs[wid] != nil
+                let title = isLive ? "🟢 \(meta.name)" : "⚪ \(meta.name)"
+                pop.addItem(withTitle: title)
+                pop.lastItem?.representedObject = wid
+                if wid == activeLoginWatchId {
+                    pop.select(pop.lastItem)
+                }
+            }
+            if pop.numberOfItems == 0 {
+                pop.addItem(withTitle: isChineseSystem ? "当前临时窗口" : "Workspace Preview")
+            }
+        }
+
+        if let qrPop = quickReplyPopup {
+            qrPop.removeAllItems()
+            qrPop.addItem(withTitle: isChineseSystem ? "⚡ 点此抽词复制防封快捷话术..." : "⚡ Copy Spintax Quick Reply...")
+            let qrs = (st["quickReplies"] as? [[String: Any]]) ?? []
+            for item in qrs {
+                let t = (item["title"] as? String) ?? "话术"
+                let body = (item["body"] as? String) ?? ""
+                qrPop.addItem(withTitle: "📋 \(t)")
+                qrPop.lastItem?.representedObject = body
+            }
+        }
+    }
+
+    @objc func wsSwitchAccountChanged(_ sender: NSPopUpButton) {
+        guard let wid = sender.selectedItem?.representedObject as? String,
+              let meta = tabMeta[wid] else { return }
+        openLoginSheet(urlStr: meta.url, name: meta.name, watchId: wid, profileUuidStr: meta.profileUuid, isolated: true)
+    }
+
+    @objc func wsQuickReplyPicked(_ sender: NSPopUpButton) {
+        guard let rawBody = sender.selectedItem?.representedObject as? String, !rawBody.isEmpty else { return }
+        let spun = resolveSpintaxSwift(rawBody)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(spun, forType: .string)
+        toolbarStatusLabel?.stringValue = isChineseSystem
+            ? "✅ 已复制变体话术，直接按 Cmd+V 粘贴！"
+            : "✅ Spintax variation copied — press Cmd+V!"
+    }
+
     func openLoginSheet(urlStr: String, name: String, watchId: String = "", profileUuidStr: String = "", isolated: Bool = true) {
         guard let u = URL(string: urlStr) else { return }
+
+        // Park previously visible account WebView back into backgroundTabsContainer so it NEVER gets detached!
+        if let prevId = activeLoginWatchId, prevId != watchId, let prevWV = liveTabs[prevId] {
+            parkWebViewInBackground(prevWV)
+        } else if activeLoginWatchId == nil, let prevTemp = loginWebView {
+            prevTemp.removeFromSuperview()
+        }
+
         activeLoginWatchId = watchId.isEmpty ? nil : watchId
+        activeHomeURL = urlStr
+        if !watchId.isEmpty {
+            tabMeta[watchId] = (name: name, url: urlStr, profileUuid: profileUuidStr)
+        }
 
         let wv: WKWebView
         if !watchId.isEmpty, let existing = liveTabs[watchId] {
-            // Wavebox model: reuse live persistent tab with ZERO reload!
+            existing.removeFromSuperview()
             wv = existing
         } else {
             let cfg = WKWebViewConfiguration()
@@ -508,7 +824,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 let us = WKUserScript(source: obsJS, injectionTime: .atDocumentStart, forMainFrameOnly: true)
                 cfg.userContentController.addUserScript(us)
             }
-            let created = WKWebView(frame: NSRect(x: 0, y: 0, width: 1060, height: 750), configuration: cfg)
+            let created = WKWebView(frame: NSRect(x: 0, y: 0, width: 1160, height: 736), configuration: cfg)
             created.uiDelegate = self
             created.load(URLRequest(url: u))
             if !watchId.isEmpty {
@@ -519,32 +835,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
         loginWebView = wv
 
-        if loginWindow == nil {
-            let win = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 1060, height: 750),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable],
-                backing: .buffered,
-                defer: false
-            )
-            win.center()
-            win.isReleasedWhenClosed = false
-            win.delegate = self
-            loginWindow = win
+        ensureWorkspaceWindow()
+        if let host = workspaceHostView {
+            wv.frame = host.bounds
+            wv.autoresizingMask = [.width, .height]
+            host.addSubview(wv)
         }
+        refreshWorkspaceToolbarMenus()
+        toolbarStatusLabel?.stringValue = isChineseSystem
+            ? "🛡️ 独立防串号隔离仓：\(name)"
+            : "🛡️ Isolated Sandbox: \(name)"
+
         loginWindow?.title = isChineseSystem
-            ? "消息总管 · 安全工作台 — \(name)（关掉窗口后后台照常安静听新消息）"
-            : "ReplyRadar · Safe Workspace — \(name) (Keeps listening passively when closed)"
-        loginWindow?.contentView = wv
+            ? "消息总管 · 多账号安全工作台 — \(name)（关掉窗口后后台照常安静听新消息）"
+            : "ReplyRadar · Multi-Account Workspace — \(name) (Keeps listening passively when closed)"
         loginWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func windowWillClose(_ notification: Notification) {
         guard let closedWin = notification.object as? NSWindow, closedWin == loginWindow else { return }
-        // Keep liveTabs[wid] alive in probeHostWindow backing hierarchy without reloading URL!
         if let wid = activeLoginWatchId, let liveWV = liveTabs[wid] {
             activeLoginWatchId = nil
-            probeHostWindow.contentView = liveWV
+            parkWebViewInBackground(liveWV)
         }
     }
 
@@ -659,6 +972,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             replyCallback(reqId, ["ok": true, "settings": set])
             return
         }
+        if method == "POST" && path == "/api/quick-replies" {
+            var st = StandaloneStore.shared.loadState()
+            let list = (payload?["quickReplies"] as? [[String: Any]]) ?? []
+            st["quickReplies"] = Array(list.prefix(300))
+            StandaloneStore.shared.saveState(st)
+            refreshWorkspaceToolbarMenus()
+            replyCallback(reqId, ["ok": true, "quickReplies": st["quickReplies"] ?? []])
+            return
+        }
         if method == "POST" && path == "/api/watches" {
             var st = StandaloneStore.shared.loadState()
             var watches = (st["watches"] as? [[String: Any]]) ?? []
@@ -690,16 +1012,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
             st["watches"] = watches
             StandaloneStore.shared.saveState(st)
+            refreshWorkspaceToolbarMenus()
             replyCallback(reqId, ["ok": true, "watch": newItem])
             return
         }
         if method == "DELETE" && path.hasPrefix("/api/watches/") {
             let rawId = String(path.dropFirst("/api/watches/".count)).removingPercentEncoding ?? ""
+            if let wv = liveTabs.removeValue(forKey: rawId) {
+                wv.removeFromSuperview()
+                webViewToWatchId.removeValue(forKey: ObjectIdentifier(wv))
+            }
+            tabMeta.removeValue(forKey: rawId)
             var st = StandaloneStore.shared.loadState()
             var watches = (st["watches"] as? [[String: Any]]) ?? []
             watches.removeAll { ($0["id"] as? String) == rawId }
             st["watches"] = watches
             StandaloneStore.shared.saveState(st)
+            refreshWorkspaceToolbarMenus()
             replyCallback(reqId, ["ok": true, "deleted": true])
             return
         }
@@ -849,20 +1178,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             var st = StandaloneStore.shared.loadState()
             var watches = (st["watches"] as? [[String: Any]]) ?? []
             if let idx = watches.firstIndex(where: { ($0["id"] as? String) == watchId }) {
+                let prevUnread = (watches[idx]["unreadCount"] as? Int) ?? 0
+                let prevFp = (watches[idx]["lastFingerprint"] as? String) ?? ""
+                let siteName = (watches[idx]["name"] as? String) ?? watchId
+                let siteUrl = (watches[idx]["url"] as? String) ?? ""
+                let fp = "\(unreadCount)::\(snippet)"
                 watches[idx]["lastCheckedAt"] = ISO8601DateFormatter().string(from: Date())
                 if unreadCount > 0 {
                     watches[idx]["status"] = "unread"
                     watches[idx]["unreadCount"] = unreadCount
                     watches[idx]["snippet"] = snippet
-                    NSSound.beep()
+                    watches[idx]["lastFingerprint"] = fp
+                    if unreadCount > prevUnread || fp != prevFp {
+                        NSSound.beep()
+                        postLocalNotification(
+                            title: isChineseSystem ? "🔴 \(siteName) 有 \(unreadCount) 条新消息" : "🔴 \(unreadCount) Unread in \(siteName)",
+                            body: snippet.isEmpty ? siteUrl : snippet
+                        )
+                        let wh = ((st["settings"] as? [String: Any])?["webhookUrl"] as? String) ?? ""
+                        WebhookDispatcher.send(webhookUrlStr: wh, siteName: siteName, unreadCount: unreadCount, snippet: snippet, siteUrl: siteUrl)
+                    }
                 } else {
                     watches[idx]["status"] = "idle"
                     watches[idx]["unreadCount"] = 0
+                    watches[idx]["lastFingerprint"] = ""
                 }
                 st["watches"] = watches
                 StandaloneStore.shared.saveState(st)
                 updateMenuBadge(from: StandaloneStore.shared.publicSummary())
-                notifyDashboardProbeDone(id: watchId, name: watchId, unreadCount: unreadCount, authExpired: false)
+                notifyDashboardProbeDone(id: watchId, name: siteName, unreadCount: unreadCount, authExpired: false)
             }
         }
     }
@@ -983,6 +1327,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 var st = StandaloneStore.shared.loadState()
                 var watches = (st["watches"] as? [[String: Any]]) ?? []
                 if let idx = watches.firstIndex(where: { ($0["id"] as? String) == targetId }) {
+                    let prevUnread = (watches[idx]["unreadCount"] as? Int) ?? 0
+                    let prevFp = (watches[idx]["lastFingerprint"] as? String) ?? ""
+                    let siteUrl = (watches[idx]["url"] as? String) ?? ""
+                    let fp = "\(unreadCount)::\(snippet)"
                     let mins = (watches[idx]["baseIntervalMinutes"] as? Int) ?? 60
                     watches[idx]["nextCheckAt"] = StandaloneStore.shared.computeNextCheckISO(baseMinutes: mins)
                     watches[idx]["lastCheckedAt"] = ISO8601DateFormatter().string(from: Date())
@@ -992,10 +1340,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                         watches[idx]["status"] = "unread"
                         watches[idx]["unreadCount"] = unreadCount
                         watches[idx]["snippet"] = snippet
-                        NSSound.beep()
+                        watches[idx]["lastFingerprint"] = fp
+                        if unreadCount > prevUnread || fp != prevFp {
+                            NSSound.beep()
+                            self.postLocalNotification(
+                                title: isChineseSystem ? "🔴 \(targetName) 有 \(unreadCount) 条新消息" : "🔴 \(unreadCount) Unread in \(targetName)",
+                                body: snippet.isEmpty ? siteUrl : snippet
+                            )
+                            let wh = ((st["settings"] as? [String: Any])?["webhookUrl"] as? String) ?? ""
+                            WebhookDispatcher.send(webhookUrlStr: wh, siteName: targetName, unreadCount: unreadCount, snippet: snippet, siteUrl: siteUrl)
+                        }
                     } else {
                         watches[idx]["status"] = "idle"
                         watches[idx]["unreadCount"] = 0
+                        watches[idx]["lastFingerprint"] = ""
                     }
                     st["watches"] = watches
                     StandaloneStore.shared.saveState(st)
@@ -1012,6 +1370,8 @@ let args = CommandLine.arguments
 if args.contains("--self-test") {
     let bad = LicenseVerifier.verify("TP1.fake.fake")
     assert((bad["valid"] as? Bool) == false, "Invalid license must fail")
+    let spun = resolveSpintaxSwift("{你好|哈喽}世界")
+    assert(spun == "你好世界" || spun == "哈喽世界", "Spintax resolver failed")
     if let idx = args.firstIndex(of: "--verify-key"), idx + 1 < args.count {
         let good = LicenseVerifier.verify(args[idx + 1])
         guard (good["valid"] as? Bool) == true else {
@@ -1024,7 +1384,8 @@ if args.contains("--self-test") {
     let store = StandaloneStore()
     let summary = store.publicSummary()
     try? FileManager.default.removeItem(at: tmp)
-    guard let watches = summary["watches"] as? [[String: Any]], watches.count == 2 else {
+    guard let watches = summary["watches"] as? [[String: Any]], watches.count == 2,
+          let qrs = summary["quickReplies"] as? [[String: Any]], qrs.count >= 4 else {
         fputs("STANDALONE_STORE_FAILED\n", stderr)
         exit(3)
     }

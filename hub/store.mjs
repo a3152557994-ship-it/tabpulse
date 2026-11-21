@@ -16,9 +16,36 @@ export function getDataFilePath() {
   return process.env.TABPULSE_DATA_FILE || DEFAULT_DATA_FILE;
 }
 
+const DEFAULT_QUICK_REPLIES = [
+  {
+    id: "qr-1",
+    cat: "破冰秒回",
+    titleZh: "现货秒回引导拍下",
+    titleEn: "Fast Stock & Order Guide",
+    textZh: "{哈喽|你好呀|嗨}~ 宝贝目前{有现货的|今天拍下就能安排}哦！页面标价就是实在底价，您可以直接拍下，看到第一时间给您极速处理~",
+    textEn: "Hey! Thanks for reaching out — {happy to help|yes, I'm available right now}. Could you share your target timeline so I can send over a clear fixed-price scope?",
+  },
+  {
+    id: "qr-2",
+    cat: "防砍价",
+    titleZh: "温和拒砍价+送小福利",
+    titleEn: "Polite Price Anchor + Bonus",
+    textZh: "{亲|朋友}，咱们这已经是{实在良心底价|薄利走量一口价}啦，品质和服务绝对让您省心！今天定下来的话，我额外给您{附赠一份实用资料包|优先加急安排}，您看行吗？",
+    textEn: "We keep pricing transparent at our best flat rate so we never cut corners on quality — if we kick off this week, I'll include {priority 24h delivery|our setup checklist} as a free bonus!",
+  },
+  {
+    id: "qr-3",
+    cat: "售后安抚",
+    titleZh: "化解不满防差评",
+    titleEn: "De-escalate & Protect 5-Star",
+    textZh: "非常抱谦给您添麻烦了！您看具体是哪一步没达到预期？咱们支持{免费重调补发|14天无忧售后}，一定给您妥善解决到位，辛苦先别急着评，给我个弥补机会~",
+    textEn: "So sorry about the hiccup! Let me fix this for you right away — would you prefer an immediate patch today or a full no-questions-asked refund?",
+  },
+];
+
 function makeDefaultState(now = new Date()) {
   return {
-    version: "1.0.0",
+    version: "2.0.0",
     extensionHeartbeatAt: null,
     license: null,
     settings: {
@@ -26,6 +53,7 @@ function makeDefaultState(now = new Date()) {
       radarKeywords: "Shopify",
       lang: "zh",
     },
+    quickReplies: DEFAULT_QUICK_REPLIES,
     watches: createDefaultWatches(now),
   };
 }
@@ -47,6 +75,9 @@ export function loadState(now = new Date()) {
     }
     if (!parsed.settings || typeof parsed.settings !== "object") {
       parsed.settings = { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" };
+    }
+    if (!Array.isArray(parsed.quickReplies) || parsed.quickReplies.length === 0) {
+      parsed.quickReplies = DEFAULT_QUICK_REPLIES;
     }
     return parsed;
   } catch {
@@ -428,6 +459,15 @@ export function deleteWatch(id) {
   return true;
 }
 
+export function saveQuickReplies(list = [], nowDate = new Date()) {
+  const state = loadState(nowDate);
+  if (Array.isArray(list)) {
+    state.quickReplies = list.slice(0, 200);
+    saveState(state);
+  }
+  return state.quickReplies || DEFAULT_QUICK_REPLIES;
+}
+
 export function getPublicSummary(nowDate = new Date()) {
   const state = loadState(nowDate);
   const watches = state.watches;
@@ -435,10 +475,11 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "1.0.0",
+    version: "2.0.0",
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),
     settings: state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" },
+    quickReplies: state.quickReplies || DEFAULT_QUICK_REPLIES,
     stats: {
       total: watches.length,
       unreadCount: unreadWatches.length,

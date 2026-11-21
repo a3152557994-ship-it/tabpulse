@@ -13,6 +13,7 @@ import {
   loadState,
   recordProbeReport,
   resolveWatch,
+  saveQuickReplies,
   saveReplyDraft,
   updateSettings,
   upsertWatch,
@@ -119,7 +120,14 @@ export function createHubServer() {
       }
 
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "1.0.0" }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "2.0.0" }, corsOrigin);
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/quick-replies") {
+        const body = await readJsonBody(req);
+        const quickReplies = saveQuickReplies(body.quickReplies || []);
+        sendJson(res, 200, { ok: true, quickReplies }, corsOrigin);
         return;
       }
 
