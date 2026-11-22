@@ -79,7 +79,7 @@ internal sealed class MainDashboardForm : Form
         Directory.CreateDirectory(Path.Combine(_appRoot, "profiles"));
         _stateFile = Path.Combine(_appRoot, "state.json");
 
-        Text = _isZh ? "消息总管 — 多平台未读消息提醒与多开防串号盒子 (v2.0.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v2.0.0)";
+        Text = _isZh ? "消息总管 — 多平台未读消息提醒与多开防串号盒子 (v3.0.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v3.0.0)";
         Width = 1200;
         Height = 800;
         StartPosition = FormStartPosition.CenterScreen;
@@ -151,7 +151,7 @@ internal sealed class MainDashboardForm : Form
         }
         var init = new JsonObject
         {
-            ["version"] = "2.0.0",
+            ["version"] = "3.0.0",
             ["settings"] = new JsonObject { ["webhookUrl"] = "", ["lang"] = _isZh ? "zh" : "en" },
             ["watches"] = watches,
             ["quickReplies"] = new JsonArray()
@@ -264,13 +264,22 @@ internal sealed class MainDashboardForm : Form
         var btnFwd = new Button { Text = "→", Width = 38, Height = 28 };
         var btnReload = new Button { Text = "↻", Width = 38, Height = 28 };
         var btnHome = new Button { Text = _isZh ? "🏠 消息页" : "🏠 Inbox", Width = 90, Height = 28 };
+        var btnPaste = new Button { Text = _isZh ? "⚡ 填入剪贴板话术" : "⚡ Auto-Fill Clipboard", Width = 136, Height = 28 };
         var btnDash = new Button { Text = _isZh ? "📊 回总控台" : "📊 Dashboard", Width = 104, Height = 28 };
         btnBack.Click += (_, _) => { if (wv.CoreWebView2?.CanGoBack == true) wv.CoreWebView2.GoBack(); };
         btnFwd.Click += (_, _) => { if (wv.CoreWebView2?.CanGoForward == true) wv.CoreWebView2.GoForward(); };
         btnReload.Click += (_, _) => wv.CoreWebView2?.Reload();
         btnHome.Click += (_, _) => wv.CoreWebView2?.Navigate(url);
+        btnPaste.Click += async (_, _) =>
+        {
+            var clip = Clipboard.GetText() ?? "";
+            if (string.IsNullOrWhiteSpace(clip) || wv.CoreWebView2 == null) return;
+            var jsonStr = JsonSerializer.Serialize(clip);
+            var js = $"(function(){{ const msg = {jsonStr}; let el = document.activeElement; if (!el || (el.tagName !== 'TEXTAREA' && !el.isContentEditable && el.tagName !== 'INPUT')) {{ el = document.querySelector('textarea, [contenteditable=\"true\"]'); }} if (el) {{ el.focus(); document.execCommand('insertText', false, msg); }} }})();";
+            await wv.CoreWebView2.ExecuteScriptAsync(js);
+        };
         btnDash.Click += (_, _) => { Show(); WindowState = FormWindowState.Normal; Activate(); };
-        bar.Controls.AddRange(new Control[] { btnBack, btnFwd, btnReload, btnHome, btnDash });
+        bar.Controls.AddRange(new Control[] { btnBack, btnFwd, btnReload, btnHome, btnPaste, btnDash });
 
         form.Controls.Add(wv);
         form.Controls.Add(bar);
@@ -357,7 +366,7 @@ internal sealed class MainDashboardForm : Form
             var lic = string.IsNullOrEmpty(licKey) ? new JsonObject { ["valid"] = false, ["plan"] = "free" } : LicenseCheck.Verify(licKey);
             return new JsonObject
             {
-                ["version"] = "2.0.0",
+                ["version"] = "3.0.0",
                 ["license"] = lic,
                 ["settings"] = st["settings"]?.DeepClone() ?? new JsonObject(),
                 ["stats"] = new JsonObject { ["total"] = watches.Count, ["unreadCount"] = unreadWatches, ["unreadMessagesTotal"] = unreadTotal, ["activeCount"] = watches.Count },

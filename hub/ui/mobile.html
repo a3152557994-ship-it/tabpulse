@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="消息总管" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/mobile-icon.svg" />
+  <title>消息总管 · 手机随身遥控台</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #162033;
+      --card-alt: #1e293b;
+      --border: #2d3d56;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --green: #10b981;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-t: env(safe-area-inset-top, 0px);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
+      padding-top: calc(56px + var(--safe-t));
+      padding-bottom: calc(68px + var(--safe-b));
+      min-height: 100vh;
+    }
+    .topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+      padding: calc(8px + var(--safe-t)) 14px 10px;
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .brand { display: flex; align-items: center; gap: 8px; }
+    .brand-title { font-size: 16px; font-weight: 800; }
+    .ip-shield {
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35);
+      font-weight: 700;
+    }
+    .btn {
+      border: 1px solid var(--border); background: var(--card-alt); color: var(--text);
+      padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 600;
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .btn.green { background: #059669; border-color: #059669; color: #fff; }
+    .btn.danger { background: rgba(239, 68, 68, 0.18); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
+    .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+
+    .page { padding: 12px 14px; display: none; }
+    .page.active { display: block; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 13px; margin-bottom: 11px;
+    }
+    .card.unread { border-color: #ef4444; box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3); }
+    .row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .badge {
+      font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+      background: #1e293b; color: #cbd5e1;
+    }
+    .badge.red { background: #ef4444; color: #fff; }
+    .badge.green { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge.amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+    .chips { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip {
+      white-space: nowrap; padding: 6px 11px; border-radius: 999px; font-size: 12px;
+      background: var(--card-alt); border: 1px solid var(--border); color: #e2e8f0; cursor: pointer;
+    }
+
+    /* CC Chat Stream */
+    .chat-stream {
+      display: flex; flex-direction: column; gap: 10px; margin: 10px 0 74px;
+    }
+    .bubble {
+      padding: 11px 13px; border-radius: 13px; font-size: 13.5px; line-height: 1.55;
+      word-break: break-word; white-space: pre-wrap;
+    }
+    .bubble.user {
+      align-self: flex-end; max-width: 86%;
+      background: #2563eb; color: #fff; border-bottom-right-radius: 4px;
+    }
+    .bubble.assistant {
+      align-self: flex-start; width: 100%;
+      background: #0f172a; border: 1px solid var(--border); color: #e2e8f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+      max-height: 380px; overflow-y: auto;
+    }
+
+    .composer {
+      position: fixed; left: 0; right: 0; bottom: calc(58px + var(--safe-b));
+      background: rgba(15, 23, 42, 0.96); border-top: 1px solid var(--border);
+      padding: 8px 12px; display: flex; gap: 8px; align-items: center; z-index: 35;
+    }
+    input, select, textarea {
+      background: #0f172a; color: #fff; border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none;
+    }
+    input:focus, textarea:focus { border-color: var(--primary); }
+
+    /* Remote Tab Live Viewer Overlay */
+    .viewer-overlay {
+      position: fixed; inset: 0; background: var(--bg); z-index: 60;
+      display: none; flex-direction: column;
+      padding-top: var(--safe-t); padding-bottom: var(--safe-b);
+    }
+    .viewer-overlay.open { display: flex; }
+    .viewer-head {
+      padding: 10px 12px; border-bottom: 1px solid var(--border); background: #0f172a;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    }
+    .viewer-body { flex: 1; overflow-y: auto; padding: 10px; }
+    .screen-wrap {
+      position: relative; border: 1px solid var(--border); border-radius: 12px;
+      overflow: hidden; background: #020617; min-height: 220px; display: grid; place-items: center;
+    }
+    .screen-wrap img { width: 100%; height: auto; display: block; cursor: crosshair; }
+    .tap-dot {
+      position: absolute; width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid #3b82f6; background: rgba(59, 130, 246, 0.35);
+      transform: translate(-50%, -50%); pointer-events: none; display: none;
+    }
+    .viewer-foot {
+      border-top: 1px solid var(--border); background: #0f172a; padding: 8px 10px;
+    }
+
+    /* Bottom Navigation */
+    .tabbar {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 45;
+      height: calc(58px + var(--safe-b)); padding-bottom: var(--safe-b);
+      background: rgba(15, 23, 42, 0.96); backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: grid; grid-template-columns: repeat(3, 1fr);
+    }
+    .tab-item {
+      border: none; background: none; color: var(--muted); font-size: 11.5px; font-weight: 700;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    }
+    .tab-item.active { color: #60a5fa; }
+    .tab-icon { font-size: 18px; position: relative; }
+    .dot-count {
+      position: absolute; top: -4px; right: -10px; background: #ef4444; color: #fff;
+      font-size: 10px; padding: 0 5px; border-radius: 999px; font-weight: 800;
+    }
+
+    .toast {
+      position: fixed; top: calc(64px + var(--safe-t)); left: 50%; transform: translateX(-50%);
+      background: #2563eb; color: #fff; padding: 8px 16px; border-radius: 999px;
+      font-size: 13px; font-weight: 700; z-index: 90; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <span style="font-size:20px;">🔔</span>
+      <div>
+        <div class="brand-title" id="m-title">消息总管 · 手机版</div>
+        <span class="ip-shield" id="m-shield">🛡️ 全程走电脑固定IP · 切5G/WiFi不封号</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn sm" onclick="refreshAll()">↻</button>
+      <button class="btn sm" onclick="toggleMobileLang()" id="btn-mlang">EN</button>
+    </div>
+  </div>
+
+  <!-- PAGE 1: CLAUDE CODE & LOCAL AI REMOTE -->
+  <div class="page active" id="page-cc">
+    <div id="hook-alerts-box"></div>
+
+    <div class="card">
+      <div class="row-between" style="margin-bottom:8px;">
+        <strong style="font-size:14px;" id="cc-head">🤖 遥控电脑上的 Claude Code / AI</strong>
+        <button class="btn sm primary" onclick="toggleNewSessionBox()" id="btn-new-cc">+ 新建任务</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;" id="cc-sub">
+        任务在家里电脑稳定网络上运行，手机随便切流量/进电梯，Claude 绝不触发异地封号。
+      </div>
+
+      <div id="new-cc-box" style="display:none;background:#0f172a;padding:10px;border-radius:10px;border:1px solid var(--border);margin-bottom:10px;">
+        <div style="display:grid;gap:8px;">
+          <select id="cc-agent-sel"></select>
+          <input id="cc-cwd-in" placeholder="电脑项目目录（留空默认主目录 ~）" />
+          <input id="cc-name-in" placeholder="任务备注名（如：修复登录页）" />
+          <button class="btn primary" onclick="createCcSession()">创建并切换至此会话</button>
+        </div>
+      </div>
+
+      <select id="cc-session-sel" style="width:100%;" onchange="selectCcSession(this.value)"></select>
+
+      <div class="chips" style="margin-top:9px;">
+        <span class="chip" onclick="quickCcPrompt('查看当前目录结构并汇报项目状态')">📂 汇报项目进度</span>
+        <span class="chip" onclick="quickCcPrompt('继续完成刚才的任务并跑一遍测试')">▶ 继续干活并跑测试</span>
+        <span class="chip" onclick="quickCcPrompt('git status && git diff --stat')">📊 看代码改动</span>
+        <span class="chip" onclick="stopActiveCcSession()" style="color:#fca5a5;">⏹ 停止运行</span>
+      </div>
+    </div>
+
+    <div class="chat-stream" id="cc-messages"></div>
+
+    <div class="composer" id="cc-composer">
+      <input id="cc-input" style="flex:1;" placeholder="在手机输入指令发给电脑上的 CC 执行..." onkeydown="if(event.key==='Enter')sendCcInstruction()" />
+      <button class="btn primary" onclick="sendCcInstruction()" id="btn-cc-send">发送</button>
+    </div>
+  </div>
+
+  <!-- PAGE 2: REMOTE INBOXES & DIRECT FIXED-IP REPLY -->
+  <div class="page" id="page-inbox">
+    <div class="card" style="background:linear-gradient(135deg,#172554,#162033);border-color:#2563eb;">
+      <div style="font-size:13.5px;font-weight:700;margin-bottom:4px;" id="ib-banner-t">📱 手机免装 App · 远程看电脑各平台消息并直接回复</div>
+      <div style="font-size:12px;color:#cbd5e1;" id="ib-banner-d">
+        点开任意平台即可实时查看电脑隔离仓画面、远程点选对话、并在底部打字由电脑固定 IP 代填发送！
+      </div>
+    </div>
+    <div id="mobile-watch-list"></div>
+  </div>
+
+  <!-- PAGE 3: QUICK REPLIES & 24H SCANNER -->
+  <div class="page" id="page-tools">
+    <div class="card">
+      <strong style="font-size:14px;display:block;margin-bottom:6px;">🎲 防封随机变体快捷话术（点一下自动换词复制）</strong>
+      <div id="mobile-qr-list" style="display:grid;gap:8px;"></div>
+    </div>
+
+    <div class="card">
+      <strong style="font-size:14px;display:block;margin-bottom:6px;">🎯 24h 全网求购线索扫描</strong>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input id="m-scan-kw" value="Shopify" style="flex:1;" />
+        <button class="btn primary" onclick="runMobileScan()">扫描</button>
+      </div>
+      <div id="m-scan-out" style="display:grid;gap:8px;"></div>
+    </div>
+  </div>
+
+  <!-- LIVE REMOTE WORKSPACE VIEWER & DIRECT REPLY SHEET -->
+  <div class="viewer-overlay" id="remote-viewer">
+    <div class="viewer-head">
+      <button class="btn sm" onclick="closeRemoteViewer()">← 返回</button>
+      <div style="flex:1;min-width:0;text-align:center;">
+        <div style="font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="rv-title">平台工作台</div>
+        <div style="font-size:11px;color:#34d399;">🟢 画面与发送均由家里电脑固定 IP 完成</div>
+      </div>
+      <button class="btn sm" onclick="refreshRemoteSnapshot()">↻ 刷新</button>
+    </div>
+
+    <div class="viewer-body">
+      <div class="chips" style="margin-bottom:8px;">
+        <span class="chip" onclick="remoteAction('scroll', { dy: -360 })">⬆ 向上滚</span>
+        <span class="chip" onclick="remoteAction('scroll', { dy: 360 })">⬇ 向下滚</span>
+        <span class="chip" onclick="remoteAction('reload', {})">🔄 刷新电脑网页</span>
+        <span class="chip" onclick="markRemoteHandled()">✓ 标为已读</span>
+      </div>
+
+      <div class="screen-wrap" id="rv-screen-wrap" onclick="handleScreenTap(event)">
+        <div id="rv-loading" style="padding:36px 16px;text-align:center;color:var(--muted);font-size:13px;">
+          ⏳ 正在从电脑隔离仓抓取实时画面...
+        </div>
+        <img id="rv-img" style="display:none;" alt="Remote Workspace" />
+        <div class="tap-dot" id="rv-tap-dot"></div>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:6px;text-align:center;">
+        💡 直接手指轻点上方画面任意位置（如左侧买家头像或输入框），即可远程点击电脑网页对应位置！
+      </div>
+      <div id="rv-text-box" style="margin-top:8px;font-size:12px;color:#cbd5e1;background:#0f172a;padding:8px 10px;border-radius:8px;border:1px solid var(--border);display:none;"></div>
+    </div>
+
+    <div class="viewer-foot">
+      <div class="chips" id="rv-qr-chips" style="margin-bottom:7px;"></div>
+      <div style="display:flex;gap:7px;align-items:center;">
+        <input id="rv-reply-in" style="flex:1;" placeholder="输入回复内容（由电脑直接填入网页并发送）..." onkeydown="if(event.key==='Enter')sendRemoteReply()" />
+        <button class="btn green" onclick="sendRemoteReply()">🚀 代填发送</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM TAB BAR -->
+  <nav class="tabbar">
+    <button class="tab-item active" id="nav-cc" onclick="switchMobileTab('cc')">
+      <span class="tab-icon">🤖</span>
+      <span id="lbl-nav-cc">CC/AI遥控</span>
+    </button>
+    <button class="tab-item" id="nav-inbox" onclick="switchMobileTab('inbox')">
+      <span class="tab-icon">💬<span class="dot-count" id="unread-dot" style="display:none;">0</span></span>
+      <span id="lbl-nav-inbox">平台直回</span>
+    </button>
+    <button class="tab-item" id="nav-tools" onclick="switchMobileTab('tools')">
+      <span class="tab-icon">🎯</span>
+      <span id="lbl-nav-tools">话术与找单</span>
+    </button>
+  </nav>
+
+  <div class="toast" id="m-toast"></div>
+
+  <script>
+    // Strip ?t= token from address bar after cookie is set so screenshots stay safe
+    const initParams = new URLSearchParams(location.search);
+    const urlTok = initParams.get("t") || "";
+    if (urlTok) {
+      sessionStorage.setItem("tp_tok", urlTok);
+      history.replaceState(null, "", location.pathname);
+    }
+
+    let mLang = (navigator.language || "zh").toLowerCase().startsWith("zh") ? "zh" : "en";
+    let hubState = { watches: [], quickReplies: [], stats: {} };
+    let ccState = { agents: [], sessions: [], hookEvents: [] };
+    let activeCcId = "";
+    let activeRemoteWatchId = "";
+
+    function toast(msg) {
+      const el = document.getElementById("m-toast");
+      el.textContent = msg;
+      el.style.display = "block";
+      clearTimeout(window.__mt);
+      window.__mt = setTimeout(() => { el.style.display = "none"; }, 2400);
+    }
+
+    async function mApi(method, path, body) {
+      const headers = {};
+      const savedTok = sessionStorage.getItem("tp_tok");
+      if (savedTok) headers["X-TabPulse-Token"] = savedTok;
+      if (body) headers["Content-Type"] = "application/json";
+      const res = await fetch(path, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      return await res.json();
+    }
+
+    function spinText(raw) {
+      return String(raw || "").replace(/\{([^{}]+)\}/g, (_, g) => {
+        const arr = g.split("|").map((x) => x.trim()).filter(Boolean);
+        return arr.length ? arr[Math.floor(Math.random() * arr.length)] : "";
+      });
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function switchMobileTab(tab) {
+      for (const k of ["cc", "inbox", "tools"]) {
+        document.getElementById("page-" + k).classList.toggle("active", k === tab);
+        document.getElementById("nav-" + k).classList.toggle("active", k === tab);
+      }
+      document.getElementById("cc-composer").style.display = tab === "cc" ? "flex" : "none";
+    }
+
+    function toggleMobileLang() {
+      mLang = mLang === "zh" ? "en" : "zh";
+      const en = mLang === "en";
+      document.getElementById("btn-mlang").textContent = en ? "中文" : "EN";
+      document.getElementById("m-title").textContent = en ? "ReplyRadar Mobile" : "消息总管 · 手机版";
+      document.getElementById("m-shield").textContent = en ? "🛡️ Fixed Desktop IP · 0 Ban Risk" : "🛡️ 全程走电脑固定IP · 切5G/WiFi不封号";
+      document.getElementById("lbl-nav-cc").textContent = en ? "CC / AI" : "CC/AI遥控";
+      document.getElementById("lbl-nav-inbox").textContent = en ? "Inboxes" : "平台直回";
+      document.getElementById("lbl-nav-tools").textContent = en ? "Replies" : "话术与找单";
+      renderAllMobile();
+    }
+
+    async function refreshAll() {
+      try {
+        const [st, cc] = await Promise.all([
+          mApi("GET", "/api/state"),
+          mApi("GET", "/api/cc/state"),
+        ]);
+        if (st && Array.isArray(st.watches)) hubState = st;
+        if (cc && cc.ok) {
+          ccState = cc;
+          if (!activeCcId && cc.sessions?.length) activeCcId = cc.sessions[0].id;
+        }
+        renderAllMobile();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderAllMobile() {
+      const totalUnread = hubState.stats?.unreadMessagesTotal || 0;
+      const dot = document.getElementById("unread-dot");
+      dot.style.display = totalUnread > 0 ? "inline-block" : "none";
+      dot.textContent = totalUnread;
+
+      renderCcSection();
+      renderMobileInboxes();
+      renderMobileQr();
+    }
+
+    function renderCcSection() {
+      const hooksEl = document.getElementById("hook-alerts-box");
+      const hooks = ccState.hookEvents || [];
+      hooksEl.innerHTML = hooks.slice(0, 2).map((h) => `
+        <div class="card" style="border-color:#10b981;padding:10px 12px;">
+          <div class="row-between">
+            <span class="badge green">🔔 终端实时提醒 (${esc(h.eventType)})</span>
+            <span style="font-size:11px;color:var(--muted);">${new Date(h.createdAt).toLocaleTimeString()}</span>
+          </div>
+          <div style="font-size:12.5px;margin-top:5px;">${esc(h.summary)}</div>
+        </div>
+      `).join("");
+
+      const agSel = document.getElementById("cc-agent-sel");
+      if (agSel && !agSel.options.length) {
+        agSel.innerHTML = (ccState.agents || []).map((a) =>
+          `<option value="${esc(a.id)}">${esc(a.label)}${a.installed ? " ✓已就绪" : " (未安装)"}</option>`
+        ).join("");
+      }
+
+      const sesSel = document.getElementById("cc-session-sel");
+      const sessions = ccState.sessions || [];
+      if (!sessions.length) {
+        sesSel.innerHTML = `<option value="">尚未创建任务（直接在底部发指令即可自动新建）</option>`;
+        document.getElementById("cc-messages").innerHTML = `
+          <div class="card" style="text-align:center;color:var(--muted);font-size:13px;">
+            👋 直接在最下方输入框打字发送，电脑就会用固定干净网络帮你跑 Claude Code / Codex / 终端命令，跑完立即发提醒给你！
+          </div>`;
+        return;
+      }
+
+      sesSel.innerHTML = sessions.map((s) => {
+        const stIcon = s.status === "running" ? "⏳运行中" : s.status === "error" ? "⚠️异常" : "✅就绪";
+        return `<option value="${esc(s.id)}" ${s.id === activeCcId ? "selected" : ""}>[${stIcon}] ${esc(s.name)} — ${esc(s.cwd)}</option>`;
+      }).join("");
+
+      const cur = sessions.find((s) => s.id === activeCcId) || sessions[0];
+      activeCcId = cur.id;
+      const msgEl = document.getElementById("cc-messages");
+      msgEl.innerHTML = (cur.messages || []).map((m) => `
+        <div class="bubble ${m.role === "user" ? "user" : "assistant"}">${esc(m.text)}</div>
+      `).join("");
+    }
+
+    function toggleNewSessionBox() {
+      const b = document.getElementById("new-cc-box");
+      b.style.display = b.style.display === "none" ? "block" : "none";
+    }
+
+    function selectCcSession(id) {
+      activeCcId = id;
+      renderCcSection();
+    }
+
+    async function createCcSession() {
+      const agent = document.getElementById("cc-agent-sel").value;
+      const cwd = document.getElementById("cc-cwd-in").value.trim();
+      const name = document.getElementById("cc-name-in").value.trim();
+      const res = await mApi("POST", "/api/cc/sessions", { agent, cwd, name });
+      if (res && res.session) {
+        activeCcId = res.session.id;
+        document.getElementById("new-cc-box").style.display = "none";
+        await refreshAll();
+        toast("✓ 已创建远程会话");
+      }
+    }
+
+    async function sendCcInstruction() {
+      const input = document.getElementById("cc-input");
+      const prompt = input.value.trim();
+      if (!prompt) return;
+      input.value = "";
+      let sid = activeCcId;
+      if (!sid) {
+        const created = await mApi("POST", "/api/cc/sessions", {});
+        sid = created?.session?.id || "auto";
+        activeCcId = sid;
+      }
+      const res = await mApi("POST", `/api/cc/sessions/${encodeURIComponent(sid)}/send`, { prompt });
+      if (res && res.error) {
+        toast(res.error);
+      } else {
+        toast("🚀 已发往电脑执行！");
+      }
+      await refreshAll();
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    }
+
+    function quickCcPrompt(text) {
+      document.getElementById("cc-input").value = text;
+      sendCcInstruction();
+    }
+
+    async function stopActiveCcSession() {
+      if (!activeCcId) return;
+      await mApi("POST", `/api/cc/sessions/${encodeURIComponent(activeCcId)}/stop`, {});
+      toast("⏹ 已停止当前任务");
+      await refreshAll();
+    }
+
+    function renderMobileInboxes() {
+      const el = document.getElementById("mobile-watch-list");
+      const watches = hubState.watches || [];
+      if (!watches.length) {
+        el.innerHTML = `<div class="card" style="color:var(--muted);text-align:center;">暂无看护平台，请在电脑端添加</div>`;
+        return;
+      }
+      el.innerHTML = watches.map((w) => {
+        const unread = Number(w.unreadCount) || 0;
+        return `
+          <div class="card ${unread > 0 ? "unread" : ""}" onclick="openRemoteViewer('${esc(w.id)}', '${esc(w.name)}')">
+            <div class="row-between">
+              <strong style="font-size:15px;">${esc(w.name)}</strong>
+              ${unread > 0
+                ? `<span class="badge red">🔴 ${unread} 条新消息</span>`
+                : `<span class="badge green">🟢 常驻看护</span>`}
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${esc(w.snippet || w.url)}
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;">
+              <span style="font-size:11.5px;color:#93c5fd;">🔒 独立防串号仓 · 点此远程看画面并直接回消息 →</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function getNormalizedQrList() {
+      const raw = hubState.quickReplies || [];
+      return raw.map((q) => ({
+        id: q.id,
+        title: q.title || q.titleZh || "快捷话术",
+        body: q.body || q.textZh || "",
+      })).filter((q) => q.body);
+    }
+
+    function renderMobileQr() {
+      const list = getNormalizedQrList();
+      const el = document.getElementById("mobile-qr-list");
+      el.innerHTML = list.map((q, idx) => `
+        <div style="background:#0f172a;border:1px solid var(--border);border-radius:10px;padding:10px;">
+          <div class="row-between" style="margin-bottom:5px;">
+            <strong style="font-size:13px;">${esc(q.title)}</strong>
+            <button class="btn sm primary" onclick="copyMobileQr(${idx})">🎲 变体复制</button>
+          </div>
+          <div style="font-size:12px;color:#cbd5e1;">${esc(q.body)}</div>
+        </div>
+      `).join("");
+
+      const chipsEl = document.getElementById("rv-qr-chips");
+      if (chipsEl) {
+        chipsEl.innerHTML = list.map((q, idx) =>
+          `<span class="chip" onclick="fillViewerQr(${idx})">⚡ ${esc(q.title)}</span>`
+        ).join("");
+      }
+    }
+
+    async function copyMobileQr(idx) {
+      const item = getNormalizedQrList()[idx];
+      if (!item) return;
+      const spun = spinText(item.body);
+      await navigator.clipboard.writeText(spun);
+      toast("✓ 已复制随机变体话术");
+    }
+
+    function fillViewerQr(idx) {
+      const item = getNormalizedQrList()[idx];
+      if (!item) return;
+      document.getElementById("rv-reply-in").value = spinText(item.body);
+      toast("已填入随机变体，点右侧即可代填发送");
+    }
+
+    async function openRemoteViewer(watchId, name) {
+      activeRemoteWatchId = watchId;
+      document.getElementById("rv-title").textContent = name;
+      document.getElementById("rv-img").style.display = "none";
+      document.getElementById("rv-loading").style.display = "block";
+      document.getElementById("rv-loading").textContent = "⏳ 正在唤醒电脑隔离仓并抓取实时画面...";
+      document.getElementById("remote-viewer").classList.add("open");
+      renderMobileQr();
+      await refreshRemoteSnapshot();
+    }
+
+    function closeRemoteViewer() {
+      activeRemoteWatchId = "";
+      document.getElementById("remote-viewer").classList.remove("open");
+    }
+
+    function applySnapshotPayload(res) {
+      const snap = res?.imageDataUrl ? res : res?.cachedSnapshot;
+      const loading = document.getElementById("rv-loading");
+      const img = document.getElementById("rv-img");
+      const txtBox = document.getElementById("rv-text-box");
+      if (snap && snap.imageDataUrl) {
+        img.src = snap.imageDataUrl;
+        img.style.display = "block";
+        loading.style.display = "none";
+      } else {
+        loading.style.display = "block";
+        loading.textContent = res?.error || "请确保电脑端《消息总管》软件已打开（打开后即可实时投射画面与代发消息）";
+      }
+      if (snap && snap.extractedText) {
+        txtBox.style.display = "block";
+        txtBox.textContent = "📄 页面文字摘要：" + snap.extractedText.slice(0, 260);
+      } else {
+        txtBox.style.display = "none";
+      }
+    }
+
+    async function refreshRemoteSnapshot() {
+      if (!activeRemoteWatchId) return;
+      const res = await mApi("GET", `/api/remote/tab/${encodeURIComponent(activeRemoteWatchId)}/snapshot`);
+      applySnapshotPayload(res);
+    }
+
+    async function handleScreenTap(ev) {
+      const img = document.getElementById("rv-img");
+      if (!activeRemoteWatchId || img.style.display === "none") return;
+      const rect = img.getBoundingClientRect();
+      const xRatio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+      const yRatio = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+
+      const dot = document.getElementById("rv-tap-dot");
+      dot.style.left = `${xRatio * 100}%`;
+      dot.style.top = `${yRatio * 100}%`;
+      dot.style.display = "block";
+      setTimeout(() => { dot.style.display = "none"; }, 700);
+
+      toast("👆 正在远程点击电脑画面...");
+      const res = await mApi("POST", `/api/remote/tab/${encodeURIComponent(activeRemoteWatchId)}/action`, {
+        type: "click",
+        xRatio,
+        yRatio,
+      });
+      applySnapshotPayload(res);
+    }
+
+    async function remoteAction(type, extra = {}) {
+      if (!activeRemoteWatchId) return;
+      toast("⏳ 电脑正在执行操作...");
+      const res = await mApi("POST", `/api/remote/tab/${encodeURIComponent(activeRemoteWatchId)}/action`, {
+        type,
+        ...extra,
+      });
+      applySnapshotPayload(res);
+    }
+
+    async function sendRemoteReply() {
+      if (!activeRemoteWatchId) return;
+      const input = document.getElementById("rv-reply-in");
+      const text = spinText(input.value.trim());
+      if (!text) {
+        toast("请先输入或选择要回复的内容");
+        return;
+      }
+      input.value = "";
+      toast("🚀 电脑正在用固定 IP 代填并发送...");
+      const res = await mApi("POST", `/api/remote/tab/${encodeURIComponent(activeRemoteWatchId)}/action`, {
+        type: "reply",
+        text,
+        autoSubmit: true,
+      });
+      applySnapshotPayload(res);
+      toast(res?.injected ? "✅ 已在电脑端填入并触发发送！" : "⚠️ 未找到焦点输入框，请先手指点一下上方画面里的聊天输入框再点发送");
+    }
+
+    async function markRemoteHandled() {
+      if (!activeRemoteWatchId) return;
+      await mApi("POST", `/api/watches/${encodeURIComponent(activeRemoteWatchId)}/resolve`, { action: "resolve" });
+      toast("✓ 已标为已读");
+      refreshAll();
+    }
+
+    async function runMobileScan() {
+      const kw = document.getElementById("m-scan-kw").value.trim() || "Shopify";
+      const out = document.getElementById("m-scan-out");
+      out.innerHTML = `<div style="color:var(--muted);font-size:12.5px;">⏳ 正在扫描...</div>`;
+      const res = await mApi("GET", `/api/scan-leads?q=${encodeURIComponent(kw)}&limit=8`);
+      const leads = res?.leads || [];
+      out.innerHTML = leads.map((l) => `
+        <a href="${esc(l.url)}" target="_blank" style="display:block;background:#0f172a;border:1px solid var(--border);border-radius:10px;padding:10px;color:#fff;text-decoration:none;">
+          <div class="row-between" style="margin-bottom:4px;">
+            <span class="badge green">意向 ${esc(l.intentScore)}</span>
+            <span style="font-size:11px;color:var(--muted);">${esc(l.source)}</span>
+          </div>
+          <div style="font-size:13px;font-weight:700;">${esc(l.title)}</div>
+        </a>
+      `).join("") || `<div style="color:var(--muted);font-size:12.5px;">暂无结果</div>`;
+    }
+
+    refreshAll();
+    setInterval(() => {
+      const hasRunning = (ccState.sessions || []).some((s) => s.status === "running");
+      if (hasRunning || activeRemoteWatchId) {
+        refreshAll();
+      }
+    }, 2200);
+    setInterval(refreshAll, 12000);
+  </script>
+</body>
+</html>

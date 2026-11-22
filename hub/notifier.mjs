@@ -6,9 +6,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-const PYTHON_BIN = "/usr/bin/python3";
 const HOME_DIR = os.homedir();
-const NOTIFY_SCRIPT = process.env.TABPULSE_NOTIFY_SCRIPT || path.join(HOME_DIR, ".gemini", "config", "assistant", "notify.py");
 const AGENTAPI_BIN = process.env.TABPULSE_AGENTAPI_BIN || path.join(HOME_DIR, ".gemini", "antigravity", "bin", "agentapi");
 const TRANSCRIPT_ROOT = path.join(HOME_DIR, ".gemini", "antigravity", "brain");
 const EXEC_TIMEOUT_MS = 15000;
@@ -19,16 +17,30 @@ function externalEffectsDisabled() {
   return process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS === "1";
 }
 
-async function sendCustomerWebhook(webhookUrl, title, text) {
+export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = "") {
   const url = String(webhookUrl || "").trim();
   if (!url || !/^https?:\/\//i.test(url)) return null;
+  const fullText = mobileLink ? `${text}\n📱 手机点此直接查看并回复：${mobileLink}` : text;
   try {
-    // Compatible with Feishu/Lark, Slack, Discord, ServerChan, Bark, and generic JSON webhooks
-    const payload = url.includes("feishu.cn") || url.includes("larksuite.com")
-      ? { msg_type: "text", content: { text: `${title}\n${text}` } }
-      : url.includes("discord.com/api/webhooks")
-        ? { content: `**${title}**\n${text}` }
-        : { text: `${title}\n${text}`, title, desp: text, body: text };
+    // Bark GET URL support (https://api.day.app/<key>) with ?url= jump straight into Mobile Pocket Console
+    if (url.includes("api.day.app/") && url.replace(/\/+$/, "").split("/").length === 4) {
+      const base = url.replace(/\/+$/, "");
+      const q = mobileLink ? `?url=${encodeURIComponent(mobileLink)}` : "";
+      const barkUrl = `${base}/${encodeURIComponent(title)}/${encodeURIComponent(text)}${q}`;
+      const r = await fetch(barkUrl);
+      return { status: r.status, ok: r.ok };
+    }
+
+    const payload =
+      url.includes("feishu.cn") || url.includes("larksuite.com")
+        ? { msg_type: "text", content: { text: `${title}\n${fullText}` } }
+        : url.includes("qyapi.weixin.qq.com")
+          ? { msgtype: "text", text: { content: `${title}\n${fullText}` } }
+          : url.includes("discord.com/api/webhooks")
+            ? { content: `**${title}**\n${fullText}` }
+            : url.includes("sctapi.ftqq.com")
+              ? { title, desp: fullText }
+              : { text: `${title}\n${fullText}`, title, desp: fullText, body: fullText, url: mobileLink };
 
     const res = await fetch(url, {
       method: "POST",
@@ -38,6 +50,22 @@ async function sendCustomerWebhook(webhookUrl, title, text) {
     return { status: res.status, ok: res.ok };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+}
+
+async function showMacBanner(title, subtitle) {
+  if (process.platform !== "darwin" || !fs.existsSync("/usr/bin/osascript")) return null;
+  try {
+    const safeTitle = String(title).slice(0, 64).replace(/["\\]/g, "'");
+    const safeSub = String(subtitle).slice(0, 90).replace(/["\\]/g, "'");
+    await execFileAsync(
+      "/usr/bin/osascript",
+      ["-e", `display notification "${safeSub}" with title "${safeTitle}" sound name "Glass"`],
+      { timeout: 5000 }
+    );
+    return "shown";
+  } catch {
+    return null;
   }
 }
 
@@ -55,9 +83,7 @@ function readTranscriptTailSummary(conversationId) {
         if (obj.content && typeof obj.content === "string") {
           snippets.push(`[${obj.type || "STEP"}] ${obj.content.replace(/\s+/g, " ").slice(0, 80)}`);
         }
-      } catch {
-        // ignore malformed trailing line
-      }
+      } catch {}
     }
     return snippets.slice(-2).join(" | ");
   } catch {
@@ -65,14 +91,13 @@ function readTranscriptTailSummary(conversationId) {
   }
 }
 
-export async function notifyUnread(item, settings = {}) {
-  const subject = `🚨 【消息总管】${item.name} 有 ${item.unreadCount} 条新消息`;
+export async function notifyUnread(item, settings = {}, mobileLink = "") {
+  const subject = `🚨【消息总管】${item.name} 有 ${item.unreadCount} 条新消息`;
   const body = [
-    `平台：${item.name}（${item.url}）`,
+    `平台：${item.name}`,
     `未读数：${item.unreadCount}`,
-    item.contextSummary ? `当初背景：${item.contextSummary}` : "",
-    item.snippet ? `消息摘要：${item.snippet}` : "",
-    `建议动作：打开《消息总管》查看拟好的回复草稿，一键跳回原网页回复。`,
+    item.contextSummary ? `备注：${item.contextSummary}` : "",
+    item.snippet ? `摘要：${item.snippet}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -82,59 +107,26 @@ export async function notifyUnread(item, settings = {}) {
     return { skipped: true, reason: "TABPULSE_DISABLE_EXTERNAL_EFFECTS=1" };
   }
 
-  const result = { notify: null, macBanner: null, agent: null, webhook: null };
-
-  if (process.platform === "darwin" && fs.existsSync("/usr/bin/osascript")) {
-    try {
-      const safeTitle = `消息总管：${item.name} (${item.unreadCount}条新消息)`.replace(/"/g, "'");
-      const safeSub = (item.snippet || item.contextSummary || "点击右上角菜单栏「消息」一键查看回复").slice(0, 80).replace(/"/g, "'");
-      await execFileAsync(
-        "/usr/bin/osascript",
-        ["-e", `display notification "${safeSub}" with title "${safeTitle}" sound name "Glass"`],
-        { timeout: 5000 }
-      );
-      result.macBanner = "shown";
-    } catch (err) {
-      result.macBannerError = err.message;
-    }
-  }
+  const result = { macBanner: null, agent: null, webhook: null };
+  result.macBanner = await showMacBanner(
+    `消息总管：${item.name} (${item.unreadCount}条新消息)`,
+    item.snippet || item.contextSummary || "点击打开工作台或手机随身端直接回复"
+  );
 
   if (settings?.webhookUrl) {
-    result.webhook = await sendCustomerWebhook(settings.webhookUrl, subject, body);
-  }
-
-  if (fs.existsSync(NOTIFY_SCRIPT)) {
-    try {
-      const { stdout } = await execFileAsync(
-        PYTHON_BIN,
-        [NOTIFY_SCRIPT, "--subject", subject, "--urgent", body],
-        { timeout: EXEC_TIMEOUT_MS }
-      );
-      result.notify = stdout.trim();
-    } catch (err) {
-      result.notifyError = err.message;
-    }
+    result.webhook = await sendCustomerWebhook(settings.webhookUrl, subject, body, mobileLink);
   }
 
   if (item.conversationId && fs.existsSync(AGENTAPI_BIN)) {
     const tail = readTranscriptTailSummary(item.conversationId);
-    const tierNote =
-      item.publishTier === "red"
-        ? "该平台属红灯手发平台，只起草回复并保存到 TabPulse 草稿框（POST /api/watches/" +
-          item.id +
-          "/draft），严禁自动点击发送。"
-        : "请先起草回复写入 TabPulse 草稿框，再按平台安全规则推进。";
     const msg = [
-      `【TabPulse 万站回音唤醒】监听平台「${item.name}」检测到 ${item.unreadCount} 条未读新消息。`,
+      `【消息总管唤醒】监听平台「${item.name}」检测到 ${item.unreadCount} 条未读新消息。`,
       item.url ? `网址：${item.url}` : "",
-      item.contextSummary ? `原任务背景：${item.contextSummary}` : "",
       item.snippet ? `最新摘要：${item.snippet}` : "",
-      tail ? `最近对话上下文：${tail}` : "",
-      tierNote,
+      tail ? `最近上下文：${tail}` : "",
     ]
       .filter(Boolean)
       .join("\n");
-
     try {
       const { stdout } = await execFileAsync(AGENTAPI_BIN, ["send-message", item.conversationId, msg], {
         timeout: EXEC_TIMEOUT_MS,
@@ -148,10 +140,9 @@ export async function notifyUnread(item, settings = {}) {
   return result;
 }
 
-export async function notifyAuthExpired(item, settings = {}) {
-  const title = `TabPulse 登录过期提醒：${item.name}`;
-  const summary = `平台「${item.name}」跳转到登录页，哨兵已自动暂停重试以防触发风控。`;
-  const action = `打开万站回音桌面端点击「内置登录」重登一次（或不需要再蹲就点暂停）。`;
+export async function notifyAuthExpired(item, settings = {}, mobileLink = "") {
+  const title = `🟠【消息总管】登录待刷新：${item.name}`;
+  const summary = `平台「${item.name}」当前未登录，已自动停检保护账号。`;
 
   if (externalEffectsDisabled()) {
     notificationLog.push({ type: "auth_expired", id: item.id, title, summary, skipped: true });
@@ -159,32 +150,20 @@ export async function notifyAuthExpired(item, settings = {}) {
   }
 
   if (settings?.webhookUrl) {
-    await sendCustomerWebhook(settings.webhookUrl, title, `${summary}\n${action}`);
+    await sendCustomerWebhook(settings.webhookUrl, title, summary, mobileLink);
   }
+  return { ok: true };
+}
 
-  if (!fs.existsSync(NOTIFY_SCRIPT)) {
-    return { enqueued: false, skipped: true };
+export async function notifyAgentAlert({ title, summary }, settings = {}, mobileLink = "") {
+  if (externalEffectsDisabled()) {
+    notificationLog.push({ type: "agent_alert", title, summary, skipped: true });
+    return { skipped: true };
   }
-
-  try {
-    const { stdout } = await execFileAsync(
-      PYTHON_BIN,
-      [
-        NOTIFY_SCRIPT,
-        "--enqueue",
-        "--account",
-        "TabPulse",
-        "--title",
-        title,
-        "--summary",
-        summary,
-        "--action",
-        action,
-      ],
-      { timeout: EXEC_TIMEOUT_MS }
-    );
-    return { enqueued: true, stdout: stdout.trim() };
-  } catch (err) {
-    return { enqueued: false, error: err.message };
+  await showMacBanner(title, summary);
+  let webhook = null;
+  if (settings?.webhookUrl) {
+    webhook = await sendCustomerWebhook(settings.webhookUrl, title, summary, mobileLink);
   }
+  return { ok: true, webhook };
 }

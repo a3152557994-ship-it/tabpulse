@@ -45,9 +45,10 @@ const DEFAULT_QUICK_REPLIES = [
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "2.0.0",
+    version: "3.0.0",
     extensionHeartbeatAt: null,
     license: null,
+    mobileToken: crypto.randomBytes(24).toString("base64url"),
     settings: {
       webhookUrl: "",
       radarKeywords: "Shopify",
@@ -78,6 +79,10 @@ export function loadState(now = new Date()) {
     }
     if (!Array.isArray(parsed.quickReplies) || parsed.quickReplies.length === 0) {
       parsed.quickReplies = DEFAULT_QUICK_REPLIES;
+    }
+    if (!parsed.mobileToken || typeof parsed.mobileToken !== "string" || parsed.mobileToken.length < 16) {
+      parsed.mobileToken = crypto.randomBytes(24).toString("base64url");
+      saveState(parsed);
     }
     return parsed;
   } catch {
@@ -468,6 +473,18 @@ export function saveQuickReplies(list = [], nowDate = new Date()) {
   return state.quickReplies || DEFAULT_QUICK_REPLIES;
 }
 
+export function getMobileToken() {
+  const state = loadState();
+  return state.mobileToken;
+}
+
+export function rotateMobileToken() {
+  const state = loadState();
+  state.mobileToken = crypto.randomBytes(24).toString("base64url");
+  saveState(state);
+  return state.mobileToken;
+}
+
 export function getPublicSummary(nowDate = new Date()) {
   const state = loadState(nowDate);
   const watches = state.watches;
@@ -475,7 +492,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "2.0.0",
+    version: "3.0.0",
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),
     settings: state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" },

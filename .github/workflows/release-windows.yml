@@ -9,7 +9,7 @@ on:
       tag:
         description: "Release tag to upload Windows zips to"
         required: true
-        default: "v2.0.0"
+        default: "v3.0.0"
 
 permissions:
   contents: write
@@ -36,6 +36,7 @@ jobs:
           dotnet publish windows-app/TabPulseWin.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:AssemblyName="消息总管" -o out-cn
           mkdir out-cn/resources
           cp hub/ui/index.html out-cn/resources/index.html
+          cp hub/ui/mobile.html out-cn/resources/mobile.html
           cp docs/cold-reply-playbook.html out-cn/resources/cold-reply-playbook.html
           cp extension/passive-observer.js out-cn/resources/passive-observer.js
           cp presets.json out-cn/resources/presets.json
@@ -44,6 +45,7 @@ jobs:
           dotnet publish windows-app/TabPulseWin.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:AssemblyName="ReplyRadar" -o out-en
           mkdir out-en/resources
           cp hub/ui/index.html out-en/resources/index.html
+          cp hub/ui/mobile.html out-en/resources/mobile.html
           cp docs/cold-reply-playbook.html out-en/resources/cold-reply-playbook.html
           cp extension/passive-observer.js out-en/resources/passive-observer.js
           cp presets.json out-en/resources/presets.json

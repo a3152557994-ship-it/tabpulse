@@ -126,7 +126,8 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
     assert.ok((await llmsRes.text()).includes("tabpulse_scan_buyer_leads"));
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
-    assert.deepEqual(health, { ok: true, version: "2.0.0" });
+    assert.equal(health.ok, true);
+    assert.equal(health.version, "3.0.0");
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -240,5 +241,73 @@ test("Native Universal macOS binaries (CN 消息总管 & EN ReplyRadar) pass --s
 
   for (const rel of ["extension/background.js", "extension/probe.js", "extension/passive-observer.js", "extension/popup.js"]) {
     execFileSync(process.execPath, ["--check", path.join(PROJECT_ROOT, rel)]);
+  }
+});
+
+test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner work securely", async () => {
+  const server = createHubServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    // 1. Desktop local call gets QR SVG & mobile link
+    const mobInfo = await (await fetch(`${baseUrl}/api/mobile/info`)).json();
+    assert.equal(mobInfo.ok, true);
+    assert.ok(mobInfo.qrSvg.startsWith("<svg"));
+    const tok = new URL(mobInfo.lanUrl).searchParams.get("t");
+    assert.ok(tok && tok.length >= 24);
+
+    // 2. External tunnel request WITHOUT token MUST be rejected (401)
+    const unauthState = await fetch(`${baseUrl}/api/state`, {
+      headers: { "cf-connecting-ip": "203.0.113.9" },
+    });
+    assert.equal(unauthState.status, 401);
+
+    // 3. External tunnel request cannot access desktop-only /api/mobile/info even WITH token (403)
+    const blockedDesktopRoute = await fetch(`${baseUrl}/api/mobile/info?t=${encodeURIComponent(tok)}`, {
+      headers: { "cf-connecting-ip": "203.0.113.9" },
+    });
+    assert.equal(blockedDesktopRoute.status, 403);
+
+    // 4. External mobile request WITH valid token succeeds & sets HttpOnly cookie
+    const mobPage = await fetch(`${baseUrl}/m?t=${encodeURIComponent(tok)}`, {
+      headers: { "cf-connecting-ip": "203.0.113.9" },
+    });
+    assert.equal(mobPage.status, 200);
+    assert.ok((mobPage.headers.get("set-cookie") || "").includes("tp_mob_tok="));
+    assert.ok((await mobPage.text()).includes("消息总管 · 手机版"));
+
+    // 5. Create & run a local fixed-IP remote session and verify output + CC hook endpoint
+    const sesRes = await (
+      await fetch(`${baseUrl}/api/cc/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+        body: JSON.stringify({ agent: "shell", name: "测试远程终端" }),
+      })
+    ).json();
+    assert.equal(sesRes.ok, true);
+
+    await fetch(`${baseUrl}/api/cc/sessions/${sesRes.session.id}/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+      body: JSON.stringify({ prompt: "echo FIXED_IP_OK" }),
+    });
+
+    await new Promise((r) => setTimeout(r, 350));
+    const ccState = await (await fetch(`${baseUrl}/api/cc/state`)).json();
+    const updatedSes = ccState.sessions.find((s) => s.id === sesRes.session.id);
+    assert.ok(updatedSes.messages.some((m) => m.text.includes("FIXED_IP_OK")));
+
+    const hookRes = await (
+      await fetch(`${baseUrl}/api/cc/hook?event=Stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Claude finished refactoring" }),
+      })
+    ).json();
+    assert.equal(hookRes.ok, true);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
   }
 });

@@ -262,7 +262,7 @@ final class StandaloneStore {
             ]
         ]
         let initial: [String: Any] = [
-            "version": "2.0.0",
+            "version": "3.0.0",
             "license": NSNull(),
             "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "watches": defaultWatches,
@@ -313,7 +313,7 @@ final class StandaloneStore {
         }
 
         return [
-            "version": "2.0.0",
+            "version": "3.0.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -422,8 +422,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var webViewToWatchId: [ObjectIdentifier: String] = [:]
     var activeLoginWatchId: String?
     var activeHomeURL: String?
+    var isDockedInMainWindow = false
     var statusItem: NSStatusItem!
     var sentinelTimer: Timer?
+    var bridgeTimer: Timer?
+    #if !MAS_BUILD
+    var spawnedHubProcess: Process?
+    #endif
     var useExternalHub = false
     var currentProbeTargetId: String?
     var currentProbeTargetName: String?
@@ -439,6 +444,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         sentinelTimer = Timer.scheduledTimer(withTimeInterval: 55.0, repeats: true) { [weak self] _ in
             self?.runSilentCheckCycle()
         }
+        #if !MAS_BUILD
+        bridgeTimer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
+            self?.pollHubBridgeCommands()
+        }
+        #endif
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        #if !MAS_BUILD
+        spawnedHubProcess?.terminate()
+        #endif
     }
 
     func postLocalNotification(title: String, body: String) {
@@ -551,13 +567,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             loadStandaloneUI()
             return
         }
-        var req = URLRequest(url: healthURL, timeoutInterval: 1.2)
+        var req = URLRequest(url: healthURL, timeoutInterval: 1.0)
         req.httpMethod = "GET"
         URLSession.shared.dataTask(with: req) { [weak self] data, resp, _ in
             DispatchQueue.main.async {
                 if let http = resp as? HTTPURLResponse, http.statusCode == 200, data != nil {
                     self?.useExternalHub = true
                     self?.dashboardWebView.load(URLRequest(url: URL(string: "http://127.0.0.1:17890/")!))
+                } else if self?.trySpawnBundledNodeHub() == true {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                        self?.useExternalHub = true
+                        self?.dashboardWebView.load(URLRequest(url: URL(string: "http://127.0.0.1:17890/")!))
+                    }
                 } else {
                     self?.useExternalHub = false
                     self?.loadStandaloneUI()
@@ -566,6 +587,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }.resume()
         #endif
     }
+
+    #if !MAS_BUILD
+    func trySpawnBundledNodeHub() -> Bool {
+        let nodeCandidates = ["/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"]
+        guard let nodeBin = nodeCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }),
+              let srvURL = Bundle.main.url(forResource: "server", withExtension: "mjs", subdirectory: "app-server/hub") else {
+            return false
+        }
+        let appSup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSup.appendingPathComponent("TabPulse", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: nodeBin)
+        p.arguments = [srvURL.path]
+        var env = ProcessInfo.processInfo.environment
+        env["TABPULSE_DATA_FILE"] = dir.appendingPathComponent("state.json").path
+        env["TABPULSE_PORT"] = "17890"
+        p.environment = env
+        do {
+            try p.run()
+            spawnedHubProcess = p
+            return true
+        } catch {
+            return false
+        }
+    }
+    #endif
 
     func loadStandaloneUI() {
         #if MAS_BUILD
@@ -585,8 +634,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     @objc func showMainWindow() {
+        returnToDashboard()
         mainWindow.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc func returnToDashboard() {
+        if isDockedInMainWindow {
+            if let wid = activeLoginWatchId, let liveWV = liveTabs[wid] {
+                activeLoginWatchId = nil
+                parkWebViewInBackground(liveWV)
+            } else {
+                loginWebView?.removeFromSuperview()
+            }
+            isDockedInMainWindow = false
+            dashboardWebView.frame = mainWindow.contentLayoutRect
+            mainWindow.contentView = dashboardWebView
+            mainWindow.title = isChineseSystem
+                ? "消息总管 — 多平台未读消息提醒与找单盒子"
+                : "ReplyRadar — All-in-One Unread Inbox & Buyer Lead Alerts"
+        } else {
+            mainWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    @objc func popOutWorkspaceWindow() {
+        guard isDockedInMainWindow, let root = workspaceRootView else { return }
+        isDockedInMainWindow = false
+        dashboardWebView.frame = mainWindow.contentLayoutRect
+        mainWindow.contentView = dashboardWebView
+        mainWindow.title = isChineseSystem
+            ? "消息总管 — 多平台未读消息提醒与找单盒子"
+            : "ReplyRadar — All-in-One Unread Inbox & Buyer Lead Alerts"
+
+        if loginWindow == nil {
+            let win = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1160, height: 780),
+                styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            win.center()
+            win.isReleasedWhenClosed = false
+            win.delegate = self
+            loginWindow = win
+        }
+        root.frame = NSRect(x: 0, y: 0, width: 1160, height: 780)
+        loginWindow?.contentView = root
+        loginWindow?.makeKeyAndOrderFront(nil)
     }
 
     @objc func triggerCheckMenu() {
@@ -634,17 +730,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             return nil
         }
         if targetURL.host == "127.0.0.1" || targetURL.host == "localhost" || targetURL.isFileURL {
-            openLoginSheet(urlStr: targetURL.absoluteString, name: isChineseSystem ? "高成交回复话术库" : "Cold-Reply Playbook", watchId: "")
+            openLoginSheet(urlStr: targetURL.absoluteString, name: isChineseSystem ? "高成交回复话术库" : "Cold-Reply Playbook", watchId: "", dockInMain: true)
         } else {
             NSWorkspace.shared.open(targetURL)
         }
         return nil
     }
 
-    // MARK: - Unified Multi-Account Workspace Window + Top Toolbar + 1-Click Spintax Quick Replies
-    func ensureWorkspaceWindow() {
-        if loginWindow != nil { return }
-        let winW: CGFloat = 1160
+    // MARK: - Unified Single-Window Direct Chat + Top Toolbar + Auto-Inject Spintax Replies
+    func ensureWorkspaceViews() {
+        if workspaceRootView != nil { return }
+        let winW: CGFloat = 1180
         let winH: CGFloat = 780
         let barH: CGFloat = 44
 
@@ -666,36 +762,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             return b
         }
 
-        toolbar.addSubview(makeBtn("←", x: 10, w: 38, action: #selector(wsBack)))
-        toolbar.addSubview(makeBtn("→", x: 50, w: 38, action: #selector(wsForward)))
-        toolbar.addSubview(makeBtn("↻", x: 90, w: 38, action: #selector(wsReload)))
-        toolbar.addSubview(makeBtn(isChineseSystem ? "🏠 消息页" : "🏠 Inbox", x: 132, w: 86, action: #selector(wsGoHome)))
+        let backDashBtn = makeBtn(isChineseSystem ? "← 回总览" : "← Overview", x: 10, w: 84, action: #selector(returnToDashboard))
+        toolbar.addSubview(backDashBtn)
+        toolbar.addSubview(makeBtn("‹", x: 98, w: 32, action: #selector(wsBack)))
+        toolbar.addSubview(makeBtn("›", x: 132, w: 32, action: #selector(wsForward)))
+        toolbar.addSubview(makeBtn("↻", x: 166, w: 34, action: #selector(wsReload)))
+        toolbar.addSubview(makeBtn(isChineseSystem ? "🏠 消息页" : "🏠 Inbox", x: 204, w: 82, action: #selector(wsGoHome)))
 
-        let accPop = NSPopUpButton(frame: NSRect(x: 224, y: 7, width: 250, height: 30), pullsDown: false)
+        let accPop = NSPopUpButton(frame: NSRect(x: 292, y: 7, width: 235, height: 30), pullsDown: false)
         accPop.font = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
         accPop.target = self
         accPop.action = #selector(wsSwitchAccountChanged(_:))
         toolbar.addSubview(accPop)
         accountSwitcherPopup = accPop
 
-        let qrPop = NSPopUpButton(frame: NSRect(x: 482, y: 7, width: 250, height: 30), pullsDown: true)
+        let qrPop = NSPopUpButton(frame: NSRect(x: 533, y: 7, width: 255, height: 30), pullsDown: true)
         qrPop.font = NSFont.systemFont(ofSize: 12.5, weight: .medium)
         qrPop.target = self
         qrPop.action = #selector(wsQuickReplyPicked(_:))
         toolbar.addSubview(qrPop)
         quickReplyPopup = qrPop
 
-        let statusLbl = NSTextField(labelWithString: isChineseSystem ? "🛡️ 独立防串号隔离仓运行中" : "🛡️ Isolated Cookie Sandbox")
-        statusLbl.frame = NSRect(x: 740, y: 13, width: 270, height: 18)
+        let statusLbl = NSTextField(labelWithString: isChineseSystem ? "🛡️ 同窗直聊运行中" : "🛡️ Direct Chat Active")
+        statusLbl.frame = NSRect(x: 794, y: 13, width: 280, height: 18)
         statusLbl.font = NSFont.systemFont(ofSize: 12, weight: .medium)
         statusLbl.textColor = NSColor(calibratedRed: 0.08, green: 0.50, blue: 0.24, alpha: 1.0)
         statusLbl.lineBreakMode = .byTruncatingTail
         toolbar.addSubview(statusLbl)
         toolbarStatusLabel = statusLbl
 
-        let dashBtn = makeBtn(isChineseSystem ? "📊 回总控台" : "📊 Dashboard", x: winW - 116, w: 106, action: #selector(showMainWindow))
-        dashBtn.autoresizingMask = [.minXMargin]
-        toolbar.addSubview(dashBtn)
+        let popBtn = makeBtn(isChineseSystem ? "↗ 独立窗" : "↗ Pop Out", x: winW - 96, w: 86, action: #selector(popOutWorkspaceWindow))
+        popBtn.autoresizingMask = [.minXMargin]
+        toolbar.addSubview(popBtn)
 
         let host = NSView(frame: NSRect(x: 0, y: 0, width: winW, height: winH - barH))
         host.autoresizingMask = [.width, .height]
@@ -703,20 +801,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         root.addSubview(host)
         root.addSubview(toolbar)
 
-        let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: winW, height: winH),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        win.center()
-        win.isReleasedWhenClosed = false
-        win.delegate = self
-        win.contentView = root
-
         workspaceRootView = root
         workspaceHostView = host
-        loginWindow = win
     }
 
     @objc func wsBack() { loginWebView?.goBack() }
@@ -763,13 +849,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         if let qrPop = quickReplyPopup {
             qrPop.removeAllItems()
-            qrPop.addItem(withTitle: isChineseSystem ? "⚡ 点此抽词复制防封快捷话术..." : "⚡ Copy Spintax Quick Reply...")
+            qrPop.addItem(withTitle: isChineseSystem ? "⚡ 点此自动填入防封话术..." : "⚡ Auto-Fill Spintax Reply...")
             let qrs = (st["quickReplies"] as? [[String: Any]]) ?? []
             for item in qrs {
-                let t = (item["title"] as? String) ?? "话术"
-                let body = (item["body"] as? String) ?? ""
-                qrPop.addItem(withTitle: "📋 \(t)")
-                qrPop.lastItem?.representedObject = body
+                let t = (item["title"] as? String) ?? (item["titleZh"] as? String) ?? "话术"
+                let body = (item["body"] as? String) ?? (item["textZh"] as? String) ?? ""
+                if !body.isEmpty {
+                    qrPop.addItem(withTitle: "⚡ \(t)")
+                    qrPop.lastItem?.representedObject = body
+                }
             }
         }
     }
@@ -777,7 +865,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func wsSwitchAccountChanged(_ sender: NSPopUpButton) {
         guard let wid = sender.selectedItem?.representedObject as? String,
               let meta = tabMeta[wid] else { return }
-        openLoginSheet(urlStr: meta.url, name: meta.name, watchId: wid, profileUuidStr: meta.profileUuid, isolated: true)
+        openLoginSheet(urlStr: meta.url, name: meta.name, watchId: wid, profileUuidStr: meta.profileUuid, isolated: true, dockInMain: isDockedInMainWindow)
+    }
+
+    func injectTextIntoWebView(_ wv: WKWebView, text: String, autoSubmit: Bool = false, completion: ((Bool) -> Void)? = nil) {
+        guard let strData = try? JSONSerialization.data(withJSONObject: [text]),
+              let arrLiteral = String(data: strData, encoding: .utf8) else {
+            completion?(false)
+            return
+        }
+        let submitFlag = autoSubmit ? "true" : "false"
+        let js = """
+        (function() {
+          const msg = (\(arrLiteral))[0];
+          const wantSubmit = \(submitFlag);
+          function isVisible(el) {
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            return r.width > 20 && r.height > 14;
+          }
+          let target = document.activeElement;
+          const isEditable = (el) => el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox','radio','button','submit','file'].includes(el.type)) || el.isContentEditable);
+          if (!isEditable(target) || !isVisible(target)) {
+            const cands = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"], input:not([type])')).filter(isVisible);
+            // Prefer bottom-most visible chat composer
+            cands.sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top);
+            target = cands[0] || null;
+          }
+          if (!target) return { injected: false };
+          target.focus();
+          if (target.isContentEditable) {
+            document.execCommand('insertText', false, msg);
+          } else {
+            const proto = target.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            const nextVal = (target.value ? target.value + ' ' : '') + msg;
+            if (setter) setter.call(target, nextVal); else target.value = nextVal;
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+            target.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          if (wantSubmit) {
+            setTimeout(() => {
+              const btns = Array.from(document.querySelectorAll('button, [role="button"], input[type="submit"]')).filter(isVisible);
+              const sendBtn = btns.find(b => {
+                const t = ((b.innerText || b.value || b.getAttribute('aria-label') || '') + '').trim();
+                return /^(发送|Send|Submit|Reply|回复)$/i.test(t) || /send-btn|im-send/i.test(b.className || '');
+              });
+              if (sendBtn && !sendBtn.disabled) {
+                sendBtn.click();
+              } else {
+                const evInit = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+                target.dispatchEvent(new KeyboardEvent('keydown', evInit));
+                target.dispatchEvent(new KeyboardEvent('keypress', evInit));
+                target.dispatchEvent(new KeyboardEvent('keyup', evInit));
+              }
+            }, 120);
+          }
+          return { injected: true };
+        })();
+        """
+        wv.evaluateJavaScript(js) { res, _ in
+            let ok = ((res as? [String: Any])?["injected"] as? Bool) ?? false
+            completion?(ok)
+        }
     }
 
     @objc func wsQuickReplyPicked(_ sender: NSPopUpButton) {
@@ -785,15 +935,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let spun = resolveSpintaxSwift(rawBody)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(spun, forType: .string)
-        toolbarStatusLabel?.stringValue = isChineseSystem
-            ? "✅ 已复制变体话术，直接按 Cmd+V 粘贴！"
-            : "✅ Spintax variation copied — press Cmd+V!"
+        if let wv = loginWebView {
+            injectTextIntoWebView(wv, text: spun, autoSubmit: false) { [weak self] injected in
+                DispatchQueue.main.async {
+                    if injected {
+                        self?.toolbarStatusLabel?.stringValue = isChineseSystem
+                            ? "✅ 已自动填入聊天输入框（确认无误点发送即可）！"
+                            : "✅ Auto-filled into chat input box!"
+                    } else {
+                        self?.toolbarStatusLabel?.stringValue = isChineseSystem
+                            ? "✅ 已复制变体话术，点一下聊天框按 Cmd+V 粘贴！"
+                            : "✅ Copied variation — click input & press Cmd+V!"
+                    }
+                }
+            }
+        }
     }
 
-    func openLoginSheet(urlStr: String, name: String, watchId: String = "", profileUuidStr: String = "", isolated: Bool = true) {
-        guard let u = URL(string: urlStr) else { return }
+    func getOrCreateLiveWebView(watchId: String, urlStr: String, name: String, profileUuidStr: String = "", isolated: Bool = true) -> WKWebView? {
+        guard let u = URL(string: urlStr) else { return nil }
+        if !watchId.isEmpty {
+            tabMeta[watchId] = (name: name, url: urlStr, profileUuid: profileUuidStr)
+        }
+        if !watchId.isEmpty, let existing = liveTabs[watchId] {
+            return existing
+        }
+        let cfg = WKWebViewConfiguration()
+        if isolated, !watchId.isEmpty, #available(macOS 14.0, *) {
+            let targetUUID = UUID(uuidString: profileUuidStr) ?? deterministicProfileUUID(watchId)
+            cfg.websiteDataStore = WKWebsiteDataStore(forIdentifier: targetUUID)
+        } else {
+            cfg.websiteDataStore = .default()
+        }
+        cfg.userContentController.add(self, name: "tabpulsePassive")
+        if let obsURL = Bundle.main.url(forResource: "passive-observer", withExtension: "js"),
+           let obsJS = try? String(contentsOf: obsURL, encoding: .utf8) {
+            let us = WKUserScript(source: obsJS, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            cfg.userContentController.addUserScript(us)
+        }
+        let created = WKWebView(frame: NSRect(x: 0, y: 0, width: 1180, height: 736), configuration: cfg)
+        created.uiDelegate = self
+        created.load(URLRequest(url: u))
+        if !watchId.isEmpty {
+            liveTabs[watchId] = created
+            webViewToWatchId[ObjectIdentifier(created)] = watchId
+            parkWebViewInBackground(created)
+        }
+        return created
+    }
 
-        // Park previously visible account WebView back into backgroundTabsContainer so it NEVER gets detached!
+    func openLoginSheet(urlStr: String, name: String, watchId: String = "", profileUuidStr: String = "", isolated: Bool = true, dockInMain: Bool = true) {
         if let prevId = activeLoginWatchId, prevId != watchId, let prevWV = liveTabs[prevId] {
             parkWebViewInBackground(prevWV)
         } else if activeLoginWatchId == nil, let prevTemp = loginWebView {
@@ -802,40 +993,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         activeLoginWatchId = watchId.isEmpty ? nil : watchId
         activeHomeURL = urlStr
-        if !watchId.isEmpty {
-            tabMeta[watchId] = (name: name, url: urlStr, profileUuid: profileUuidStr)
-        }
-
-        let wv: WKWebView
-        if !watchId.isEmpty, let existing = liveTabs[watchId] {
-            existing.removeFromSuperview()
-            wv = existing
-        } else {
-            let cfg = WKWebViewConfiguration()
-            if isolated, !watchId.isEmpty, #available(macOS 14.0, *) {
-                let targetUUID = UUID(uuidString: profileUuidStr) ?? deterministicProfileUUID(watchId)
-                cfg.websiteDataStore = WKWebsiteDataStore(forIdentifier: targetUUID)
-            } else {
-                cfg.websiteDataStore = .default()
-            }
-            cfg.userContentController.add(self, name: "tabpulsePassive")
-            if let obsURL = Bundle.main.url(forResource: "passive-observer", withExtension: "js"),
-               let obsJS = try? String(contentsOf: obsURL, encoding: .utf8) {
-                let us = WKUserScript(source: obsJS, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-                cfg.userContentController.addUserScript(us)
-            }
-            let created = WKWebView(frame: NSRect(x: 0, y: 0, width: 1160, height: 736), configuration: cfg)
-            created.uiDelegate = self
-            created.load(URLRequest(url: u))
-            if !watchId.isEmpty {
-                liveTabs[watchId] = created
-                webViewToWatchId[ObjectIdentifier(created)] = watchId
-            }
-            wv = created
-        }
+        guard let wv = getOrCreateLiveWebView(watchId: watchId, urlStr: urlStr, name: name, profileUuidStr: profileUuidStr, isolated: isolated) else { return }
+        wv.removeFromSuperview()
         loginWebView = wv
 
-        ensureWorkspaceWindow()
+        ensureWorkspaceViews()
         if let host = workspaceHostView {
             wv.frame = host.bounds
             wv.autoresizingMask = [.width, .height]
@@ -843,13 +1005,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
         refreshWorkspaceToolbarMenus()
         toolbarStatusLabel?.stringValue = isChineseSystem
-            ? "🛡️ 独立防串号隔离仓：\(name)"
-            : "🛡️ Isolated Sandbox: \(name)"
+            ? "🛡️ 独立防串号直聊：\(name)"
+            : "🛡️ Isolated Direct Chat: \(name)"
 
-        loginWindow?.title = isChineseSystem
-            ? "消息总管 · 多账号安全工作台 — \(name)（关掉窗口后后台照常安静听新消息）"
-            : "ReplyRadar · Multi-Account Workspace — \(name) (Keeps listening passively when closed)"
-        loginWindow?.makeKeyAndOrderFront(nil)
+        if dockInMain, let root = workspaceRootView {
+            loginWindow?.orderOut(nil)
+            isDockedInMainWindow = true
+            root.frame = mainWindow.contentLayoutRect
+            mainWindow.contentView = root
+            mainWindow.title = isChineseSystem
+                ? "消息总管 · 同窗直接收发 — \(name)"
+                : "ReplyRadar · Direct Chat — \(name)"
+            mainWindow.makeKeyAndOrderFront(nil)
+        } else if let root = workspaceRootView {
+            isDockedInMainWindow = false
+            if loginWindow == nil {
+                let win = NSWindow(
+                    contentRect: NSRect(x: 0, y: 0, width: 1160, height: 780),
+                    styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                    backing: .buffered,
+                    defer: false
+                )
+                win.center()
+                win.isReleasedWhenClosed = false
+                win.delegate = self
+                loginWindow = win
+            }
+            root.frame = NSRect(x: 0, y: 0, width: 1160, height: 780)
+            loginWindow?.contentView = root
+            loginWindow?.title = isChineseSystem
+                ? "消息总管 · 多账号安全工作台 — \(name)"
+                : "ReplyRadar · Multi-Account Workspace — \(name)"
+            loginWindow?.makeKeyAndOrderFront(nil)
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -860,6 +1048,144 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             parkWebViewInBackground(liveWV)
         }
     }
+
+    #if !MAS_BUILD
+    // MARK: - Mobile Remote Live Screen & Fixed-IP Reply Bridge
+    var isPollingBridge = false
+
+    func pollHubBridgeCommands() {
+        guard useExternalHub, !isPollingBridge,
+              let pollURL = URL(string: "http://127.0.0.1:17890/api/bridge/poll") else { return }
+        isPollingBridge = true
+        URLSession.shared.dataTask(with: pollURL) { [weak self] data, _, _ in
+            defer { self?.isPollingBridge = false }
+            guard let d = data,
+                  let obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any],
+                  let cmds = obj["commands"] as? [[String: Any]],
+                  !cmds.isEmpty else { return }
+            DispatchQueue.main.async {
+                for cmd in cmds {
+                    self?.executeBridgeCommand(cmd)
+                }
+            }
+        }.resume()
+    }
+
+    func executeBridgeCommand(_ cmd: [String: Any]) {
+        let taskId = (cmd["taskId"] as? String) ?? ""
+        let type = (cmd["type"] as? String) ?? "snapshot"
+        let watchId = (cmd["watchId"] as? String) ?? ""
+        let urlStr = (cmd["url"] as? String) ?? ""
+        let name = (cmd["name"] as? String) ?? watchId
+        let pUuid = (cmd["profileUuid"] as? String) ?? ""
+
+        let wasCold = liveTabs[watchId] == nil
+        guard let wv = getOrCreateLiveWebView(watchId: watchId, urlStr: urlStr, name: name, profileUuidStr: pUuid, isolated: true) else {
+            postBridgeResult(taskId: taskId, watchId: watchId, payload: ["error": "Invalid URL"])
+            return
+        }
+
+        if type == "reload" {
+            wv.reload()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                self.captureAndPostSnapshot(wv: wv, taskId: taskId, watchId: watchId, extra: [:])
+            }
+            return
+        }
+
+        if type == "scroll" {
+            let dy = (cmd["dy"] as? Double) ?? 300
+            let scrollJS = """
+            (function() {
+              const scrollers = Array.from(document.querySelectorAll('*')).filter(el => el.scrollHeight > el.clientHeight + 40 && el.clientHeight > 160);
+              scrollers.sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight));
+              if (scrollers[0]) scrollers[0].scrollBy(0, \(dy));
+              window.scrollBy(0, \(dy));
+            })();
+            """
+            wv.evaluateJavaScript(scrollJS) { _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    self.captureAndPostSnapshot(wv: wv, taskId: taskId, watchId: watchId, extra: [:])
+                }
+            }
+            return
+        }
+
+        if type == "click" {
+            let xr = (cmd["xRatio"] as? Double) ?? 0.5
+            let yr = (cmd["yRatio"] as? Double) ?? 0.5
+            let clickJS = """
+            (function() {
+              const x = Math.round(window.innerWidth * \(xr));
+              const y = Math.round(window.innerHeight * \(yr));
+              const el = document.elementFromPoint(x, y);
+              if (!el) return false;
+              el.focus && el.focus();
+              ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(t => {
+                el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+              });
+              return true;
+            })();
+            """
+            wv.evaluateJavaScript(clickJS) { _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.captureAndPostSnapshot(wv: wv, taskId: taskId, watchId: watchId, extra: [:])
+                }
+            }
+            return
+        }
+
+        if type == "reply" {
+            let text = (cmd["text"] as? String) ?? ""
+            let autoSub = (cmd["autoSubmit"] as? Bool) ?? true
+            injectTextIntoWebView(wv, text: text, autoSubmit: autoSub) { injected in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                    self.captureAndPostSnapshot(wv: wv, taskId: taskId, watchId: watchId, extra: ["injected": injected])
+                }
+            }
+            return
+        }
+
+        let delay = wasCold ? 2.2 : 0.15
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.captureAndPostSnapshot(wv: wv, taskId: taskId, watchId: watchId, extra: [:])
+        }
+    }
+
+    func captureAndPostSnapshot(wv: WKWebView, taskId: String, watchId: String, extra: [String: Any]) {
+        let cfg = WKSnapshotConfiguration()
+        cfg.snapshotWidth = 900
+        wv.takeSnapshot(with: cfg) { [weak self] image, _ in
+            var dataUrl = ""
+            if let img = image,
+               let tiff = img.tiffRepresentation,
+               let rep = NSBitmapImageRep(data: tiff),
+               let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.68]) {
+                dataUrl = "data:image/jpeg;base64," + jpg.base64EncodedString()
+            }
+            wv.evaluateJavaScript("(document.body && document.body.innerText || '').replace(/\\s+/g, ' ').slice(0, 320)") { txt, _ in
+                var payload = extra
+                payload["imageDataUrl"] = dataUrl
+                payload["pageTitle"] = wv.title ?? ""
+                payload["currentUrl"] = wv.url?.absoluteString ?? ""
+                payload["extractedText"] = (txt as? String) ?? ""
+                self?.postBridgeResult(taskId: taskId, watchId: watchId, payload: payload)
+            }
+        }
+    }
+
+    func postBridgeResult(taskId: String, watchId: String, payload: [String: Any]) {
+        guard let resURL = URL(string: "http://127.0.0.1:17890/api/bridge/result") else { return }
+        var body = payload
+        body["taskId"] = taskId
+        body["watchId"] = watchId
+        var req = URLRequest(url: resURL)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: req).resume()
+    }
+    #endif
 
     // MARK: - WKScriptMessageHandler Bridge
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -882,7 +1208,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let id = (body["id"] as? String) ?? ""
             let pUuid = (body["profileUuid"] as? String) ?? ""
             let iso = (body["isolatedProfile"] as? Bool) ?? true
-            openLoginSheet(urlStr: url, name: name, watchId: id, profileUuidStr: pUuid, isolated: iso)
+            let dock = (body["dockInMain"] as? Bool) ?? true
+            openLoginSheet(urlStr: url, name: name, watchId: id, profileUuidStr: pUuid, isolated: iso, dockInMain: dock)
             return
         }
         #if MAS_BUILD

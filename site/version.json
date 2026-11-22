@@ -1,12 +1,12 @@
 {
-  "latestVersion": "2.0.0",
-  "publishedAt": "2026-11-21",
+  "latestVersion": "3.0.0",
+  "publishedAt": "2026-11-22",
   "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg",
   "downloadUrlWinCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip",
   "downloadUrlWinEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
-  "notesCn": "v2.0.0 旗舰版：新增「防封快捷话术 + 随机同义变体 + 违禁引流词实时避雷针」、多账号工作台顶部一键切换栏与手机飞书/企微/Bark秒级推送！",
-  "notesZh": "v2.0.0 旗舰版：新增「防封快捷话术 + 随机同义变体 + 违禁引流词实时避雷针」、多账号工作台顶部一键切换栏与手机飞书/企微/Bark秒级推送！",
-  "notesEn": "v2.0.0 Flagship Release: Anti-ban Spintax quick replies, pre-send spam/off-platform trigger detector, instant multi-account workspace switcher toolbar, and real-time webhook push."
+  "notesCn": "v3.0.0 跨端遥控旗舰版：新增「📱 手机免翻墙随身遥控端（扫码即用，全程走家里电脑固定IP防封号）」、「🤖 Claude Code (CC) 任务跑完提醒与手机回指令」以及「💬 电脑端单窗口同屏直接收发回复 + 一键把话术自动填入聊天框」！",
+  "notesZh": "v3.0.0 跨端遥控旗舰版：新增「📱 手机免翻墙随身遥控端（扫码即用，全程走家里电脑固定IP防封号）」、「🤖 Claude Code (CC) 任务跑完提醒与手机回指令」以及「💬 电脑端单窗口同屏直接收发回复 + 一键把话术自动填入聊天框」！",
+  "notesEn": "v3.0.0 Cross-Device Flagship: Zero-install Mobile Pocket App (anchored to your desktop's fixed IP for zero ban risk), Claude Code (CC) task alerts & mobile reply console, and single-window direct chat with 1-click input auto-fill."
 }
