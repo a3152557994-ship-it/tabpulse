@@ -192,7 +192,7 @@ class CloudflaredManager {
       let settled = false;
       const proc = spawn(
         bin,
-        ["tunnel", "--no-autoupdate", "--url", `http://127.0.0.1:${localPort}`],
+        ["tunnel", "--protocol", "http2", "--no-autoupdate", "--url", `http://127.0.0.1:${localPort}`],
         { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PATH: buildAugmentedPath() } }
       );
       this.proc = proc;
