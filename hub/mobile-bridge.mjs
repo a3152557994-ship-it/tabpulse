@@ -179,12 +179,20 @@ class CloudflaredManager {
     this.status = "starting";
     this.lastError = "";
 
+    // Primary: Built-in system SSH HTTPS tunnel (works out-of-the-box on macOS & Windows 10/11 AND passes Clash Fake-IP TUN!)
+    const sshBin = findExecutable("ssh") || (process.platform === "win32" ? "C:\\Windows\\System32\\OpenSSH\\ssh.exe" : "/usr/bin/ssh");
+    if (sshBin && fs.existsSync(sshBin)) {
+      const sshRes = await this.startSshTunnel(sshBin, localPort);
+      if (sshRes.ok && sshRes.publicUrl) return sshRes;
+    }
+
+    // Fallback: cloudflared HTTP/2 quick tunnel
     let bin;
     try {
       bin = await this.ensureBinary();
     } catch (err) {
       this.status = "error";
-      this.lastError = `下载穿透组件失败: ${err.message}`;
+      this.lastError = `启动穿透失败: ${err.message}`;
       return { ok: false, status: this.status, error: this.lastError };
     }
 
@@ -215,30 +223,79 @@ class CloudflaredManager {
       proc.on("exit", (code) => {
         if (this.proc === proc) {
           this.proc = null;
-          if (!this.publicUrl) {
-            this.status = "error";
-            this.lastError = `cloudflared exited (${code})`;
-          } else {
-            this.status = "stopped";
-            this.publicUrl = "";
-          }
+          this.status = "stopped";
+          this.publicUrl = "";
         }
         if (!settled) {
           settled = true;
-          resolve({ ok: false, status: this.status, error: this.lastError || "tunnel exited" });
+          resolve({ ok: false, status: "error", error: `tunnel exited (${code})` });
         }
       });
 
       setTimeout(() => {
         if (!settled) {
           settled = true;
-          if (this.publicUrl) {
-            resolve({ ok: true, status: "running", publicUrl: this.publicUrl });
-          } else {
-            resolve({ ok: true, status: "starting", publicUrl: "" });
-          }
+          resolve({ ok: Boolean(this.publicUrl), status: this.status, publicUrl: this.publicUrl });
         }
       }, 6500);
+    });
+  }
+
+  startSshTunnel(sshBin, localPort) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const proc = spawn(
+        sshBin,
+        [
+          "-T",
+          "-o", "StrictHostKeyChecking=no",
+          "-o", "UserKnownHostsFile=" + (process.platform === "win32" ? "NUL" : "/dev/null"),
+          "-o", "ServerAliveInterval=30",
+          "-o", "ExitOnForwardFailure=yes",
+          "-R", `80:127.0.0.1:${localPort}`,
+          "nokey@localhost.run",
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] }
+      );
+      this.proc = proc;
+
+      const onChunk = (buf) => {
+        const text = buf.toString("utf-8");
+        const m = text.match(/https:\/\/[a-z0-9.-]+\.lhr\.life/i);
+        if (m && (!this.publicUrl || this.publicUrl !== m[0])) {
+          this.publicUrl = m[0];
+          this.status = "running";
+          if (!settled) {
+            settled = true;
+            resolve({ ok: true, status: "running", publicUrl: this.publicUrl });
+          }
+        }
+      };
+
+      proc.stdout.on("data", onChunk);
+      proc.stderr.on("data", onChunk);
+      proc.on("exit", () => {
+        if (this.proc === proc) {
+          this.proc = null;
+          this.publicUrl = "";
+          this.status = "stopped";
+        }
+        if (!settled) {
+          settled = true;
+          resolve({ ok: false, status: "stopped", publicUrl: "" });
+        }
+      });
+
+      setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          if (!this.publicUrl) {
+            try { proc.kill("SIGTERM"); } catch {}
+            this.proc = null;
+          }
+          resolve({ ok: Boolean(this.publicUrl), status: this.status, publicUrl: this.publicUrl });
+        }
+      }, 6000);
     });
   }
 
