@@ -79,7 +79,7 @@ internal sealed class MainDashboardForm : Form
         Directory.CreateDirectory(Path.Combine(_appRoot, "profiles"));
         _stateFile = Path.Combine(_appRoot, "state.json");
 
-        Text = _isZh ? "消息总管 — 多平台未读消息提醒与多开防串号盒子 (v3.0.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v3.0.0)";
+        Text = _isZh ? "消息总管 — 多平台未读消息提醒与多开防串号盒子 (v4.0.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v4.0.0)";
         Width = 1200;
         Height = 800;
         StartPosition = FormStartPosition.CenterScreen;
@@ -151,7 +151,7 @@ internal sealed class MainDashboardForm : Form
         }
         var init = new JsonObject
         {
-            ["version"] = "3.0.0",
+            ["version"] = "4.0.0",
             ["settings"] = new JsonObject { ["webhookUrl"] = "", ["lang"] = _isZh ? "zh" : "en" },
             ["watches"] = watches,
             ["quickReplies"] = new JsonArray()
@@ -366,7 +366,7 @@ internal sealed class MainDashboardForm : Form
             var lic = string.IsNullOrEmpty(licKey) ? new JsonObject { ["valid"] = false, ["plan"] = "free" } : LicenseCheck.Verify(licKey);
             return new JsonObject
             {
-                ["version"] = "3.0.0",
+                ["version"] = "4.0.0",
                 ["license"] = lic,
                 ["settings"] = st["settings"]?.DeepClone() ?? new JsonObject(),
                 ["stats"] = new JsonObject { ["total"] = watches.Count, ["unreadCount"] = unreadWatches, ["unreadMessagesTotal"] = unreadTotal, ["activeCount"] = watches.Count },

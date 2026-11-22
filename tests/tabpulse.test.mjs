@@ -127,7 +127,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
     assert.equal(health.ok, true);
-    assert.equal(health.version, "3.0.0");
+    assert.equal(health.version, "4.0.0");
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -276,7 +276,7 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
     });
     assert.equal(mobPage.status, 200);
     assert.ok((mobPage.headers.get("set-cookie") || "").includes("tp_mob_tok="));
-    assert.ok((await mobPage.text()).includes("消息总管 · 手机版"));
+    assert.ok((await mobPage.text()).includes("消息总管 · 全电脑监控台"));
 
     // 5. Create & run a local fixed-IP remote session and verify output + CC hook endpoint
     const sesRes = await (
@@ -307,6 +307,14 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
       })
     ).json();
     assert.equal(hookRes.ok, true);
+
+    // 6. Verify Native Desktop Software Monitor endpoint works behind mobile token
+    const deskRes = await (
+      await fetch(`${baseUrl}/api/desktop/state`, {
+        headers: { "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+      })
+    ).json();
+    assert.ok(Array.isArray(deskRes.windows));
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

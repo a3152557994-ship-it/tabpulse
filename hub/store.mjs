@@ -45,7 +45,7 @@ const DEFAULT_QUICK_REPLIES = [
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "3.0.0",
+    version: "4.0.0",
     extensionHeartbeatAt: null,
     license: null,
     mobileToken: crypto.randomBytes(24).toString("base64url"),
@@ -492,7 +492,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "3.0.0",
+    version: "4.0.0",
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),
     settings: state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" },

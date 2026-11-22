@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/mobile-icon.svg" />
-  <title>消息总管 · 手机随身遥控台</title>
+  <title>消息总管 · 手机监控全电脑软件与网页台</title>
   <style>
     :root {
       --bg: #0b1120;
@@ -44,22 +44,21 @@
       display: flex; justify-content: space-between; align-items: center;
     }
     .brand { display: flex; align-items: center; gap: 8px; }
-    .brand-title { font-size: 16px; font-weight: 800; }
+    .brand-title { font-size: 15.5px; font-weight: 800; }
     .ip-shield {
-      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      font-size: 10.5px; padding: 2px 7px; border-radius: 999px;
       background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35);
       font-weight: 700;
     }
     .btn {
       border: 1px solid var(--border); background: var(--card-alt); color: var(--text);
-      padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 600;
-      display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer;
+      padding: 8px 11px; border-radius: 10px; font-size: 13px; font-weight: 600;
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer;
     }
     .btn:active { transform: scale(0.97); }
     .btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
     .btn.green { background: #059669; border-color: #059669; color: #fff; }
-    .btn.danger { background: rgba(239, 68, 68, 0.18); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
-    .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+    .btn.sm { padding: 5px 9px; font-size: 12px; border-radius: 8px; }
 
     .page { padding: 12px 14px; display: none; }
     .page.active { display: block; }
@@ -68,15 +67,15 @@
       background: var(--card); border: 1px solid var(--border); border-radius: 14px;
       padding: 13px; margin-bottom: 11px;
     }
-    .card.unread { border-color: #ef4444; box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3); }
+    .card.unread { border-color: #ef4444; box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35); }
     .row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .badge {
       font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
-      background: #1e293b; color: #cbd5e1;
+      background: #1e293b; color: #cbd5e1; white-space: nowrap;
     }
     .badge.red { background: #ef4444; color: #fff; }
     .badge.green { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-    .badge.amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .badge.blue { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
 
     .chips { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
     .chips::-webkit-scrollbar { display: none; }
@@ -85,10 +84,7 @@
       background: var(--card-alt); border: 1px solid var(--border); color: #e2e8f0; cursor: pointer;
     }
 
-    /* CC Chat Stream */
-    .chat-stream {
-      display: flex; flex-direction: column; gap: 10px; margin: 10px 0 74px;
-    }
+    .chat-stream { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 74px; }
     .bubble {
       padding: 11px 13px; border-radius: 13px; font-size: 13.5px; line-height: 1.55;
       word-break: break-word; white-space: pre-wrap;
@@ -107,7 +103,7 @@
     .composer {
       position: fixed; left: 0; right: 0; bottom: calc(58px + var(--safe-b));
       background: rgba(15, 23, 42, 0.96); border-top: 1px solid var(--border);
-      padding: 8px 12px; display: flex; gap: 8px; align-items: center; z-index: 35;
+      padding: 8px 12px; display: none; gap: 8px; align-items: center; z-index: 35;
     }
     input, select, textarea {
       background: #0f172a; color: #fff; border: 1px solid var(--border);
@@ -115,7 +111,7 @@
     }
     input:focus, textarea:focus { border-color: var(--primary); }
 
-    /* Remote Tab Live Viewer Overlay */
+    /* Unified Remote Live Screen Overlay (Works for BOTH Desktop Software & Web Platforms!) */
     .viewer-overlay {
       position: fixed; inset: 0; background: var(--bg); z-index: 60;
       display: none; flex-direction: column;
@@ -141,17 +137,16 @@
       border-top: 1px solid var(--border); background: #0f172a; padding: 8px 10px;
     }
 
-    /* Bottom Navigation */
     .tabbar {
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 45;
       height: calc(58px + var(--safe-b)); padding-bottom: var(--safe-b);
       background: rgba(15, 23, 42, 0.96); backdrop-filter: blur(12px);
       border-top: 1px solid var(--border);
-      display: grid; grid-template-columns: repeat(3, 1fr);
+      display: grid; grid-template-columns: repeat(4, 1fr);
     }
     .tab-item {
-      border: none; background: none; color: var(--muted); font-size: 11.5px; font-weight: 700;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+      border: none; background: none; color: var(--muted); font-size: 11px; font-weight: 700;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     }
     .tab-item.active { color: #60a5fa; }
     .tab-icon { font-size: 18px; position: relative; }
@@ -173,8 +168,8 @@
     <div class="brand">
       <span style="font-size:20px;">🔔</span>
       <div>
-        <div class="brand-title" id="m-title">消息总管 · 手机版</div>
-        <span class="ip-shield" id="m-shield">🛡️ 全程走电脑固定IP · 切5G/WiFi不封号</span>
+        <div class="brand-title" id="m-title">消息总管 · 全电脑监控台</div>
+        <span class="ip-shield" id="m-shield">🛡️ 电脑软件+网页全监控 · 走电脑固定IP</span>
       </div>
     </div>
     <div style="display:flex;gap:6px;">
@@ -183,16 +178,46 @@
     </div>
   </div>
 
-  <!-- PAGE 1: CLAUDE CODE & LOCAL AI REMOTE -->
-  <div class="page active" id="page-cc">
+  <!-- PAGE 1: NATIVE DESKTOP SOFTWARE MONITOR & REMOTE CONTROL -->
+  <div class="page active" id="page-desktop">
+    <div class="card" style="background:linear-gradient(135deg,#064e3b,#162033);border-color:#10b981;">
+      <div style="font-size:13.5px;font-weight:800;margin-bottom:4px;">🖥️ 电脑桌面软件实时监控 &amp; 手机代打回复</div>
+      <div style="font-size:12px;color:#d1fae5;line-height:1.45;">
+        自动监控电脑上所有软件（微信、Antigravity、Gemini、千牛、飞书、Telegram 等）的<strong>未读红点与右上角弹窗通知</strong>；点任意窗口即可在手机上看画面、点选会话并直接打字发送！
+      </div>
+      <div style="display:flex;gap:7px;margin-top:10px;">
+        <select id="launch-app-sel" style="flex:1;padding:7px 9px;font-size:12.5px;"></select>
+        <button class="btn sm green" onclick="remoteLaunchDesktopApp()">🚀 远程打开软件</button>
+      </div>
+    </div>
+
+    <div id="desktop-alerts-box"></div>
+    <div id="desktop-badges-box"></div>
+    <div style="font-size:12.5px;font-weight:800;color:#93c5fd;margin:10px 2px 8px;">🪟 电脑当前打开的软件窗口（点卡片实时看画面并回消息）：</div>
+    <div id="desktop-windows-list"></div>
+  </div>
+
+  <!-- PAGE 2: ISOLATED WEB INBOXES -->
+  <div class="page" id="page-inbox">
+    <div class="card" style="background:linear-gradient(135deg,#172554,#162033);border-color:#2563eb;">
+      <div style="font-size:13.5px;font-weight:700;margin-bottom:4px;">💬 网页多开防串号隔离仓（手机免装 App 代回）</div>
+      <div style="font-size:12px;color:#cbd5e1;">
+        点开任意平台即可实时查看电脑隔离仓画面、远程点选对话、并在底部打字由电脑固定 IP 代填发送！
+      </div>
+    </div>
+    <div id="mobile-watch-list"></div>
+  </div>
+
+  <!-- PAGE 3: CLAUDE CODE & LOCAL AI REMOTE -->
+  <div class="page" id="page-cc">
     <div id="hook-alerts-box"></div>
 
     <div class="card">
       <div class="row-between" style="margin-bottom:8px;">
-        <strong style="font-size:14px;" id="cc-head">🤖 遥控电脑上的 Claude Code / AI</strong>
-        <button class="btn sm primary" onclick="toggleNewSessionBox()" id="btn-new-cc">+ 新建任务</button>
+        <strong style="font-size:14px;">🤖 遥控电脑上的 Claude Code / AI</strong>
+        <button class="btn sm primary" onclick="toggleNewSessionBox()">+ 新建任务</button>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;" id="cc-sub">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
         任务在家里电脑稳定网络上运行，手机随便切流量/进电梯，Claude 绝不触发异地封号。
       </div>
 
@@ -219,22 +244,11 @@
 
     <div class="composer" id="cc-composer">
       <input id="cc-input" style="flex:1;" placeholder="在手机输入指令发给电脑上的 CC 执行..." onkeydown="if(event.key==='Enter')sendCcInstruction()" />
-      <button class="btn primary" onclick="sendCcInstruction()" id="btn-cc-send">发送</button>
+      <button class="btn primary" onclick="sendCcInstruction()">发送</button>
     </div>
   </div>
 
-  <!-- PAGE 2: REMOTE INBOXES & DIRECT FIXED-IP REPLY -->
-  <div class="page" id="page-inbox">
-    <div class="card" style="background:linear-gradient(135deg,#172554,#162033);border-color:#2563eb;">
-      <div style="font-size:13.5px;font-weight:700;margin-bottom:4px;" id="ib-banner-t">📱 手机免装 App · 远程看电脑各平台消息并直接回复</div>
-      <div style="font-size:12px;color:#cbd5e1;" id="ib-banner-d">
-        点开任意平台即可实时查看电脑隔离仓画面、远程点选对话、并在底部打字由电脑固定 IP 代填发送！
-      </div>
-    </div>
-    <div id="mobile-watch-list"></div>
-  </div>
-
-  <!-- PAGE 3: QUICK REPLIES & 24H SCANNER -->
+  <!-- PAGE 4: QUICK REPLIES & 24H SCANNER -->
   <div class="page" id="page-tools">
     <div class="card">
       <strong style="font-size:14px;display:block;margin-bottom:6px;">🎲 防封随机变体快捷话术（点一下自动换词复制）</strong>
@@ -251,67 +265,66 @@
     </div>
   </div>
 
-  <!-- LIVE REMOTE WORKSPACE VIEWER & DIRECT REPLY SHEET -->
+  <!-- UNIFIED LIVE REMOTE VIEWER (SUPPORTS BOTH NATIVE DESKTOP SOFTWARE & WEB INBOXES) -->
   <div class="viewer-overlay" id="remote-viewer">
     <div class="viewer-head">
       <button class="btn sm" onclick="closeRemoteViewer()">← 返回</button>
       <div style="flex:1;min-width:0;text-align:center;">
-        <div style="font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="rv-title">平台工作台</div>
-        <div style="font-size:11px;color:#34d399;">🟢 画面与发送均由家里电脑固定 IP 完成</div>
+        <div style="font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="rv-title">远程窗口</div>
+        <div style="font-size:11px;color:#34d399;" id="rv-subtitle">🟢 电脑实时画面 · 点任意位置即可远程操作</div>
       </div>
       <button class="btn sm" onclick="refreshRemoteSnapshot()">↻ 刷新</button>
     </div>
 
     <div class="viewer-body">
-      <div class="chips" style="margin-bottom:8px;">
-        <span class="chip" onclick="remoteAction('scroll', { dy: -360 })">⬆ 向上滚</span>
-        <span class="chip" onclick="remoteAction('scroll', { dy: 360 })">⬇ 向下滚</span>
-        <span class="chip" onclick="remoteAction('reload', {})">🔄 刷新电脑网页</span>
-        <span class="chip" onclick="markRemoteHandled()">✓ 标为已读</span>
-      </div>
+      <div class="chips" style="margin-bottom:8px;" id="rv-top-actions"></div>
 
-      <div class="screen-wrap" id="rv-screen-wrap" onclick="handleScreenTap(event)">
+      <div class="screen-wrap" onclick="handleScreenTap(event)">
         <div id="rv-loading" style="padding:36px 16px;text-align:center;color:var(--muted);font-size:13px;">
-          ⏳ 正在从电脑隔离仓抓取实时画面...
+          ⏳ 正在抓取电脑实时窗口画面...
         </div>
-        <img id="rv-img" style="display:none;" alt="Remote Workspace" />
+        <img id="rv-img" style="display:none;" alt="Remote Screen" />
         <div class="tap-dot" id="rv-tap-dot"></div>
       </div>
       <div style="font-size:11.5px;color:var(--muted);margin-top:6px;text-align:center;">
-        💡 直接手指轻点上方画面任意位置（如左侧买家头像或输入框），即可远程点击电脑网页对应位置！
+        👆 手指轻点上方画面里的联系人或输入框，电脑就会自动点击对应位置！
       </div>
       <div id="rv-text-box" style="margin-top:8px;font-size:12px;color:#cbd5e1;background:#0f172a;padding:8px 10px;border-radius:8px;border:1px solid var(--border);display:none;"></div>
     </div>
 
     <div class="viewer-foot">
       <div class="chips" id="rv-qr-chips" style="margin-bottom:7px;"></div>
-      <div style="display:flex;gap:7px;align-items:center;">
-        <input id="rv-reply-in" style="flex:1;" placeholder="输入回复内容（由电脑直接填入网页并发送）..." onkeydown="if(event.key==='Enter')sendRemoteReply()" />
-        <button class="btn green" onclick="sendRemoteReply()">🚀 代填发送</button>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input id="rv-reply-in" style="flex:1;" placeholder="输入要发给该电脑软件/网页的文字..." onkeydown="if(event.key==='Enter')sendRemoteReply('enter')" />
+        <button class="btn green" onclick="sendRemoteReply('enter')">⏎ 发送</button>
+        <button class="btn primary" id="btn-cmd-enter" onclick="sendRemoteReply('cmd_enter')" title="适合需 Cmd+Enter 发送的软件">⌘⏎</button>
       </div>
     </div>
   </div>
 
-  <!-- BOTTOM TAB BAR -->
+  <!-- BOTTOM 4-TAB BAR -->
   <nav class="tabbar">
-    <button class="tab-item active" id="nav-cc" onclick="switchMobileTab('cc')">
-      <span class="tab-icon">🤖</span>
-      <span id="lbl-nav-cc">CC/AI遥控</span>
+    <button class="tab-item active" id="nav-desktop" onclick="switchMobileTab('desktop')">
+      <span class="tab-icon">🖥️<span class="dot-count" id="desk-dot" style="display:none;">0</span></span>
+      <span id="lbl-nav-desktop">电脑软件</span>
     </button>
     <button class="tab-item" id="nav-inbox" onclick="switchMobileTab('inbox')">
       <span class="tab-icon">💬<span class="dot-count" id="unread-dot" style="display:none;">0</span></span>
-      <span id="lbl-nav-inbox">平台直回</span>
+      <span id="lbl-nav-inbox">网页平台</span>
+    </button>
+    <button class="tab-item" id="nav-cc" onclick="switchMobileTab('cc')">
+      <span class="tab-icon">🤖</span>
+      <span id="lbl-nav-cc">CC/AI遥控</span>
     </button>
     <button class="tab-item" id="nav-tools" onclick="switchMobileTab('tools')">
       <span class="tab-icon">🎯</span>
-      <span id="lbl-nav-tools">话术与找单</span>
+      <span id="lbl-nav-tools">话术找单</span>
     </button>
   </nav>
 
   <div class="toast" id="m-toast"></div>
 
   <script>
-    // Strip ?t= token from address bar after cookie is set so screenshots stay safe
     const initParams = new URLSearchParams(location.search);
     const urlTok = initParams.get("t") || "";
     if (urlTok) {
@@ -321,9 +334,11 @@
 
     let mLang = (navigator.language || "zh").toLowerCase().startsWith("zh") ? "zh" : "en";
     let hubState = { watches: [], quickReplies: [], stats: {} };
+    let deskState = { windows: [], badges: [], recentAlerts: [], installedApps: [] };
     let ccState = { agents: [], sessions: [], hookEvents: [] };
     let activeCcId = "";
-    let activeRemoteWatchId = "";
+    let viewerMode = ""; // "desktop" | "web"
+    let activeTargetId = "";
 
     function toast(msg) {
       const el = document.getElementById("m-toast");
@@ -358,7 +373,7 @@
     }
 
     function switchMobileTab(tab) {
-      for (const k of ["cc", "inbox", "tools"]) {
+      for (const k of ["desktop", "inbox", "cc", "tools"]) {
         document.getElementById("page-" + k).classList.toggle("active", k === tab);
         document.getElementById("nav-" + k).classList.toggle("active", k === tab);
       }
@@ -369,21 +384,23 @@
       mLang = mLang === "zh" ? "en" : "zh";
       const en = mLang === "en";
       document.getElementById("btn-mlang").textContent = en ? "中文" : "EN";
-      document.getElementById("m-title").textContent = en ? "ReplyRadar Mobile" : "消息总管 · 手机版";
-      document.getElementById("m-shield").textContent = en ? "🛡️ Fixed Desktop IP · 0 Ban Risk" : "🛡️ 全程走电脑固定IP · 切5G/WiFi不封号";
+      document.getElementById("m-title").textContent = en ? "ReplyRadar Remote" : "消息总管 · 全电脑监控台";
+      document.getElementById("lbl-nav-desktop").textContent = en ? "Apps" : "电脑软件";
+      document.getElementById("lbl-nav-inbox").textContent = en ? "Web" : "网页平台";
       document.getElementById("lbl-nav-cc").textContent = en ? "CC / AI" : "CC/AI遥控";
-      document.getElementById("lbl-nav-inbox").textContent = en ? "Inboxes" : "平台直回";
-      document.getElementById("lbl-nav-tools").textContent = en ? "Replies" : "话术与找单";
+      document.getElementById("lbl-nav-tools").textContent = en ? "Tools" : "话术找单";
       renderAllMobile();
     }
 
     async function refreshAll() {
       try {
-        const [st, cc] = await Promise.all([
+        const [st, dk, cc] = await Promise.all([
           mApi("GET", "/api/state"),
+          mApi("GET", "/api/desktop/state"),
           mApi("GET", "/api/cc/state"),
         ]);
         if (st && Array.isArray(st.watches)) hubState = st;
+        if (dk && dk.ok !== undefined) deskState = dk;
         if (cc && cc.ok) {
           ccState = cc;
           if (!activeCcId && cc.sessions?.length) activeCcId = cc.sessions[0].id;
@@ -395,14 +412,101 @@
     }
 
     function renderAllMobile() {
-      const totalUnread = hubState.stats?.unreadMessagesTotal || 0;
-      const dot = document.getElementById("unread-dot");
-      dot.style.display = totalUnread > 0 ? "inline-block" : "none";
-      dot.textContent = totalUnread;
+      const totalWebUnread = hubState.stats?.unreadMessagesTotal || 0;
+      const uDot = document.getElementById("unread-dot");
+      uDot.style.display = totalWebUnread > 0 ? "inline-block" : "none";
+      uDot.textContent = totalWebUnread;
 
-      renderCcSection();
+      const totalDeskBadges = (deskState.badges || []).reduce((acc, b) => acc + (parseInt(b.badge, 10) || 1), 0);
+      const dDot = document.getElementById("desk-dot");
+      dDot.style.display = totalDeskBadges > 0 ? "inline-block" : "none";
+      dDot.textContent = totalDeskBadges;
+
+      renderDesktopPage();
       renderMobileInboxes();
+      renderCcSection();
       renderMobileQr();
+    }
+
+    function renderDesktopPage() {
+      // 1. Installed /Applications launcher dropdown
+      const appSel = document.getElementById("launch-app-sel");
+      if (appSel && !appSel.options.length && (deskState.installedApps || []).length) {
+        appSel.innerHTML = deskState.installedApps.map((a) =>
+          `<option value="${esc(a.path)}">${a.running ? "🟢 " : "⚪ "}${esc(a.name)}</option>`
+        ).join("");
+      }
+
+      // 2. Active Dock red badges
+      const badges = deskState.badges || [];
+      const badgeMap = {};
+      for (const b of badges) {
+        if (b.bundleId) badgeMap[b.bundleId] = b.badge;
+        badgeMap[b.name] = b.badge;
+      }
+      const badgeBox = document.getElementById("desktop-badges-box");
+      if (badges.length) {
+        badgeBox.innerHTML = `
+          <div class="card unread">
+            <div style="font-size:13px;font-weight:800;margin-bottom:6px;">🔴 电脑程序坞实时未读红点 (${badges.length})</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ${badges.map((b) => `<span class="badge red">${esc(b.name)}: ${esc(b.badge)}</span>`).join("")}
+            </div>
+          </div>`;
+      } else {
+        badgeBox.innerHTML = "";
+      }
+
+      // 3. Recent Notification Center banners & badge alerts
+      const alerts = deskState.recentAlerts || [];
+      const alertBox = document.getElementById("desktop-alerts-box");
+      if (alerts.length) {
+        alertBox.innerHTML = `
+          <div class="card" style="border-color:#3b82f6;">
+            <div style="font-size:12.5px;font-weight:800;color:#93c5fd;margin-bottom:6px;">🔔 最新截获的电脑弹窗与消息提醒</div>
+            ${alerts.slice(0, 4).map((a) => `
+              <div style="font-size:12px;padding:5px 0;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:8px;">
+                <span><strong>${esc(a.appName)}</strong>：${esc(a.text)}</span>
+                <span style="color:var(--muted);white-space:nowrap;">${new Date(a.at).toLocaleTimeString()}</span>
+              </div>
+            `).join("")}
+          </div>`;
+      } else {
+        alertBox.innerHTML = "";
+      }
+
+      // 4. Running desktop windows
+      const wins = deskState.windows || [];
+      const winEl = document.getElementById("desktop-windows-list");
+      if (!wins.length) {
+        winEl.innerHTML = `<div class="card" style="color:var(--muted);text-align:center;font-size:13px;">当前没有打开的前台电脑软件窗口，可用上方下拉框远程启动任意软件</div>`;
+        return;
+      }
+      winEl.innerHTML = wins.map((w) => {
+        const bg = badgeMap[w.bundleId] || badgeMap[w.appName] || "";
+        return `
+          <div class="card ${bg ? "unread" : ""}" onclick="openDesktopWindowViewer(${Number(w.windowId)}, '${esc(w.appName)}', '${esc(w.title || "")}')">
+            <div class="row-between">
+              <strong style="font-size:15px;">🖥️ ${esc(w.appName)}</strong>
+              ${bg ? `<span class="badge red">🔴 ${esc(bg)} 未读</span>` : `<span class="badge blue">${w.bounds?.w || 0}×${w.bounds?.h || 0}</span>`}
+            </div>
+            <div style="font-size:12.5px;color:#cbd5e1;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${esc(w.title || "主窗口（点击查看实时画面并远程操控回复）")}
+            </div>
+            <div style="font-size:11.5px;color:#34d399;margin-top:8px;">
+              👉 点此实时投射该电脑软件窗口、手指点选会话并直接打字发送 →
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function remoteLaunchDesktopApp() {
+      const p = document.getElementById("launch-app-sel")?.value;
+      if (!p) return;
+      toast("🚀 正在电脑上启动该软件...");
+      await mApi("POST", "/api/desktop/launch", { path: p });
+      setTimeout(refreshAll, 900);
     }
 
     function renderCcSection() {
@@ -443,8 +547,7 @@
 
       const cur = sessions.find((s) => s.id === activeCcId) || sessions[0];
       activeCcId = cur.id;
-      const msgEl = document.getElementById("cc-messages");
-      msgEl.innerHTML = (cur.messages || []).map((m) => `
+      document.getElementById("cc-messages").innerHTML = (cur.messages || []).map((m) => `
         <div class="bubble ${m.role === "user" ? "user" : "assistant"}">${esc(m.text)}</div>
       `).join("");
     }
@@ -454,10 +557,7 @@
       b.style.display = b.style.display === "none" ? "block" : "none";
     }
 
-    function selectCcSession(id) {
-      activeCcId = id;
-      renderCcSection();
-    }
+    function selectCcSession(id) { activeCcId = id; renderCcSection(); }
 
     async function createCcSession() {
       const agent = document.getElementById("cc-agent-sel").value;
@@ -484,13 +584,8 @@
         activeCcId = sid;
       }
       const res = await mApi("POST", `/api/cc/sessions/${encodeURIComponent(sid)}/send`, { prompt });
-      if (res && res.error) {
-        toast(res.error);
-      } else {
-        toast("🚀 已发往电脑执行！");
-      }
+      toast(res?.error || "🚀 已发往电脑执行！");
       await refreshAll();
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     }
 
     function quickCcPrompt(text) {
@@ -509,15 +604,15 @@
       const el = document.getElementById("mobile-watch-list");
       const watches = hubState.watches || [];
       if (!watches.length) {
-        el.innerHTML = `<div class="card" style="color:var(--muted);text-align:center;">暂无看护平台，请在电脑端添加</div>`;
+        el.innerHTML = `<div class="card" style="color:var(--muted);text-align:center;">暂无看护网页平台，请在电脑端添加</div>`;
         return;
       }
       el.innerHTML = watches.map((w) => {
         const unread = Number(w.unreadCount) || 0;
         return `
-          <div class="card ${unread > 0 ? "unread" : ""}" onclick="openRemoteViewer('${esc(w.id)}', '${esc(w.name)}')">
+          <div class="card ${unread > 0 ? "unread" : ""}" onclick="openWebInboxViewer('${esc(w.id)}', '${esc(w.name)}')">
             <div class="row-between">
-              <strong style="font-size:15px;">${esc(w.name)}</strong>
+              <strong style="font-size:15px;">🌐 ${esc(w.name)}</strong>
               ${unread > 0
                 ? `<span class="badge red">🔴 ${unread} 条新消息</span>`
                 : `<span class="badge green">🟢 常驻看护</span>`}
@@ -525,8 +620,8 @@
             <div style="font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
               ${esc(w.snippet || w.url)}
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;">
-              <span style="font-size:11.5px;color:#93c5fd;">🔒 独立防串号仓 · 点此远程看画面并直接回消息 →</span>
+            <div style="font-size:11.5px;color:#93c5fd;margin-top:8px;">
+              🔒 独立防串号网页仓 · 点此看画面并直接代发回复 →
             </div>
           </div>
         `;
@@ -544,8 +639,7 @@
 
     function renderMobileQr() {
       const list = getNormalizedQrList();
-      const el = document.getElementById("mobile-qr-list");
-      el.innerHTML = list.map((q, idx) => `
+      document.getElementById("mobile-qr-list").innerHTML = list.map((q, idx) => `
         <div style="background:#0f172a;border:1px solid var(--border);border-radius:10px;padding:10px;">
           <div class="row-between" style="margin-bottom:5px;">
             <strong style="font-size:13px;">${esc(q.title)}</strong>
@@ -566,8 +660,7 @@
     async function copyMobileQr(idx) {
       const item = getNormalizedQrList()[idx];
       if (!item) return;
-      const spun = spinText(item.body);
-      await navigator.clipboard.writeText(spun);
+      await navigator.clipboard.writeText(spinText(item.body));
       toast("✓ 已复制随机变体话术");
     }
 
@@ -575,22 +668,51 @@
       const item = getNormalizedQrList()[idx];
       if (!item) return;
       document.getElementById("rv-reply-in").value = spinText(item.body);
-      toast("已填入随机变体，点右侧即可代填发送");
+      toast("已填入随机变体，点右侧即可发送");
     }
 
-    async function openRemoteViewer(watchId, name) {
-      activeRemoteWatchId = watchId;
-      document.getElementById("rv-title").textContent = name;
+    // MARK: - Unified Viewer for Native Desktop Software & Isolated Web Inboxes
+    async function openDesktopWindowViewer(windowId, appName, winTitle) {
+      viewerMode = "desktop";
+      activeTargetId = String(windowId);
+      document.getElementById("rv-title").textContent = `🖥️ ${appName}${winTitle ? " · " + winTitle : ""}`;
+      document.getElementById("rv-subtitle").textContent = "🟢 电脑原生软件窗口实时投射 · 支持点选与代打回复";
+      document.getElementById("btn-cmd-enter").style.display = "inline-flex";
+      document.getElementById("rv-top-actions").innerHTML = `
+        <span class="chip" onclick="remoteAction('scroll', { dy: -5 })">⬆ 向上滚</span>
+        <span class="chip" onclick="remoteAction('scroll', { dy: 5 })">⬇ 向下滚</span>
+        <span class="chip" onclick="sendRemoteKeyOnly('enter')">⏎ 单独按回车</span>
+      `;
+      prepareViewerAndLoad();
+    }
+
+    async function openWebInboxViewer(watchId, name) {
+      viewerMode = "web";
+      activeTargetId = watchId;
+      document.getElementById("rv-title").textContent = `🌐 ${name}`;
+      document.getElementById("rv-subtitle").textContent = "🟢 电脑独立网页仓 · 固定 IP 零封号代填回复";
+      document.getElementById("btn-cmd-enter").style.display = "none";
+      document.getElementById("rv-top-actions").innerHTML = `
+        <span class="chip" onclick="remoteAction('scroll', { dy: -360 })">⬆ 向上滚</span>
+        <span class="chip" onclick="remoteAction('scroll', { dy: 360 })">⬇ 向下滚</span>
+        <span class="chip" onclick="remoteAction('reload', {})">🔄 刷新网页</span>
+        <span class="chip" onclick="markRemoteHandled()">✓ 标为已读</span>
+      `;
+      prepareViewerAndLoad();
+    }
+
+    async function prepareViewerAndLoad() {
       document.getElementById("rv-img").style.display = "none";
       document.getElementById("rv-loading").style.display = "block";
-      document.getElementById("rv-loading").textContent = "⏳ 正在唤醒电脑隔离仓并抓取实时画面...";
+      document.getElementById("rv-loading").textContent = "⏳ 正在抓取电脑实时画面...";
       document.getElementById("remote-viewer").classList.add("open");
       renderMobileQr();
       await refreshRemoteSnapshot();
     }
 
     function closeRemoteViewer() {
-      activeRemoteWatchId = "";
+      activeTargetId = "";
+      viewerMode = "";
       document.getElementById("remote-viewer").classList.remove("open");
     }
 
@@ -605,7 +727,7 @@
         loading.style.display = "none";
       } else {
         loading.style.display = "block";
-        loading.textContent = res?.error || "请确保电脑端《消息总管》软件已打开（打开后即可实时投射画面与代发消息）";
+        loading.textContent = res?.error || "抓取画面失败，请确认电脑端《消息总管》正在运行";
       }
       if (snap && snap.extractedText) {
         txtBox.style.display = "block";
@@ -616,17 +738,20 @@
     }
 
     async function refreshRemoteSnapshot() {
-      if (!activeRemoteWatchId) return;
-      const res = await mApi("GET", `/api/remote/tab/${encodeURIComponent(activeRemoteWatchId)}/snapshot`);
+      if (!activeTargetId) return;
+      const url = viewerMode === "desktop"
+        ? `/api/desktop/window/${encodeURIComponent(activeTargetId)}/capture`
+        : `/api/remote/tab/${encodeURIComponent(activeTargetId)}/snapshot`;
+      const res = await mApi("GET", url);
       applySnapshotPayload(res);
     }
 
     async function handleScreenTap(ev) {
       const img = document.getElementById("rv-img");
-      if (!activeRemoteWatchId || img.style.display === "none") return;
+      if (!activeTargetId || img.style.display === "none") return;
       const rect = img.getBoundingClientRect();
-      const xRatio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-      const yRatio = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+      const xRatio = Math.max(0.01, Math.min(0.99, (ev.clientX - rect.left) / rect.width));
+      const yRatio = Math.max(0.01, Math.min(0.99, (ev.clientY - rect.top) / rect.height));
 
       const dot = document.getElementById("rv-tap-dot");
       dot.style.left = `${xRatio * 100}%`;
@@ -634,47 +759,67 @@
       dot.style.display = "block";
       setTimeout(() => { dot.style.display = "none"; }, 700);
 
-      toast("👆 正在远程点击电脑画面...");
-      const res = await mApi("POST", `/api/remote/tab/${encodeURIComponent(activeRemoteWatchId)}/action`, {
-        type: "click",
-        xRatio,
-        yRatio,
-      });
+      toast("👆 正在远程点击电脑窗口...");
+      const url = viewerMode === "desktop"
+        ? `/api/desktop/window/${encodeURIComponent(activeTargetId)}/action`
+        : `/api/remote/tab/${encodeURIComponent(activeTargetId)}/action`;
+      const res = await mApi("POST", url, { type: "click", xRatio, yRatio });
       applySnapshotPayload(res);
     }
 
     async function remoteAction(type, extra = {}) {
-      if (!activeRemoteWatchId) return;
+      if (!activeTargetId) return;
       toast("⏳ 电脑正在执行操作...");
-      const res = await mApi("POST", `/api/remote/tab/${encodeURIComponent(activeRemoteWatchId)}/action`, {
-        type,
-        ...extra,
+      const url = viewerMode === "desktop"
+        ? `/api/desktop/window/${encodeURIComponent(activeTargetId)}/action`
+        : `/api/remote/tab/${encodeURIComponent(activeTargetId)}/action`;
+      const res = await mApi("POST", url, { type, ...extra });
+      applySnapshotPayload(res);
+    }
+
+    async function sendRemoteKeyOnly(submitMode) {
+      if (!activeTargetId || viewerMode !== "desktop") return;
+      const res = await mApi("POST", `/api/desktop/window/${encodeURIComponent(activeTargetId)}/action`, {
+        type: "type",
+        text: "",
+        submitMode,
       });
       applySnapshotPayload(res);
     }
 
-    async function sendRemoteReply() {
-      if (!activeRemoteWatchId) return;
+    async function sendRemoteReply(submitMode = "enter") {
+      if (!activeTargetId) return;
       const input = document.getElementById("rv-reply-in");
       const text = spinText(input.value.trim());
       if (!text) {
-        toast("请先输入或选择要回复的内容");
+        toast("请先输入或点选上方快捷话术");
         return;
       }
       input.value = "";
-      toast("🚀 电脑正在用固定 IP 代填并发送...");
-      const res = await mApi("POST", `/api/remote/tab/${encodeURIComponent(activeRemoteWatchId)}/action`, {
-        type: "reply",
-        text,
-        autoSubmit: true,
-      });
-      applySnapshotPayload(res);
-      toast(res?.injected ? "✅ 已在电脑端填入并触发发送！" : "⚠️ 未找到焦点输入框，请先手指点一下上方画面里的聊天输入框再点发送");
+      toast("🚀 正在电脑端代打并发送...");
+
+      if (viewerMode === "desktop") {
+        const res = await mApi("POST", `/api/desktop/window/${encodeURIComponent(activeTargetId)}/action`, {
+          type: "type",
+          text,
+          submitMode,
+        });
+        applySnapshotPayload(res);
+        toast("✅ 已在电脑软件内粘贴并触发发送！（若未选中输入框，先手指点一下画面里的输入框即可）");
+      } else {
+        const res = await mApi("POST", `/api/remote/tab/${encodeURIComponent(activeTargetId)}/action`, {
+          type: "reply",
+          text,
+          autoSubmit: true,
+        });
+        applySnapshotPayload(res);
+        toast(res?.injected ? "✅ 已在电脑网页填入并发送！" : "⚠️ 请先手指点一下上方画面里的聊天输入框");
+      }
     }
 
     async function markRemoteHandled() {
-      if (!activeRemoteWatchId) return;
-      await mApi("POST", `/api/watches/${encodeURIComponent(activeRemoteWatchId)}/resolve`, { action: "resolve" });
+      if (!activeTargetId || viewerMode !== "web") return;
+      await mApi("POST", `/api/watches/${encodeURIComponent(activeTargetId)}/resolve`, { action: "resolve" });
       toast("✓ 已标为已读");
       refreshAll();
     }
@@ -699,11 +844,9 @@
     refreshAll();
     setInterval(() => {
       const hasRunning = (ccState.sessions || []).some((s) => s.status === "running");
-      if (hasRunning || activeRemoteWatchId) {
-        refreshAll();
-      }
+      if (hasRunning) refreshAll();
     }, 2200);
-    setInterval(refreshAll, 12000);
+    setInterval(refreshAll, 9000);
   </script>
 </body>
 </html>

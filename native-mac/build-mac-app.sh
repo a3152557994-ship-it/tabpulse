@@ -56,6 +56,18 @@ BIN_TMP="$(mktemp -d)"
 UNIVERSAL_DIRECT="$BIN_TMP/DirectExec"
 /usr/bin/lipo -create "$BIN_TMP/direct-arm64" "$BIN_TMP/direct-x86_64" -output "$UNIVERSAL_DIRECT"
 
+# Universal Desktop Bridge Helper (Dock Badges + Notification Sniffer + Window Capture/Reply)
+/usr/bin/swiftc -O -target arm64-apple-macos12.0 \
+  -framework Cocoa -framework CoreGraphics -framework ApplicationServices \
+  "$PROJECT_ROOT/native-mac/DesktopBridgeHelper.swift" -o "$BIN_TMP/helper-arm64"
+/usr/bin/swiftc -O -target x86_64-apple-macos12.0 \
+  -framework Cocoa -framework CoreGraphics -framework ApplicationServices \
+  "$PROJECT_ROOT/native-mac/DesktopBridgeHelper.swift" -o "$BIN_TMP/helper-x86_64"
+UNIVERSAL_HELPER="$BIN_TMP/mac-desktop-helper"
+/usr/bin/lipo -create "$BIN_TMP/helper-arm64" "$BIN_TMP/helper-x86_64" -output "$UNIVERSAL_HELPER"
+cp "$UNIVERSAL_HELPER" "$PROJECT_ROOT/bin/mac-desktop-helper"
+chmod +x "$PROJECT_ROOT/bin/mac-desktop-helper"
+
 # MAS StoreKit2 Universal Binary
 /usr/bin/swiftc -O -DMAS_BUILD -target arm64-apple-macos12.0 \
   -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications -framework StoreKit \
@@ -146,20 +158,22 @@ PLIST
 bundle_embedded_server() {
   local app_dir="$1"
   local srv_root="$app_dir/Contents/Resources/app-server"
-  mkdir -p "$srv_root/hub/ui" "$srv_root/seed" "$srv_root/docs"
+  mkdir -p "$srv_root/hub/ui" "$srv_root/seed" "$srv_root/docs" "$srv_root/bin"
   cp "$PROJECT_ROOT/hub/"*.mjs "$srv_root/hub/"
   cp "$PROJECT_ROOT/hub/ui/"*.html "$srv_root/hub/ui/"
   cp "$PROJECT_ROOT/seed/"*.mjs "$srv_root/seed/"
   cp "$PROJECT_ROOT/docs/cold-reply-playbook.html" "$srv_root/docs/"
   cp "$PROJECT_ROOT/llms.txt" "$srv_root/"
+  cp "$UNIVERSAL_HELPER" "$srv_root/bin/mac-desktop-helper"
+  chmod +x "$srv_root/bin/mac-desktop-helper"
 }
 
 echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
-populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "3.0.0" "3"
+populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "4.0.0" "4"
 bundle_embedded_server "$DIST_DIR/消息总管.app"
 /usr/bin/codesign --force --deep --sign - "$DIST_DIR/消息总管.app"
 
-populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "3.0.0" "3"
+populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "4.0.0" "4"
 bundle_embedded_server "$DIST_DIR/ReplyRadar.app"
 /usr/bin/codesign --force --deep --sign - "$DIST_DIR/ReplyRadar.app"
 

@@ -3,6 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PRESET_PACKS } from "../seed/preset-packs.mjs";
+import { desktopMonitor } from "./desktop-monitor.mjs";
 import {
   agentEngine,
   checkMobileAuth,
@@ -115,6 +116,13 @@ export function createHubServer(options = {}) {
     notifyAgentAlert({ title, summary }, st.settings || {}, link).catch(() => {});
   };
 
+  desktopMonitor.onDesktopAlert = ({ title, summary }) => {
+    const st = loadState();
+    const link = currentMobileLink(serverPortRef.port);
+    notifyAgentAlert({ title, summary }, st.settings || {}, link).catch(() => {});
+  };
+  desktopMonitor.startBackgroundWatcher();
+
   const server = http.createServer(async (req, res) => {
     const localTrusted = isLocalDesktopTrusted(req);
     const origin = req.headers.origin;
@@ -151,7 +159,7 @@ export function createHubServer(options = {}) {
     try {
       // Public lightweight endpoints
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "3.0.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "4.0.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
         return;
       }
       if (req.method === "GET" && pathname === "/llms.txt") {
@@ -333,6 +341,32 @@ export function createHubServer(options = {}) {
       if (ccStopMatch && req.method === "POST") {
         const sid = decodeURIComponent(ccStopMatch[1]);
         sendJson(res, 200, agentEngine.stopSession(sid), corsOrigin);
+        return;
+      }
+
+      // Native Desktop Software Monitor & Remote Window Control routes
+      if (pathname === "/api/desktop/state" && req.method === "GET") {
+        const dst = await desktopMonitor.getDesktopState();
+        sendJson(res, 200, dst, corsOrigin, authCookieHeader);
+        return;
+      }
+      if (pathname === "/api/desktop/launch" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const out = await desktopMonitor.launchApp(body.path || "");
+        sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+      const deskCapMatch = pathname.match(/^\/api\/desktop\/window\/(\d+)\/capture$/);
+      if (deskCapMatch && req.method === "GET") {
+        const out = await desktopMonitor.captureWindow(deskCapMatch[1]);
+        sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+      const deskActMatch = pathname.match(/^\/api\/desktop\/window\/(\d+)\/action$/);
+      if (deskActMatch && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const out = await desktopMonitor.performWindowAction(deskActMatch[1], body);
+        sendJson(res, 200, out, corsOrigin);
         return;
       }
 

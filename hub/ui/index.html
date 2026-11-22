@@ -213,7 +213,8 @@
     </div>
 
     <div class="nav-tabs">
-      <button class="nav-tab active" id="tab-inbox" onclick="switchTab('inbox')">📬 我的各平台消息（点卡片直接同窗回消息）</button>
+      <button class="nav-tab active" id="tab-inbox" onclick="switchTab('inbox')">📬 网页各平台消息（同窗直回）</button>
+      <button class="nav-tab" id="tab-desktop" onclick="switchTab('desktop')">🖥️ 电脑桌面软件监控（微信/IDE/千牛）</button>
       <button class="nav-tab" id="tab-cc" onclick="switchTab('cc')">🤖 Claude Code / AI 远程仓</button>
       <button class="nav-tab" id="tab-replies" onclick="switchTab('replies')">⚡ 防封快捷话术与违禁词检测</button>
       <button class="nav-tab" id="tab-scanner" onclick="switchTab('scanner')">🎯 实时找单扫描器</button>
@@ -224,6 +225,26 @@
       <div class="packs-bar" id="packs-bar"></div>
       <div id="alerts-section"></div>
       <div id="categories-section"></div>
+    </div>
+
+    <div id="view-desktop" style="display:none;">
+      <div class="scanner-box">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h2 style="margin:0 0 4px;font-size:18px;">🖥️ 全电脑桌面软件实时监控（不限网页版 · 微信 / 千牛 / Antigravity / 飞书全覆盖）</h2>
+            <div style="font-size:13px;color:var(--muted);">
+              零注入读取系统程序坞未读红点与右上角通知弹窗（0 封号隐患）；出门用手机扫码打开<strong>「手机随身版 → 电脑软件」</strong>即可实时看任意软件窗口画面、远程点选联系人并直接代打发送回复！
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="sm" onclick="refreshDesktopMonitorView()">↻ 立即刷新窗口列表</button>
+            <button class="sm primary" onclick="openMobileModal()">📲 手机扫码远程看电脑软件</button>
+          </div>
+        </div>
+        <div id="desk-mon-badges" style="margin-top:12px;"></div>
+        <div id="desk-mon-alerts" style="margin-top:10px;"></div>
+      </div>
+      <div id="desk-mon-windows" class="grid"></div>
     </div>
 
     <div id="view-cc" style="display:none;">
@@ -649,6 +670,11 @@
       if (mobBtn) {
         mobBtn.style.display = isMas ? "none" : "inline-flex";
         mobBtn.textContent = en ? "📲 Mobile Remote App" : "📲 手机版扫码直连";
+      }
+      const deskTab = document.getElementById("tab-desktop");
+      if (deskTab) {
+        deskTab.style.display = isMas ? "none" : "inline-block";
+        deskTab.textContent = en ? "🖥️ Desktop Apps Monitor" : "🖥️ 电脑桌面软件监控（微信/IDE/千牛）";
       }
       if (ccTab) {
         ccTab.style.display = isMas ? "none" : "inline-block";
@@ -1079,14 +1105,20 @@
 
     function switchTab(tab) {
       document.getElementById("tab-inbox").classList.toggle("active", tab === "inbox");
+      document.getElementById("tab-desktop")?.classList.toggle("active", tab === "desktop");
       document.getElementById("tab-cc")?.classList.toggle("active", tab === "cc");
       document.getElementById("tab-replies").classList.toggle("active", tab === "replies");
       document.getElementById("tab-scanner").classList.toggle("active", tab === "scanner");
       document.getElementById("view-inbox").style.display = tab === "inbox" ? "block" : "none";
+      const vDesk = document.getElementById("view-desktop");
+      if (vDesk) vDesk.style.display = tab === "desktop" ? "block" : "none";
       const vCc = document.getElementById("view-cc");
       if (vCc) vCc.style.display = tab === "cc" ? "block" : "none";
       document.getElementById("view-replies").style.display = tab === "replies" ? "block" : "none";
       document.getElementById("view-scanner").style.display = tab === "scanner" ? "block" : "none";
+      if (tab === "desktop") {
+        refreshDesktopMonitorView();
+      }
       if (tab === "cc") {
         refreshCcView();
       }
@@ -1097,6 +1129,45 @@
         window.__scannedOnce = true;
         runLeadScan();
       }
+    }
+
+    async function refreshDesktopMonitorView() {
+      const res = await apiCall("GET", "/api/desktop/state");
+      if (!res) return;
+      const badges = res.badges || [];
+      const badgeMap = {};
+      for (const b of badges) {
+        if (b.bundleId) badgeMap[b.bundleId] = b.badge;
+        badgeMap[b.name] = b.badge;
+      }
+      document.getElementById("desk-mon-badges").innerHTML = badges.length
+        ? `<div style="background:#fef2f2;border:1px solid #fecaca;padding:10px 12px;border-radius:10px;font-size:13px;color:#991b1b;">🔴 <strong>程序坞实时未读角标：</strong> ${badges.map((b) => `<span class="badge badge-red" style="margin-right:6px;">${escapeHtml(b.name)}: ${escapeHtml(b.badge)}</span>`).join("")}</div>`
+        : `<div style="font-size:12.5px;color:var(--green);font-weight:600;">🟢 当前电脑所有桌面软件均无未读红点（一旦微信/千牛/IDE出现红点或弹窗将自动推送到手机）</div>`;
+
+      const alerts = res.recentAlerts || [];
+      document.getElementById("desk-mon-alerts").innerHTML = alerts.slice(0, 4).map((a) =>
+        `<div style="font-size:12px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:6px 10px;border-radius:8px;margin-bottom:5px;">🔔 [${new Date(a.at).toLocaleTimeString()}] <strong>${escapeHtml(a.appName)}</strong>：${escapeHtml(a.text)}</div>`
+      ).join("");
+
+      const wins = res.windows || [];
+      document.getElementById("desk-mon-windows").innerHTML = wins.map((w) => {
+        const bg = badgeMap[w.bundleId] || badgeMap[w.appName] || "";
+        return `
+          <div class="card ${bg ? "is-unread" : ""}">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <h3 class="card-title">🖥️ ${escapeHtml(w.appName)}</h3>
+                ${bg ? `<span class="badge badge-red">🔴 ${escapeHtml(bg)} 未读</span>` : `<span class="badge badge-green">🟢 监控中</span>`}
+              </div>
+              <div class="card-meta">${escapeHtml(w.title || "桌面主窗口")}</div>
+              <div style="font-size:12px;color:var(--muted);">窗口尺寸 ${w.bounds?.w || 0}×${w.bounds?.h || 0} · 手机端可随时查看画面并代打回复</div>
+            </div>
+            <div class="card-foot">
+              <button class="sm primary" onclick="openMobileModal()">📲 手机扫码查看并遥控此软件</button>
+            </div>
+          </div>
+        `;
+      }).join("");
     }
 
     let desktopCcState = { agents: [], sessions: [], hookEvents: [], claudeHookInstalled: false };

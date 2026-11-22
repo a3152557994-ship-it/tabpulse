@@ -262,7 +262,7 @@ final class StandaloneStore {
             ]
         ]
         let initial: [String: Any] = [
-            "version": "3.0.0",
+            "version": "4.0.0",
             "license": NSNull(),
             "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "watches": defaultWatches,
@@ -313,7 +313,7 @@ final class StandaloneStore {
         }
 
         return [
-            "version": "3.0.0",
+            "version": "4.0.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
