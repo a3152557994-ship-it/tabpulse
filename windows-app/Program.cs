@@ -366,7 +366,7 @@ internal sealed class MainDashboardForm : Form
             var lic = string.IsNullOrEmpty(licKey) ? new JsonObject { ["valid"] = false, ["plan"] = "free" } : LicenseCheck.Verify(licKey);
             return new JsonObject
             {
-                ["version"] = "4.0.0",
+                ["version"] = "5.0.0",
                 ["license"] = lic,
                 ["settings"] = st["settings"]?.DeepClone() ?? new JsonObject(),
                 ["stats"] = new JsonObject { ["total"] = watches.Count, ["unreadCount"] = unreadWatches, ["unreadMessagesTotal"] = unreadTotal, ["activeCount"] = watches.Count },

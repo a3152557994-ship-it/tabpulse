@@ -460,6 +460,7 @@ class AgentSessionEngine {
       this.onTaskAlert({
         title: eventType === "Stop" ? "✅ 电脑端 Claude Code 任务已完成" : "🔔 Claude Code 等待您的确认",
         summary: `${cwd ? `[${path.basename(cwd)}] ` : ""}${entry.summary}`,
+        targetKey: "cc:hooks",
       });
     }
     return entry;
@@ -563,8 +564,9 @@ class AgentSessionEngine {
         const tail = replyMsg.text.trim().replace(/\s+/g, " ").slice(-140);
         this.onTaskAlert({
           title: code === 0 ? `✅ [${session.name}] 任务已完成` : `⚠️ [${session.name}] 执行结束 (code ${code})`,
-          summary: tail || "点击手机端链接查看详情并继续发送下一条指令",
+          summary: tail || "点击手机端红点进入查看详情并继续发送下一条指令",
           sessionId: session.id,
+          targetKey: `cc:${session.id}`,
         });
       }
     });
@@ -654,11 +656,13 @@ class DesktopWebRelay {
 
   submitCommandResult(taskId, result = {}) {
     this.lastBridgeSeenAt = Date.now();
-    if (result.watchId && result.imageDataUrl) {
+    if (result.watchId && (Array.isArray(result.messages) || result.extractedText)) {
       this.lastSnapshots.set(result.watchId, {
-        imageDataUrl: result.imageDataUrl,
         pageTitle: result.pageTitle || "",
         currentUrl: result.currentUrl || "",
+        authRequired: Boolean(result.authRequired),
+        threads: Array.isArray(result.threads) ? result.threads : [],
+        messages: Array.isArray(result.messages) ? result.messages : [],
         extractedText: result.extractedText || "",
         capturedAt: new Date().toISOString(),
       });

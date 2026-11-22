@@ -1,12 +1,12 @@
 {
-  "latestVersion": "4.0.0",
+  "latestVersion": "5.0.0",
   "publishedAt": "2026-11-22",
   "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg",
   "downloadUrlWinCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip",
   "downloadUrlWinEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
-  "notesCn": "v4.0.0 全电脑监控旗舰版：突破网页限制！手机随身端现可实时监控并遥控电脑上所有原生桌面软件（微信、千牛、飞书、Antigravity、Gemini 等未读红点与右上角弹窗）+ 多开网页隔离仓 + Claude Code 完成提醒与代打回复！",
-  "notesZh": "v4.0.0 全电脑监控旗舰版：突破网页限制！手机随身端现可实时监控并遥控电脑上所有原生桌面软件（微信、千牛、飞书、Antigravity、Gemini 等未读红点与右上角弹窗）+ 多开网页隔离仓 + Claude Code 完成提醒与代打回复！",
-  "notesEn": "v4.0.0 Full Desktop & Web Flagship: Monitor Dock unread badges, system notification banners, and live windows of ANY native desktop app (WeChat, Slack, Cursor, IDEs) alongside isolated web sandboxes and Claude Code from your phone!"
+  "notesCn": "v5.0.0 原生红点收件箱版：来新消息手机直接响铃推送亮红点，点进对应平台（网页+电脑软件微信/千牛/飞书/Claude Code）的红点直接看纯文字聊天记录并回复，彻底告别笨重卡顿的电脑屏幕截图！",
+  "notesZh": "v5.0.0 原生红点收件箱版：来新消息手机直接响铃推送亮红点，点进对应平台（网页+电脑软件微信/千牛/飞书/Claude Code）的红点直接看纯文字聊天记录并回复，彻底告别笨重卡顿的电脑屏幕截图！",
+  "notesEn": "v5.0.0 Native Red-Dot Mobile Inbox: Real Web Push notifications & app badges on your phone. Tap any unread red dot across web platforms, native desktop apps (WeChat, Slack, IDEs), or Claude Code to read clean pure-text chat bubbles and reply directly via your computer's fixed IP—zero desktop screenshots!"
 }

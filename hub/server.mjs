@@ -11,18 +11,21 @@ import {
   isLocalDesktopTrusted,
   tunnelManager,
 } from "./mobile-bridge.mjs";
-import { notifyAgentAlert, notifyAuthExpired, notifyUnread } from "./notifier.mjs";
+import { notifyAgentAlert, notifyAuthExpired, notifyUnread, sendCustomerWebhook } from "./notifier.mjs";
 import { scanBuyerLeads } from "./scanner.mjs";
 import {
   activateLicenseKey,
+  broadcastMobileWebPush,
   deleteWatch,
   getDueWatches,
   getMobileToken,
   getPublicSummary,
+  getVapidPublicKey,
   loadState,
   recordProbeReport,
   resolveWatch,
   rotateMobileToken,
+  savePushSubscription,
   saveQuickReplies,
   saveReplyDraft,
   updateSettings,
@@ -34,6 +37,7 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const INDEX_HTML_PATH = path.join(__dirname, "ui", "index.html");
 const MOBILE_HTML_PATH = path.join(__dirname, "ui", "mobile.html");
+const SW_JS_PATH = path.join(__dirname, "ui", "sw.js");
 const LLMS_TXT_PATH = path.join(PROJECT_ROOT, "llms.txt");
 const PLAYBOOK_HTML_PATH = path.join(PROJECT_ROOT, "docs", "cold-reply-playbook.html");
 
@@ -110,16 +114,16 @@ function renderPairGateHtml(errorMsg = "") {
 export function createHubServer(options = {}) {
   const serverPortRef = { port: Number(options.port || process.env.TABPULSE_PORT || 17890) };
 
-  agentEngine.onTaskAlert = ({ title, summary }) => {
+  agentEngine.onTaskAlert = ({ title, summary, targetKey }) => {
     const st = loadState();
     const link = currentMobileLink(serverPortRef.port);
-    notifyAgentAlert({ title, summary }, st.settings || {}, link).catch(() => {});
+    notifyAgentAlert({ title, summary, targetKey: targetKey || "cc:latest" }, st.settings || {}, link).catch(() => {});
   };
 
-  desktopMonitor.onDesktopAlert = ({ title, summary }) => {
+  desktopMonitor.onDesktopAlert = ({ title, summary, targetKey }) => {
     const st = loadState();
     const link = currentMobileLink(serverPortRef.port);
-    notifyAgentAlert({ title, summary }, st.settings || {}, link).catch(() => {});
+    notifyAgentAlert({ title, summary, targetKey: targetKey || "" }, st.settings || {}, link).catch(() => {});
   };
   desktopMonitor.startBackgroundWatcher();
 
@@ -159,7 +163,13 @@ export function createHubServer(options = {}) {
     try {
       // Public lightweight endpoints
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "4.0.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "5.0.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
+        return;
+      }
+      if (req.method === "GET" && pathname === "/sw.js") {
+        sendText(res, 200, "application/javascript; charset=utf-8", fs.readFileSync(SW_JS_PATH, "utf-8"), {
+          "Service-Worker-Allowed": "/",
+        });
         return;
       }
       if (req.method === "GET" && pathname === "/llms.txt") {
@@ -344,7 +354,32 @@ export function createHubServer(options = {}) {
         return;
       }
 
-      // Native Desktop Software Monitor & Remote Window Control routes
+      // Mobile Web Push (VAPID) routes
+      if (pathname === "/api/push/vapid-public-key" && req.method === "GET") {
+        sendJson(res, 200, { ok: true, publicKey: getVapidPublicKey() }, corsOrigin, authCookieHeader);
+        return;
+      }
+      if (pathname === "/api/push/subscribe" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const out = savePushSubscription(body.subscription || body);
+        sendJson(res, out.ok ? 200 : 400, out, corsOrigin);
+        return;
+      }
+      if (pathname === "/api/push/test" && req.method === "POST") {
+        const st = loadState();
+        const link = currentMobileLink(serverPortRef.port);
+        const title = "🔔 消息总管手机提醒测试";
+        const summary = "提醒已打通！来消息时手机直接响铃，点进对应红点就能看消息并回复。";
+        const pushOut = await broadcastMobileWebPush({ title, body: summary, targetKey: "" });
+        let webhookOut = null;
+        if (st.settings?.webhookUrl) {
+          webhookOut = await sendCustomerWebhook(st.settings.webhookUrl, title, summary, link);
+        }
+        sendJson(res, 200, { ok: true, webPush: pushOut, webhook: webhookOut }, corsOrigin);
+        return;
+      }
+
+      // Native Desktop Software Monitor & Pure-Text Message Sync routes
       if (pathname === "/api/desktop/state" && req.method === "GET") {
         const dst = await desktopMonitor.getDesktopState();
         sendJson(res, 200, dst, corsOrigin, authCookieHeader);
@@ -356,9 +391,15 @@ export function createHubServer(options = {}) {
         sendJson(res, 200, out, corsOrigin);
         return;
       }
-      const deskCapMatch = pathname.match(/^\/api\/desktop\/window\/(\d+)\/capture$/);
-      if (deskCapMatch && req.method === "GET") {
-        const out = await desktopMonitor.captureWindow(deskCapMatch[1]);
+      if (pathname === "/api/desktop/clear-unread" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const out = desktopMonitor.clearAppUnread(body.appName || "");
+        sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+      const deskMsgMatch = pathname.match(/^\/api\/desktop\/window\/(\d+)\/(?:messages|capture)$/);
+      if (deskMsgMatch && req.method === "GET") {
+        const out = await desktopMonitor.readWindowMessages(deskMsgMatch[1]);
         sendJson(res, 200, out, corsOrigin);
         return;
       }
@@ -584,6 +625,6 @@ if (isDirectEntrypoint()) {
   const port = Number(process.env.TABPULSE_PORT || 17890);
   const server = createHubServer({ port });
   server.listen(port, host, () => {
-    console.log(`TabPulse Hub v3.0.0 listening on http://${host}:${port}`);
+    console.log(`TabPulse Hub v5.0.0 listening on http://${host}:${port}`);
   });
 }

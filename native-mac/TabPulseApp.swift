@@ -262,7 +262,7 @@ final class StandaloneStore {
             ]
         ]
         let initial: [String: Any] = [
-            "version": "4.0.0",
+            "version": "5.0.0",
             "license": NSNull(),
             "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "watches": defaultWatches,
@@ -313,7 +313,7 @@ final class StandaloneStore {
         }
 
         return [
-            "version": "4.0.0",
+            "version": "5.0.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -1153,24 +1153,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     func captureAndPostSnapshot(wv: WKWebView, taskId: String, watchId: String, extra: [String: Any]) {
-        let cfg = WKSnapshotConfiguration()
-        cfg.snapshotWidth = 900
-        wv.takeSnapshot(with: cfg) { [weak self] image, _ in
-            var dataUrl = ""
-            if let img = image,
-               let tiff = img.tiffRepresentation,
-               let rep = NSBitmapImageRep(data: tiff),
-               let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.68]) {
-                dataUrl = "data:image/jpeg;base64," + jpg.base64EncodedString()
+        let domExtractorJS = """
+        (function() {
+          const vw = Math.max(1, window.innerWidth || 1000);
+          const vh = Math.max(1, window.innerHeight || 700);
+          const seen = new Set();
+          const threads = [];
+          const messages = [];
+
+          const isVisible = (el) => {
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            if (r.width < 12 || r.height < 10 || r.bottom < 0 || r.top > vh * 1.5) return false;
+            const st = window.getComputedStyle(el);
+            return st.display !== 'none' && st.visibility !== 'hidden' && st.opacity !== '0';
+          };
+
+          const authRequired = Boolean(document.querySelector('input[type="password"]')) || /(login|signin|sign-in|passport|扫码登录|请登录)/i.test(location.href + ' ' + document.title);
+
+          // Extract left-sidebar threads & main-pane leaf text blocks without any screenshot
+          const candidates = document.querySelectorAll('li, article, p, [class*="msg" i], [class*="message" i], [class*="chat" i], [class*="item" i], [class*="comment" i], [class*="notify" i], [role="listitem"], h3, h4, div');
+          for (const el of candidates) {
+            if (!isVisible(el)) continue;
+            // Skip huge wrapper divs that contain many child blocks
+            if (el.tagName === 'DIV' && el.children.length > 3) continue;
+            const raw = (el.innerText || '').trim().replace(/\\s+/g, ' ');
+            if (raw.length < 2 || raw.length > 900 || seen.has(raw)) continue;
+            const r = el.getBoundingClientRect();
+            if (r.top < 38) continue;
+            seen.add(raw);
+
+            const relX = r.left / vw;
+            const cxRatio = Math.max(0.02, Math.min(0.98, (r.left + r.width * 0.5) / vw));
+            const cyRatio = Math.max(0.02, Math.min(0.98, (r.top + r.height * 0.5) / vh));
+            if (relX < 0.28 && r.width < vw * 0.38 && raw.length <= 42 && threads.length < 16) {
+              threads.push({ label: raw, xRatio: cxRatio, yRatio: cyRatio });
+            } else {
+              const isMe = ((r.left + r.width * 0.5) / vw) > 0.62 || /mine|self|right|me|outbound/i.test(el.className || '');
+              messages.push({ text: raw, isMe });
             }
-            wv.evaluateJavaScript("(document.body && document.body.innerText || '').replace(/\\s+/g, ' ').slice(0, 320)") { txt, _ in
-                var payload = extra
-                payload["imageDataUrl"] = dataUrl
-                payload["pageTitle"] = wv.title ?? ""
-                payload["currentUrl"] = wv.url?.absoluteString ?? ""
-                payload["extractedText"] = (txt as? String) ?? ""
-                self?.postBridgeResult(taskId: taskId, watchId: watchId, payload: payload)
-            }
+            if (messages.length >= 45) break;
+          }
+
+          if (messages.length === 0 && document.body) {
+            const lines = (document.body.innerText || '').split('\\n').map(s => s.trim()).filter(s => s.length >= 2 && s.length <= 600).slice(0, 30);
+            for (const l of lines) messages.push({ text: l, isMe: false });
+          }
+
+          return { threads, messages, authRequired };
+        })();
+        """
+        wv.evaluateJavaScript(domExtractorJS) { [weak self] res, _ in
+            let dict = (res as? [String: Any]) ?? [:]
+            var payload = extra
+            payload["pageTitle"] = wv.title ?? ""
+            payload["currentUrl"] = wv.url?.absoluteString ?? ""
+            payload["threads"] = dict["threads"] ?? []
+            payload["messages"] = dict["messages"] ?? []
+            payload["authRequired"] = dict["authRequired"] ?? false
+            self?.postBridgeResult(taskId: taskId, watchId: watchId, payload: payload)
         }
     }
 

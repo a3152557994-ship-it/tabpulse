@@ -8,3 +8,4 @@ release/
 *license-keys*
 windows-app/bin/
 windows-app/obj/
+bin/mac-desktop-helper

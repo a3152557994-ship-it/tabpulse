@@ -10,6 +10,7 @@ import { signLicensePayload } from "../bin/generate-license.mjs";
 import { verifyLicenseKey } from "../hub/license.mjs";
 import { notificationLog } from "../hub/notifier.mjs";
 import { createHubServer } from "../hub/server.mjs";
+import { encryptWebPushPayload, generateVapidKeys } from "../hub/webpush.mjs";
 import {
   computeNextCheck,
   getDueWatches,
@@ -127,7 +128,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
     assert.equal(health.ok, true);
-    assert.equal(health.version, "4.0.0");
+    assert.equal(health.version, "5.0.0");
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -270,13 +271,42 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
     });
     assert.equal(blockedDesktopRoute.status, 403);
 
-    // 4. External mobile request WITH valid token succeeds & sets HttpOnly cookie
+    // 4. External mobile request WITH valid token succeeds, sets HttpOnly cookie, and renders pure-text red-dot inbox (ZERO screenshots)
     const mobPage = await fetch(`${baseUrl}/m?t=${encodeURIComponent(tok)}`, {
       headers: { "cf-connecting-ip": "203.0.113.9" },
     });
     assert.equal(mobPage.status, 200);
     assert.ok((mobPage.headers.get("set-cookie") || "").includes("tp_mob_tok="));
-    assert.ok((await mobPage.text()).includes("消息总管 · 全电脑监控台"));
+    const mobHtml = await mobPage.text();
+    assert.ok(mobHtml.includes("消息总管 · 手机随身收件箱"));
+    assert.equal(mobHtml.includes("<img"), false);
+
+    // 4b. Service Worker (/sw.js) & Web Push VAPID public key + RFC 8291 encryption work cleanly
+    const swRes = await fetch(`${baseUrl}/sw.js`);
+    assert.equal(swRes.status, 200);
+    assert.ok((await swRes.text()).includes("showNotification"));
+
+    const vapidRes = await (
+      await fetch(`${baseUrl}/api/push/vapid-public-key`, {
+        headers: { "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+      })
+    ).json();
+    assert.equal(vapidRes.ok, true);
+    assert.ok(vapidRes.publicKey && vapidRes.publicKey.length >= 80);
+
+    const vKeys = generateVapidKeys();
+    assert.ok(vKeys.publicKey && vKeys.privateKey);
+    const clientEcdh = crypto.createECDH("prime256v1");
+    clientEcdh.generateKeys();
+    const fakeSub = {
+      endpoint: "https://fcm.googleapis.com/fcm/send/fake",
+      keys: {
+        p256dh: clientEcdh.getPublicKey().toString("base64url"),
+        auth: crypto.randomBytes(16).toString("base64url"),
+      },
+    };
+    const encrypted = encryptWebPushPayload(JSON.stringify({ title: "新消息", unreadTotal: 2 }), fakeSub);
+    assert.ok(Buffer.isBuffer(encrypted) && encrypted.length > 86);
 
     // 5. Create & run a local fixed-IP remote session and verify output + CC hook endpoint
     const sesRes = await (

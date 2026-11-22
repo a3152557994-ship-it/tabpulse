@@ -22,6 +22,8 @@ function resolveMacHelperBin() {
 class DesktopSoftwareMonitor {
   constructor() {
     this.recentAlerts = [];
+    this.appMessagesLog = new Map(); // appName -> [{ text, at, isMe }]
+    this.appUnreadCounts = new Map(); // appName -> number
     this.lastBadges = new Map();
     this.seenBanners = new Set();
     this.watchTimer = null;
@@ -33,7 +35,7 @@ class DesktopSoftwareMonitor {
     if (this.watchTimer || process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS === "1") return;
     this.watchTimer = setInterval(() => {
       this.pollOnce().catch(() => {});
-    }, 3800);
+    }, 3500);
     if (this.watchTimer.unref) this.watchTimer.unref();
   }
 
@@ -41,7 +43,6 @@ class DesktopSoftwareMonitor {
     const st = await this.getDesktopState();
     if (!st.ok) return st;
 
-    // 1. Check Dock unread badge increases across ALL running desktop apps (WeChat, QQ, Telegram, Antigravity, Mail, etc.)
     const currentKeys = new Set();
     for (const b of st.badges || []) {
       const key = b.bundleId || b.name;
@@ -52,48 +53,63 @@ class DesktopSoftwareMonitor {
 
       const prevNum = parseInt(prev, 10) || 0;
       const curNum = parseInt(cur, 10) || (cur ? 1 : 0);
-      if (cur && cur !== prev && curNum >= prevNum) {
-        const entry = {
-          id: `da_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`,
+      this.appUnreadCounts.set(b.name, curNum);
+
+      if (cur && cur !== prev && curNum > prevNum) {
+        this.pushAlertEntry({
+          id: `da_${Date.now().toString(36)}`,
           kind: "badge",
           appName: b.name,
           badge: cur,
-          text: `${b.name} 图标出现未读红点 (${cur})`,
+          text: `收到 ${cur} 条未读新消息`,
           at: new Date().toISOString(),
-        };
-        this.pushAlertEntry(entry);
+        });
       }
     }
     for (const oldKey of Array.from(this.lastBadges.keys())) {
       if (!currentKeys.has(oldKey)) this.lastBadges.delete(oldKey);
     }
 
-    // 2. Check live Notification Center banners popping up from ANY desktop software
     const banners = st.banners || [];
     if (banners.length >= 1) {
-      const joined = banners.slice(0, 4).join(" · ");
-      if (joined.length >= 3 && !this.seenBanners.has(joined)) {
-        this.seenBanners.add(joined);
-        if (this.seenBanners.size > 120) {
+      const appName = banners[0] || "桌面通知";
+      const bodyText = banners.slice(1).join(" · ") || banners[0];
+      const fp = `${appName}::${bodyText}`;
+      if (bodyText.length >= 2 && !this.seenBanners.has(fp)) {
+        this.seenBanners.add(fp);
+        if (this.seenBanners.size > 150) {
           const first = this.seenBanners.values().next().value;
           this.seenBanners.delete(first);
         }
-        const entry = {
-          id: `bn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`,
+        const prevCnt = this.appUnreadCounts.get(appName) || 0;
+        this.appUnreadCounts.set(appName, prevCnt + 1);
+        this.recordAppLog(appName, bodyText, false);
+        this.pushAlertEntry({
+          id: `bn_${Date.now().toString(36)}`,
           kind: "banner",
-          appName: banners[0] || "系统通知",
-          badge: "新弹窗",
-          text: joined,
+          appName,
+          badge: String(prevCnt + 1),
+          text: bodyText,
           at: new Date().toISOString(),
-        };
-        this.pushAlertEntry(entry);
+        });
       }
     }
     return st;
   }
 
+  recordAppLog(appName, text, isMe = false) {
+    const arr = this.appMessagesLog.get(appName) || [];
+    arr.push({ text, isMe, at: new Date().toISOString() });
+    if (arr.length > 40) arr.shift();
+    this.appMessagesLog.set(appName, arr);
+  }
+
+  clearAppUnread(appName) {
+    if (appName) this.appUnreadCounts.set(appName, 0);
+    return { ok: true };
+  }
+
   pushAlertEntry(entry) {
-    // Ignore our own notifications to avoid feedback loops
     if (entry.appName.includes("消息总管") || entry.appName.includes("ReplyRadar") || entry.text.includes("消息总管")) {
       return;
     }
@@ -101,8 +117,9 @@ class DesktopSoftwareMonitor {
     if (this.recentAlerts.length > 50) this.recentAlerts.length = 50;
     if (this.onDesktopAlert) {
       this.onDesktopAlert({
-        title: `🖥️【电脑软件提醒】${entry.appName}`,
+        title: `🔔 ${entry.appName} 新消息`,
         summary: entry.text,
+        targetKey: `app:${entry.appName}`,
       });
     }
   }
@@ -115,8 +132,26 @@ class DesktopSoftwareMonitor {
         const { stdout } = await execFileAsync(bin, ["list"], { timeout: 5000, maxBuffer: 4 * 1024 * 1024 });
         const parsed = JSON.parse(stdout.trim() || "{}");
         this.cachedState = parsed;
+
+        const badgeByApp = {};
+        for (const b of parsed.badges || []) {
+          badgeByApp[b.name] = parseInt(b.badge, 10) || 1;
+          if (b.bundleId) badgeByApp[b.bundleId] = parseInt(b.badge, 10) || 1;
+        }
+        const enrichedWindows = (parsed.windows || []).map((w) => {
+          const unread =
+            badgeByApp[w.bundleId] ||
+            badgeByApp[w.appName] ||
+            this.appUnreadCounts.get(w.appName) ||
+            0;
+          const logs = this.appMessagesLog.get(w.appName) || [];
+          const lastSnippet = logs.length ? logs[logs.length - 1].text : (w.title || "点击进入查看该软件消息");
+          return { ...w, unreadCount: unread, snippet: lastSnippet };
+        });
+
         return {
           ...parsed,
+          windows: enrichedWindows,
           recentAlerts: this.recentAlerts.slice(0, 25),
         };
       } catch (err) {
@@ -130,59 +165,63 @@ class DesktopSoftwareMonitor {
     return { ok: false, windows: [], badges: [], recentAlerts: [], installedApps: [] };
   }
 
-  async captureWindow(windowId) {
+  async readWindowMessages(windowId) {
     if (process.platform === "darwin") {
       const bin = resolveMacHelperBin();
       if (!bin) return { ok: false, error: "mac-desktop-helper missing" };
-      const { stdout } = await execFileAsync(bin, ["capture", String(Number(windowId) || 0)], {
+      const { stdout } = await execFileAsync(bin, ["read-messages", String(Number(windowId) || 0)], {
         timeout: 8000,
-        maxBuffer: 8 * 1024 * 1024,
+        maxBuffer: 4 * 1024 * 1024,
       });
-      return JSON.parse(stdout.trim() || "{}");
+      const parsed = JSON.parse(stdout.trim() || "{}");
+      if (parsed.appName) {
+        this.clearAppUnread(parsed.appName);
+        const bannerHist = this.appMessagesLog.get(parsed.appName) || [];
+        if (bannerHist.length) {
+          parsed.bannerHistory = bannerHist;
+        }
+      }
+      return parsed;
     }
     if (process.platform === "win32") {
-      return await this.captureWindowsScreen(windowId);
+      return await this.readWindowsMessages(windowId);
     }
     return { ok: false, error: "unsupported platform" };
   }
 
   async performWindowAction(windowId, body = {}) {
     const wid = String(Number(windowId) || 0);
-    const type = body.type || "capture";
+    const type = body.type || "read";
     if (process.platform === "darwin") {
       const bin = resolveMacHelperBin();
       if (!bin) return { ok: false, error: "mac-desktop-helper missing" };
 
-      if (type === "click") {
-        const xr = String(Math.max(0.01, Math.min(0.99, Number(body.xRatio) || 0.5)));
-        const yr = String(Math.max(0.01, Math.min(0.99, Number(body.yRatio) || 0.5)));
-        const { stdout } = await execFileAsync(bin, ["click", wid, xr, yr], {
+      if (type === "selectThread") {
+        const xr = String(Math.max(0.01, Math.min(0.99, Number(body.xRatio) || 0.12)));
+        const yr = String(Math.max(0.01, Math.min(0.99, Number(body.yRatio) || 0.3)));
+        const { stdout } = await execFileAsync(bin, ["select-thread", wid, xr, yr], {
           timeout: 8000,
-          maxBuffer: 8 * 1024 * 1024,
+          maxBuffer: 4 * 1024 * 1024,
         });
         return JSON.parse(stdout.trim() || "{}");
       }
 
-      if (type === "scroll") {
-        const lines = Number(body.dy) > 0 ? "-6" : "6";
-        const { stdout } = await execFileAsync(bin, ["scroll", wid, lines], {
-          timeout: 8000,
-          maxBuffer: 8 * 1024 * 1024,
-        });
-        return JSON.parse(stdout.trim() || "{}");
-      }
-
-      if (type === "type") {
-        const b64 = Buffer.from(String(body.text || ""), "utf-8").toString("base64");
-        const mode = body.submitMode === "cmd_enter" ? "cmd_enter" : body.submitMode === "none" ? "none" : "enter";
-        const { stdout } = await execFileAsync(bin, ["type", wid, b64, mode], {
+      if (type === "reply") {
+        const text = String(body.text || "");
+        const b64 = Buffer.from(text, "utf-8").toString("base64");
+        const mode = body.submitMode === "cmd_enter" ? "cmd_enter" : "enter";
+        const { stdout } = await execFileAsync(bin, ["reply-text", wid, b64, mode], {
           timeout: 10000,
-          maxBuffer: 8 * 1024 * 1024,
+          maxBuffer: 4 * 1024 * 1024,
         });
-        return JSON.parse(stdout.trim() || "{}");
+        const out = JSON.parse(stdout.trim() || "{}");
+        if (out.appName && text) {
+          this.recordAppLog(out.appName, text, true);
+        }
+        return out;
       }
 
-      return await this.captureWindow(wid);
+      return await this.readWindowMessages(wid);
     }
 
     if (process.platform === "win32") {
@@ -201,13 +240,12 @@ class DesktopSoftwareMonitor {
     return { ok: false, error: "unsupported" };
   }
 
-  // Windows 10/11 Native Process Window Enumeration & Capture via PowerShell .NET
   async getWindowsDesktopState() {
     const ps = `
       $procs = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -ne '' } | Select-Object Id, ProcessName, MainWindowTitle, MainWindowHandle
       $wins = @()
       foreach ($p in $procs) {
-        $wins += @{ windowId = [int64]$p.MainWindowHandle; pid = $p.Id; appName = $p.ProcessName; title = $p.MainWindowTitle; bundleId = $p.ProcessName }
+        $wins += @{ windowId = [int64]$p.MainWindowHandle; pid = $p.Id; appName = $p.ProcessName; title = $p.MainWindowTitle; snippet = $p.MainWindowTitle; unreadCount = 0 }
       }
       @{ ok = $true; windows = $wins; badges = @(); installedApps = @() } | ConvertTo-Json -Depth 4 -Compress
     `;
@@ -220,36 +258,30 @@ class DesktopSoftwareMonitor {
     }
   }
 
-  async captureWindowsScreen(hwnd) {
+  async readWindowsMessages(hwnd) {
     const ps = `
-      Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-      Add-Type @"
-        using System;
-        using System.Runtime.InteropServices;
-        public class WinApi {
-          [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-        }
-"@
-      [WinApi]::SetForegroundWindow([IntPtr]${Number(hwnd) || 0}) | Out-Null
-      Start-Sleep -Milliseconds 180
-      $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-      $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-      $g = [System.Drawing.Graphics]::FromImage($bmp)
-      $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-      $ms = New-Object System.IO.MemoryStream
-      $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Jpeg)
-      $b64 = [Convert]::ToBase64String($ms.ToArray())
-      @{ ok = $true; windowId = ${Number(hwnd) || 0}; imageDataUrl = "data:image/jpeg;base64," + $b64 } | ConvertTo-Json -Compress
+      Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+      $el = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]${Number(hwnd) || 0})
+      $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text)
+      $nodes = $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)
+      $msgs = @()
+      foreach ($n in $nodes) {
+        $nm = $n.Current.Name
+        if ($nm -and $nm.Length -ge 2) { $msgs += @{ text = $nm; isMe = $false } }
+        if ($msgs.Count -ge 40) { break }
+      }
+      @{ ok = $true; windowId = ${Number(hwnd) || 0}; appName = $el.Current.Name; threads = @(); messages = $msgs } | ConvertTo-Json -Depth 4 -Compress
     `;
-    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", ps], {
-      timeout: 8000,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    return JSON.parse(stdout.trim() || "{}");
+    try {
+      const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", ps], { timeout: 8000 });
+      return JSON.parse(stdout.trim() || "{}");
+    } catch (err) {
+      return { ok: false, error: err.message, messages: [], threads: [] };
+    }
   }
 
   async performWindowsAction(hwnd, body = {}) {
-    if (body.type === "type" && body.text) {
+    if (body.type === "reply" && body.text) {
       const b64 = Buffer.from(String(body.text), "utf-8").toString("base64");
       const ps = `
         Add-Type -AssemblyName System.Windows.Forms
@@ -266,7 +298,7 @@ class DesktopSoftwareMonitor {
       `;
       await execFileAsync("powershell.exe", ["-NoProfile", "-Command", ps], { timeout: 6000 });
     }
-    return await this.captureWindowsScreen(hwnd);
+    return await this.readWindowsMessages(hwnd);
   }
 }
 

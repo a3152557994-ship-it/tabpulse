@@ -9,7 +9,7 @@ on:
       tag:
         description: "Release tag to upload Windows zips to"
         required: true
-        default: "v4.0.0"
+        default: "v5.0.0"
 
 permissions:
   contents: write
@@ -37,6 +37,7 @@ jobs:
           mkdir out-cn/resources
           cp hub/ui/index.html out-cn/resources/index.html
           cp hub/ui/mobile.html out-cn/resources/mobile.html
+          cp hub/ui/sw.js out-cn/resources/sw.js
           cp docs/cold-reply-playbook.html out-cn/resources/cold-reply-playbook.html
           cp extension/passive-observer.js out-cn/resources/passive-observer.js
           cp presets.json out-cn/resources/presets.json
@@ -46,6 +47,7 @@ jobs:
           mkdir out-en/resources
           cp hub/ui/index.html out-en/resources/index.html
           cp hub/ui/mobile.html out-en/resources/mobile.html
+          cp hub/ui/sw.js out-en/resources/sw.js
           cp docs/cold-reply-playbook.html out-en/resources/cold-reply-playbook.html
           cp extension/passive-observer.js out-en/resources/passive-observer.js
           cp presets.json out-en/resources/presets.json

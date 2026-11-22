@@ -2,6 +2,7 @@ import ApplicationServices
 import Cocoa
 import CoreGraphics
 import Foundation
+import Vision
 
 func jsonOut(_ obj: Any) {
     if let data = try? JSONSerialization.data(withJSONObject: obj, options: []),
@@ -88,6 +89,7 @@ func collectAxStrings(_ el: AXUIElement, depth: Int = 0, into out: inout [String
 }
 
 func readActiveNotificationBanners(windowList: [[String: Any]]) -> [String] {
+    guard AXIsProcessTrusted() else { return [] }
     let ncWin = windowList.first { w in
         let owner = (w[kCGWindowOwnerName as String] as? String) ?? ""
         return owner == "通知中心" || owner == "Notification Center" || owner == "NotificationCenter"
@@ -106,8 +108,15 @@ let BLOCKED_OWNERS: Set<String> = [
     "Window Server", "Dock", "程序坞", "控制中心", "Control Center",
     "SystemUIServer", "loginwindow", "墙纸", "Wallpaper", "Lockpaw",
     "钥匙串访问", "Keychain Access", "SecurityAgent", "CoreServicesUIAgent",
-    "通知中心", "Notification Center", "NotificationCenter", "DockDoor"
+    "通知中心", "Notification Center", "NotificationCenter", "DockDoor",
+    "universalAccessAuthWarn", "UserNotificationCenter",
+    "消息总管", "ReplyRadar"
 ]
+
+func isSensitiveTitle(_ title: String) -> Bool {
+    let lower = title.lowercased()
+    return title.contains("密钥") || title.contains("令牌") || title.contains("密码") || title.contains("库存") || lower.contains("password") || lower.contains("secret")
+}
 
 func listDesktopState() {
     let opts: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
@@ -125,15 +134,12 @@ func listDesktopState() {
         guard let bounds = w[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
         let width = bounds["Width"] ?? 0
         let height = bounds["Height"] ?? 0
-        if width < 160 || height < 120 { continue }
+        if width < 180 || height < 140 { continue }
 
         let wid = (w[kCGWindowNumber as String] as? Int) ?? 0
         let pid = (w[kCGWindowOwnerPID as String] as? pid_t) ?? 0
         let title = (w[kCGWindowName as String] as? String) ?? ""
-        let lowerTitle = title.lowercased()
-        if title.contains("密钥") || title.contains("令牌") || title.contains("密码") || title.contains("库存") || lowerTitle.contains("password") || lowerTitle.contains("secret") {
-            continue
-        }
+        if isSensitiveTitle(title) { continue }
         let bundleId = runningByPid[pid]?.bundleIdentifier ?? ""
 
         windows.append([
@@ -154,7 +160,6 @@ func listDesktopState() {
     let badges = parseDockBadges()
     let banners = readActiveNotificationBanners(windowList: rawWins)
 
-    // Installed /Applications list for remote 1-tap launch
     let runningBundles = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier })
     var installedApps: [[String: Any]] = []
     if let items = try? FileManager.default.contentsOfDirectory(atPath: "/Applications") {
@@ -189,41 +194,182 @@ func findWindowInfo(_ targetWid: Int) -> [String: Any]? {
     return rawWins.first { (($0[kCGWindowNumber as String] as? Int) ?? -1) == targetWid }
 }
 
-func captureWindowBase64(_ wid: Int) -> [String: Any] {
-    guard let info = findWindowInfo(wid) else {
-        return ["ok": false, "error": "该软件窗口已关闭或最小化，请返回列表重新选择"]
+struct PositionedText {
+    let text: String
+    let x: CGFloat
+    let y: CGFloat
+    let w: CGFloat
+    let h: CGFloat
+}
+
+func axFrame(_ el: AXUIElement) -> CGRect? {
+    var posRef: CFTypeRef?
+    var sizeRef: CFTypeRef?
+    var pt = CGPoint.zero
+    var sz = CGSize.zero
+    if AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &posRef) == .success,
+       let pv = posRef {
+        AXValueGetValue(pv as! AXValue, .cgPoint, &pt)
+    } else {
+        return nil
+    }
+    if AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &sizeRef) == .success,
+       let sv = sizeRef {
+        AXValueGetValue(sv as! AXValue, .cgSize, &sz)
+    }
+    return CGRect(origin: pt, size: sz)
+}
+
+let UI_NOISE: Set<String> = [
+    "关闭", "最小化", "全屏", "缩放", "发送", "Send", "Close", "Minimize", "Zoom",
+    "打开/关闭边栏", "新建对话", "搜索", "Search"
+]
+
+func walkAxTexts(_ el: AXUIElement, depth: Int = 0, visited: inout Int, seen: inout Set<String>, items: inout [PositionedText]) {
+    visited += 1
+    if depth > 14 || items.count >= 90 || visited > 1200 { return }
+    var roleRef: CFTypeRef?
+    let role = (AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &roleRef) == .success) ? (roleRef as? String ?? "") : ""
+
+    if role == "AXStaticText" || role == "AXTextArea" || role == "AXHeading" || role == "AXCell" || role == "AXButton" {
+        for attr in [kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute] {
+            var v: CFTypeRef?
+            if AXUIElementCopyAttributeValue(el, attr as CFString, &v) == .success,
+               let s = v as? String {
+                let clean = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if clean.count >= 2 && clean.count <= 1200 && !UI_NOISE.contains(clean) && !seen.contains(clean) {
+                    if role == "AXButton" && clean.count > 24 { continue }
+                    if let fr = axFrame(el), fr.width > 8 && fr.height > 8 {
+                        seen.insert(clean)
+                        items.append(PositionedText(text: clean, x: fr.origin.x, y: fr.origin.y, w: fr.width, h: fr.height))
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    var chRef: CFTypeRef?
+    if AXUIElementCopyAttributeValue(el, kAXChildrenAttribute as CFString, &chRef) == .success,
+       let children = chRef as? [AXUIElement] {
+        for c in children {
+            if visited > 1200 || items.count >= 90 { break }
+            walkAxTexts(c, depth: depth + 1, visited: &visited, seen: &seen, items: &items)
+        }
+    }
+}
+
+// Pure Text Extraction (AX Tree Primary + In-Memory Apple Neural Engine OCR Fallback — ZERO Screenshots Sent!)
+func extractStructuredWindowMessages(_ wid: Int) -> [String: Any] {
+    guard let info = findWindowInfo(wid),
+          let b = info[kCGWindowBounds as String] as? [String: CGFloat],
+          let pid = info[kCGWindowOwnerPID as String] as? pid_t else {
+        return ["ok": false, "error": "该电脑软件窗口未打开"]
     }
     let owner = (info[kCGWindowOwnerName as String] as? String) ?? ""
     let title = (info[kCGWindowName as String] as? String) ?? ""
-    let tmpPath = NSTemporaryDirectory() + "tp-cap-\(wid)-\(UUID().uuidString.prefix(6)).jpg"
-    defer { try? FileManager.default.removeItem(atPath: tmpPath) }
-
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-    p.arguments = ["-x", "-o", "-t", "jpg", "-l", "\(wid)", tmpPath]
-    try? p.run()
-    p.waitUntilExit()
-
-    guard let rawData = try? Data(contentsOf: URL(fileURLWithPath: tmpPath)),
-          let nsImg = NSImage(data: rawData) else {
-        return ["ok": false, "error": "抓取窗口画面失败，请确认已开启屏幕录制权限"]
+    if isSensitiveTitle(title) {
+        return ["ok": false, "error": "隐私保护已跳过敏感文档窗口"]
     }
 
-    // Resize to max 960px wide for fast 5G loading
-    let origSize = nsImg.size
-    let maxW: CGFloat = 960
-    let scale = origSize.width > maxW ? (maxW / origSize.width) : 1.0
-    let targetSize = NSSize(width: max(1, round(origSize.width * scale)), height: max(1, round(origSize.height * scale)))
+    let winX = b["X"] ?? 0
+    let winY = b["Y"] ?? 0
+    let winW = max(1, b["Width"] ?? 800)
+    let winH = max(1, b["Height"] ?? 600)
 
-    let smallImg = NSImage(size: targetSize)
-    smallImg.lockFocus()
-    nsImg.draw(in: NSRect(origin: .zero, size: targetSize), from: NSRect(origin: .zero, size: origSize), operation: .copy, fraction: 1.0)
-    smallImg.unlockFocus()
+    var seen = Set<String>()
+    var items: [PositionedText] = []
+    let axTrusted = AXIsProcessTrusted()
+    let screenTrusted = CGPreflightScreenCaptureAccess()
 
-    guard let tiff = smallImg.tiffRepresentation,
-          let rep = NSBitmapImageRep(data: tiff),
-          let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.68]) else {
-        return ["ok": false, "error": "编码画面失败"]
+    if axTrusted {
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetAttributeValue(axApp, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        usleep(70_000)
+
+        var visited = 0
+        var winListRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &winListRef) == .success,
+           let axWins = winListRef as? [AXUIElement], let firstWin = axWins.first {
+            walkAxTexts(firstWin, depth: 0, visited: &visited, seen: &seen, items: &items)
+        } else {
+            walkAxTexts(axApp, depth: 0, visited: &visited, seen: &seen, items: &items)
+        }
+    }
+
+    // Fallback: Only if both AX and Screen Recording are already granted, with strict 1.2s timeout so it NEVER blocks!
+    if items.count < 3 && axTrusted && screenTrusted {
+        let tmpPath = NSTemporaryDirectory() + "tp-ocr-\(wid)-\(UUID().uuidString.prefix(6)).jpg"
+        defer { try? FileManager.default.removeItem(atPath: tmpPath) }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        p.arguments = ["-x", "-o", "-t", "jpg", "-l", "\(wid)", tmpPath]
+        let doneSem = DispatchSemaphore(value: 0)
+        p.terminationHandler = { _ in doneSem.signal() }
+        try? p.run()
+        if doneSem.wait(timeout: .now() + 1.2) == .timedOut {
+            p.terminate()
+        }
+
+        if let imgData = try? Data(contentsOf: URL(fileURLWithPath: tmpPath)) {
+            let req = VNRecognizeTextRequest()
+            req.recognitionLevel = .accurate
+            req.recognitionLanguages = ["zh-Hans", "en-US"]
+            req.usesLanguageCorrection = true
+            let handler = VNImageRequestHandler(data: imgData, options: [:])
+            try? handler.perform([req])
+            for obs in req.results ?? [] {
+                guard let top = obs.topCandidates(1).first else { continue }
+                let str = top.string.trimmingCharacters(in: .whitespacesAndNewlines)
+                if str.count >= 2 && !seen.contains(str) {
+                    seen.insert(str)
+                    let box = obs.boundingBox
+                    let px = winX + box.origin.x * winW
+                    let py = winY + (1.0 - box.origin.y - box.height) * winH
+                    items.append(PositionedText(text: str, x: px, y: py, w: box.width * winW, h: box.height * winH))
+                }
+            }
+        }
+    }
+
+    var threads: [[String: Any]] = []
+    var messages: [[String: Any]] = []
+
+    let sorted = items.sorted { a, b in
+        if abs(a.y - b.y) > 10 { return a.y < b.y }
+        return a.x < b.x
+    }
+
+    for it in sorted {
+        let relX = (it.x - winX) / winW
+        let relY = (it.y - winY) / winH
+        if relY < 0.05 { continue }
+        if relX < 0.28 && it.text.count <= 26 && threads.count < 14 {
+            threads.append([
+                "title": it.text,
+                "label": it.text,
+                "xRatio": Double(max(0.02, min(0.98, (it.x + it.w * 0.5 - winX) / winW))),
+                "yRatio": Double(max(0.02, min(0.98, (it.y + it.h * 0.5 - winY) / winH)))
+            ])
+        } else if relX >= 0.22 || it.text.count > 26 {
+            let centerRatio = (it.x + it.w * 0.5 - winX) / winW
+            messages.append([
+                "text": it.text,
+                "isMe": centerRatio > 0.64
+            ])
+        }
+    }
+
+    if messages.isEmpty {
+        let hint = axTrusted
+            ? (title.isEmpty ? "当前窗口暂无更多文字气泡，可直接在下方打字发送。" : "当前会话：\(title)")
+            : (title.isEmpty
+                ? "当前窗口：\(owner)（未读红点提醒已实时生效；如需读取软件内部聊天文字，请在电脑『系统设置 → 隐私与安全性 → 辅助功能』勾选《消息总管》）"
+                : "当前会话：\(title)\n（如需同步窗口内完整聊天文字，请在电脑『系统设置 → 隐私与安全性 → 辅助功能』勾选《消息总管》）")
+        messages.append([
+            "text": hint,
+            "isMe": false
+        ])
     }
 
     return [
@@ -231,14 +377,16 @@ func captureWindowBase64(_ wid: Int) -> [String: Any] {
         "windowId": wid,
         "appName": owner,
         "title": title,
-        "imageDataUrl": "data:image/jpeg;base64," + jpg.base64EncodedString()
+        "axTrusted": axTrusted,
+        "threads": threads,
+        "messages": Array(messages.suffix(45))
     ]
 }
 
 func activateWindowOwner(_ info: [String: Any]) {
     if let pid = info[kCGWindowOwnerPID as String] as? pid_t,
        let app = NSRunningApplication(processIdentifier: pid) {
-        app.activate(options: [.activateIgnoringOtherApps])
+        app.activate()
         usleep(120_000)
     }
 }
@@ -276,50 +424,30 @@ switch cmd {
 case "list":
     listDesktopState()
 
-case "capture":
+case "read-messages":
     let wid = args.count > 2 ? (Int(args[2]) ?? 0) : 0
-    jsonOut(captureWindowBase64(wid))
+    jsonOut(extractStructuredWindowMessages(wid))
 
-case "click":
+case "select-thread":
     let wid = args.count > 2 ? (Int(args[2]) ?? 0) : 0
-    let xr = args.count > 3 ? (Double(args[3]) ?? 0.5) : 0.5
-    let yr = args.count > 4 ? (Double(args[4]) ?? 0.5) : 0.5
-    guard let info = findWindowInfo(wid),
-          let b = info[kCGWindowBounds as String] as? [String: CGFloat] else {
-        jsonOut(["ok": false, "error": "窗口不存在"])
-        exit(0)
-    }
-    activateWindowOwner(info)
-    let px = (b["X"] ?? 0) + (b["Width"] ?? 100) * CGFloat(max(0.01, min(0.99, xr)))
-    let py = (b["Y"] ?? 0) + (b["Height"] ?? 100) * CGFloat(max(0.01, min(0.99, yr)))
-    postMouseClick(at: CGPoint(x: px, y: py))
-    usleep(380_000)
-    jsonOut(captureWindowBase64(wid))
-
-case "scroll":
-    let wid = args.count > 2 ? (Int(args[2]) ?? 0) : 0
-    let dy = args.count > 3 ? (Int32(args[3]) ?? -5) : -5
+    let xr = args.count > 3 ? (Double(args[3]) ?? 0.15) : 0.15
+    let yr = args.count > 4 ? (Double(args[4]) ?? 0.3) : 0.3
     if let info = findWindowInfo(wid),
        let b = info[kCGWindowBounds as String] as? [String: CGFloat] {
         activateWindowOwner(info)
-        let cx = (b["X"] ?? 0) + (b["Width"] ?? 200) * 0.5
-        let cy = (b["Y"] ?? 0) + (b["Height"] ?? 200) * 0.5
-        let src = CGEventSource(stateID: .hidSystemState)
-        if let move = CGEvent(mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: cx, y: cy), mouseButton: .left) {
-            move.post(tap: .cghidEventTap)
-        }
-        if let wheel = CGEvent(scrollWheelEvent2Source: src, units: .line, wheelCount: 1, wheel1: dy, wheel2: 0, wheel3: 0) {
-            wheel.post(tap: .cghidEventTap)
-        }
-        usleep(320_000)
+        let px = (b["X"] ?? 0) + (b["Width"] ?? 100) * CGFloat(xr)
+        let py = (b["Y"] ?? 0) + (b["Height"] ?? 100) * CGFloat(yr)
+        postMouseClick(at: CGPoint(x: px, y: py))
+        usleep(420_000)
     }
-    jsonOut(captureWindowBase64(wid))
+    jsonOut(extractStructuredWindowMessages(wid))
 
-case "type":
+case "reply-text":
     let wid = args.count > 2 ? (Int(args[2]) ?? 0) : 0
     let b64 = args.count > 3 ? args[3] : ""
     let submitMode = args.count > 4 ? args[4] : "enter"
     guard let info = findWindowInfo(wid),
+          let b = info[kCGWindowBounds as String] as? [String: CGFloat],
           let textData = Data(base64Encoded: b64),
           let text = String(data: textData, encoding: .utf8) else {
         jsonOut(["ok": false, "error": "参数或窗口无效"])
@@ -331,22 +459,28 @@ case "type":
     pb.setString(text, forType: .string)
 
     activateWindowOwner(info)
+    // Click standard bottom-right chat input area first to ensure input focus
+    let ix = (b["X"] ?? 0) + (b["Width"] ?? 600) * 0.62
+    let iy = (b["Y"] ?? 0) + (b["Height"] ?? 600) * 0.90
+    postMouseClick(at: CGPoint(x: ix, y: iy))
+    usleep(120_000)
+
     if !text.isEmpty {
         postKeyCombo(keyCode: 9, flags: .maskCommand) // Cmd+V
         usleep(140_000)
     }
     if submitMode == "enter" {
-        postKeyCombo(keyCode: 36, flags: []) // Return
+        postKeyCombo(keyCode: 36, flags: [])
     } else if submitMode == "cmd_enter" {
-        postKeyCombo(keyCode: 36, flags: .maskCommand) // Cmd+Return
+        postKeyCombo(keyCode: 36, flags: .maskCommand)
     }
     usleep(480_000)
     if let old = prevText {
         pb.clearContents()
         pb.setString(old, forType: .string)
     }
-    var out = captureWindowBase64(wid)
-    out["typed"] = true
+    var out = extractStructuredWindowMessages(wid)
+    out["sent"] = true
     jsonOut(out)
 
 case "launch":

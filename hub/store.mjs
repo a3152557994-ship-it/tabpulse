@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDefaultWatches } from "../seed/default-watches.mjs";
 import { PLAN_LABELS, verifyLicenseKey } from "./license.mjs";
+import { generateVapidKeys, sendWebPushNotification } from "./webpush.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA_FILE = path.resolve(__dirname, "..", "data", "state.json");
@@ -45,10 +46,12 @@ const DEFAULT_QUICK_REPLIES = [
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "4.0.0",
+    version: "5.0.0",
     extensionHeartbeatAt: null,
     license: null,
     mobileToken: crypto.randomBytes(24).toString("base64url"),
+    vapidKeys: generateVapidKeys(),
+    pushSubscriptions: [],
     settings: {
       webhookUrl: "",
       radarKeywords: "Shopify",
@@ -80,10 +83,20 @@ export function loadState(now = new Date()) {
     if (!Array.isArray(parsed.quickReplies) || parsed.quickReplies.length === 0) {
       parsed.quickReplies = DEFAULT_QUICK_REPLIES;
     }
+    let dirty = false;
     if (!parsed.mobileToken || typeof parsed.mobileToken !== "string" || parsed.mobileToken.length < 16) {
       parsed.mobileToken = crypto.randomBytes(24).toString("base64url");
-      saveState(parsed);
+      dirty = true;
     }
+    if (!parsed.vapidKeys || !parsed.vapidKeys.publicKey || !parsed.vapidKeys.privateKey) {
+      parsed.vapidKeys = generateVapidKeys();
+      dirty = true;
+    }
+    if (!Array.isArray(parsed.pushSubscriptions)) {
+      parsed.pushSubscriptions = [];
+      dirty = true;
+    }
+    if (dirty) saveState(parsed);
     return parsed;
   } catch {
     const initial = makeDefaultState(now);
@@ -485,6 +498,50 @@ export function rotateMobileToken() {
   return state.mobileToken;
 }
 
+export function getVapidPublicKey() {
+  const state = loadState();
+  return state.vapidKeys.publicKey;
+}
+
+export function savePushSubscription(sub) {
+  if (!sub || !sub.endpoint) return { ok: false, error: "endpoint required" };
+  const state = loadState();
+  const list = Array.isArray(state.pushSubscriptions) ? state.pushSubscriptions : [];
+  const filtered = list.filter((x) => x.endpoint !== sub.endpoint);
+  filtered.unshift({
+    endpoint: sub.endpoint,
+    keys: sub.keys || {},
+    createdAt: new Date().toISOString(),
+  });
+  state.pushSubscriptions = filtered.slice(0, 12);
+  saveState(state);
+  return { ok: true, count: state.pushSubscriptions.length };
+}
+
+export async function broadcastMobileWebPush(payloadObj = {}) {
+  const state = loadState();
+  const subs = Array.isArray(state.pushSubscriptions) ? state.pushSubscriptions : [];
+  if (!subs.length) return { sent: 0 };
+  const unreadTotal = state.watches
+    .filter((w) => w.status === "unread")
+    .reduce((s, w) => s + (Number(w.unreadCount) || 0), 0);
+  const fullPayload = { unreadTotal: Math.max(1, unreadTotal), ...payloadObj };
+  const keep = [];
+  let sent = 0;
+  for (const sub of subs) {
+    const res = await sendWebPushNotification(sub, fullPayload, state.vapidKeys);
+    if (res.status !== 404 && res.status !== 410) {
+      keep.push(sub);
+    }
+    if (res.ok) sent++;
+  }
+  if (keep.length !== subs.length) {
+    state.pushSubscriptions = keep;
+    saveState(state);
+  }
+  return { sent, activeDevices: keep.length };
+}
+
 export function getPublicSummary(nowDate = new Date()) {
   const state = loadState(nowDate);
   const watches = state.watches;
@@ -492,7 +549,8 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "4.0.0",
+    version: "5.0.0",
+    pushSubscribersCount: (state.pushSubscriptions || []).length,
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),
     settings: state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh" },

@@ -56,12 +56,12 @@ BIN_TMP="$(mktemp -d)"
 UNIVERSAL_DIRECT="$BIN_TMP/DirectExec"
 /usr/bin/lipo -create "$BIN_TMP/direct-arm64" "$BIN_TMP/direct-x86_64" -output "$UNIVERSAL_DIRECT"
 
-# Universal Desktop Bridge Helper (Dock Badges + Notification Sniffer + Window Capture/Reply)
+# Universal Desktop Bridge Helper (Dock Badges + Notification Sniffer + Pure-Text Accessibility/Vision Sync)
 /usr/bin/swiftc -O -target arm64-apple-macos12.0 \
-  -framework Cocoa -framework CoreGraphics -framework ApplicationServices \
+  -framework Cocoa -framework CoreGraphics -framework ApplicationServices -framework Vision \
   "$PROJECT_ROOT/native-mac/DesktopBridgeHelper.swift" -o "$BIN_TMP/helper-arm64"
 /usr/bin/swiftc -O -target x86_64-apple-macos12.0 \
-  -framework Cocoa -framework CoreGraphics -framework ApplicationServices \
+  -framework Cocoa -framework CoreGraphics -framework ApplicationServices -framework Vision \
   "$PROJECT_ROOT/native-mac/DesktopBridgeHelper.swift" -o "$BIN_TMP/helper-x86_64"
 UNIVERSAL_HELPER="$BIN_TMP/mac-desktop-helper"
 /usr/bin/lipo -create "$BIN_TMP/helper-arm64" "$BIN_TMP/helper-x86_64" -output "$UNIVERSAL_HELPER"
@@ -160,7 +160,7 @@ bundle_embedded_server() {
   local srv_root="$app_dir/Contents/Resources/app-server"
   mkdir -p "$srv_root/hub/ui" "$srv_root/seed" "$srv_root/docs" "$srv_root/bin"
   cp "$PROJECT_ROOT/hub/"*.mjs "$srv_root/hub/"
-  cp "$PROJECT_ROOT/hub/ui/"*.html "$srv_root/hub/ui/"
+  cp "$PROJECT_ROOT/hub/ui/"* "$srv_root/hub/ui/"
   cp "$PROJECT_ROOT/seed/"*.mjs "$srv_root/seed/"
   cp "$PROJECT_ROOT/docs/cold-reply-playbook.html" "$srv_root/docs/"
   cp "$PROJECT_ROOT/llms.txt" "$srv_root/"
@@ -168,14 +168,19 @@ bundle_embedded_server() {
   chmod +x "$srv_root/bin/mac-desktop-helper"
 }
 
-echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
-populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "4.0.0" "4"
-bundle_embedded_server "$DIST_DIR/消息总管.app"
-/usr/bin/codesign --force --deep --sign - "$DIST_DIR/消息总管.app"
+SIGN_IDENTITY="-"
+if security find-identity -v -p codesigning | grep -q "Apple Development: Yang He (KU364788TC)"; then
+  SIGN_IDENTITY="Apple Development: Yang He (KU364788TC)"
+fi
 
-populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "4.0.0" "4"
+echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
+populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.0.0" "5"
+bundle_embedded_server "$DIST_DIR/消息总管.app"
+/usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/消息总管.app"
+
+populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.0.0" "5"
 bundle_embedded_server "$DIST_DIR/ReplyRadar.app"
-/usr/bin/codesign --force --deep --sign - "$DIST_DIR/ReplyRadar.app"
+/usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/ReplyRadar.app"
 
 echo "[4/6] Running self-tests on compiled Universal binaries..."
 SAMPLE_KEY="$(/usr/local/bin/node "$PROJECT_ROOT/bin/generate-license.mjs" --plan lifetime --count 1 --prefix TEST | awk -F'\t' '{print $4}')"

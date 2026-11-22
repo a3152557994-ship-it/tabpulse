@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { broadcastMobileWebPush } from "./store.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -92,6 +93,8 @@ function readTranscriptTailSummary(conversationId) {
 }
 
 export async function notifyUnread(item, settings = {}, mobileLink = "") {
+  const targetKey = `web:${item.id}`;
+  const deepLink = mobileLink ? `${mobileLink}#open=${encodeURIComponent(targetKey)}` : "";
   const subject = `🚨【消息总管】${item.name} 有 ${item.unreadCount} 条新消息`;
   const body = [
     `平台：${item.name}`,
@@ -107,14 +110,20 @@ export async function notifyUnread(item, settings = {}, mobileLink = "") {
     return { skipped: true, reason: "TABPULSE_DISABLE_EXTERNAL_EFFECTS=1" };
   }
 
-  const result = { macBanner: null, agent: null, webhook: null };
+  const result = { macBanner: null, agent: null, webhook: null, webPush: null };
   result.macBanner = await showMacBanner(
     `消息总管：${item.name} (${item.unreadCount}条新消息)`,
     item.snippet || item.contextSummary || "点击打开工作台或手机随身端直接回复"
   );
 
+  result.webPush = await broadcastMobileWebPush({
+    title: `🔴 ${item.name} (${item.unreadCount}条未读)`,
+    body: item.snippet || item.contextSummary || "点击红点直接进入查看并回复",
+    targetKey,
+  }).catch(() => null);
+
   if (settings?.webhookUrl) {
-    result.webhook = await sendCustomerWebhook(settings.webhookUrl, subject, body, mobileLink);
+    result.webhook = await sendCustomerWebhook(settings.webhookUrl, subject, body, deepLink);
   }
 
   if (item.conversationId && fs.existsSync(AGENTAPI_BIN)) {
@@ -141,6 +150,8 @@ export async function notifyUnread(item, settings = {}, mobileLink = "") {
 }
 
 export async function notifyAuthExpired(item, settings = {}, mobileLink = "") {
+  const targetKey = `web:${item.id}`;
+  const deepLink = mobileLink ? `${mobileLink}#open=${encodeURIComponent(targetKey)}` : "";
   const title = `🟠【消息总管】登录待刷新：${item.name}`;
   const summary = `平台「${item.name}」当前未登录，已自动停检保护账号。`;
 
@@ -149,21 +160,33 @@ export async function notifyAuthExpired(item, settings = {}, mobileLink = "") {
     return { skipped: true, reason: "TABPULSE_DISABLE_EXTERNAL_EFFECTS=1" };
   }
 
+  await broadcastMobileWebPush({
+    title,
+    body: summary,
+    targetKey,
+  }).catch(() => null);
+
   if (settings?.webhookUrl) {
-    await sendCustomerWebhook(settings.webhookUrl, title, summary, mobileLink);
+    await sendCustomerWebhook(settings.webhookUrl, title, summary, deepLink);
   }
   return { ok: true };
 }
 
-export async function notifyAgentAlert({ title, summary }, settings = {}, mobileLink = "") {
+export async function notifyAgentAlert({ title, summary, targetKey = "" }, settings = {}, mobileLink = "") {
   if (externalEffectsDisabled()) {
     notificationLog.push({ type: "agent_alert", title, summary, skipped: true });
     return { skipped: true };
   }
+  const deepLink = mobileLink && targetKey ? `${mobileLink}#open=${encodeURIComponent(targetKey)}` : mobileLink;
   await showMacBanner(title, summary);
+  const webPush = await broadcastMobileWebPush({
+    title,
+    body: summary,
+    targetKey: targetKey || "cc:latest",
+  }).catch(() => null);
   let webhook = null;
   if (settings?.webhookUrl) {
-    webhook = await sendCustomerWebhook(settings.webhookUrl, title, summary, mobileLink);
+    webhook = await sendCustomerWebhook(settings.webhookUrl, title, summary, deepLink);
   }
-  return { ok: true, webhook };
+  return { ok: true, webhook, webPush };
 }

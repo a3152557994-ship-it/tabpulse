@@ -233,12 +233,12 @@
           <div>
             <h2 style="margin:0 0 4px;font-size:18px;">🖥️ 全电脑桌面软件实时监控（不限网页版 · 微信 / 千牛 / Antigravity / 飞书全覆盖）</h2>
             <div style="font-size:13px;color:var(--muted);">
-              零注入读取系统程序坞未读红点与右上角通知弹窗（0 封号隐患）；出门用手机扫码打开<strong>「手机随身版 → 电脑软件」</strong>即可实时看任意软件窗口画面、远程点选联系人并直接代打发送回复！
+              零注入读取系统程序坞未读红点与右上角通知弹窗（0 封号隐患）；出门时来消息手机自动响铃亮红点，点进<strong>「手机随身版」</strong>对应平台的红点即可直接看纯文字聊天记录并代打回复（无需看电脑屏幕截图）！
             </div>
           </div>
           <div style="display:flex;gap:8px;">
             <button class="sm" onclick="refreshDesktopMonitorView()">↻ 立即刷新窗口列表</button>
-            <button class="sm primary" onclick="openMobileModal()">📲 手机扫码远程看电脑软件</button>
+            <button class="sm primary" onclick="openMobileModal()">📲 手机扫码随身收消息</button>
           </div>
         </div>
         <div id="desk-mon-badges" style="margin-top:12px;"></div>
@@ -506,9 +506,9 @@
   <!-- MODAL: MOBILE POCKET CONSOLE & QR PAIRING -->
   <div class="modal-backdrop" id="modal-mobile">
     <div class="modal" style="max-width:560px;">
-      <h2 id="mob-title">📲 手机随身版（免装软件 · 全程走电脑固定 IP 防封号）</h2>
+      <h2 id="mob-title">📲 手机随身收件箱（来消息响铃亮红点 · 点红点直看文字回复）</h2>
       <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="mob-desc">
-        手机扫码即可添加到桌面当原生 App 用！无论手机怎么切 Wi-Fi / 5G 流量，所有请求都由家里这台电脑的固定干净网络发出，可在手机上<strong>远程看画面直接回各平台消息</strong>，也能<strong>随时接收 Claude Code (CC) 完成提醒并继续发指令</strong>！
+        手机扫码即可添加到主屏幕当原生收件箱用！无论手机怎么切 Wi-Fi / 5G 流量，所有请求都由家里电脑的固定干净网络发出；来新消息手机自动提醒亮红点，<strong>点进对应平台的红点就能直接看纯文字消息并回复（不传笨重电脑屏幕图）</strong>！
       </p>
       <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:center;background:#f8fafc;border:1px solid var(--border);border-radius:14px;padding:14px;">
         <div id="mob-qr-box" style="width:210px;height:210px;background:#fff;border-radius:12px;border:1px solid var(--border);display:grid;place-items:center;">
