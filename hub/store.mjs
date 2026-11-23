@@ -46,7 +46,7 @@ const DEFAULT_QUICK_REPLIES = [
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "5.1.0",
+    version: "5.2.0",
     extensionHeartbeatAt: null,
     license: null,
     mobileToken: crypto.randomBytes(24).toString("base64url"),
@@ -177,6 +177,26 @@ export function updateSettings(patch = {}, nowDate = new Date()) {
     lang: patch.lang === "en" ? "en" : patch.lang === "zh" ? "zh" : current.lang || "zh",
     termsAcceptedAt:
       patch.termsAcceptedAt !== undefined ? patch.termsAcceptedAt : (current.termsAcceptedAt || null),
+    aiButlerEnabled:
+      patch.aiButlerEnabled !== undefined ? Boolean(patch.aiButlerEnabled) : Boolean(current.aiButlerEnabled),
+    aiButlerProvider:
+      patch.aiButlerProvider !== undefined ? String(patch.aiButlerProvider || "codex") : (current.aiButlerProvider || "codex"),
+    aiButlerPersona:
+      patch.aiButlerPersona !== undefined ? String(patch.aiButlerPersona || "").trim() : (current.aiButlerPersona || ""),
+    aiButlerConversationId:
+      patch.aiButlerConversationId !== undefined
+        ? String(patch.aiButlerConversationId || "").trim()
+        : (current.aiButlerConversationId || ""),
+    aiButlerWebhookUrl:
+      patch.aiButlerWebhookUrl !== undefined
+        ? String(patch.aiButlerWebhookUrl || "").trim()
+        : (current.aiButlerWebhookUrl || ""),
+    aiButlerApiUrl:
+      patch.aiButlerApiUrl !== undefined ? String(patch.aiButlerApiUrl || "").trim() : (current.aiButlerApiUrl || ""),
+    aiButlerApiKey:
+      patch.aiButlerApiKey !== undefined ? String(patch.aiButlerApiKey || "").trim() : (current.aiButlerApiKey || ""),
+    aiButlerModel:
+      patch.aiButlerModel !== undefined ? String(patch.aiButlerModel || "").trim() : (current.aiButlerModel || "gpt-4o-mini"),
   };
   saveState(state);
   return state.settings;
@@ -549,7 +569,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "5.1.0",
+    version: "5.2.0",
     pushSubscribersCount: (state.pushSubscriptions || []).length,
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),

@@ -3,6 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PRESET_PACKS } from "../seed/preset-packs.mjs";
+import { aiButler } from "./ai-butler.mjs";
 import { aiInbox } from "./ai-inbox.mjs";
 import { installAiClient, listAiClientsStatus } from "./ai-installer.mjs";
 import { desktopMonitor } from "./desktop-monitor.mjs";
@@ -122,10 +123,31 @@ export function createHubServer(options = {}) {
     notifyAgentAlert({ title, summary, targetKey: targetKey || "cc:latest" }, st.settings || {}, link).catch(() => {});
   };
 
-  desktopMonitor.onDesktopAlert = ({ title, summary, targetKey }) => {
+  desktopMonitor.onDesktopAlert = async ({ title, summary, targetKey }) => {
     const st = loadState();
     const link = currentMobileLink(serverPortRef.port);
-    notifyAgentAlert({ title, summary, targetKey: targetKey || "" }, st.settings || {}, link).catch(() => {});
+    const appLabel = String(title || "电脑软件").replace(/^🔔\s*|\s*新消息$/g, "");
+    const butlerOut = await aiButler
+      .runAiTriage(
+        {
+          sourceType: "desktop_app",
+          platformName: appLabel,
+          targetKey: targetKey || `app:${appLabel}`,
+          snippet: summary || "",
+          unreadCount: 1,
+        },
+        st.settings || {}
+      )
+      .catch(() => ({ enabled: false }));
+    if (butlerOut?.enabled && butlerOut?.ok && butlerOut?.isSpam) {
+      return; // AI Assistant filtered junk promo automatically!
+    }
+    const enrichedSummary = butlerOut?.suggestion?.summary
+      ? `🧠 AI助理：${butlerOut.suggestion.summary}`
+      : summary;
+    notifyAgentAlert({ title, summary: enrichedSummary, targetKey: targetKey || "" }, st.settings || {}, link).catch(
+      () => {}
+    );
   };
 
   aiInbox.onAiAlert = ({ title, summary, targetKey }) => {
@@ -171,7 +193,7 @@ export function createHubServer(options = {}) {
     try {
       // Public lightweight endpoints
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "5.1.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "5.2.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
         return;
       }
       if (req.method === "GET" && pathname === "/sw.js") {
@@ -311,6 +333,47 @@ export function createHubServer(options = {}) {
         }
         const body = await readJsonBody(req);
         sendJson(res, 200, desktopRelay.submitCommandResult(body.taskId, body), corsOrigin);
+        return;
+      }
+
+      // AI Personal Butler (Instant Event-to-AI Triage & Auto-Drafting) routes
+      if (pathname === "/api/ai-butler/state" && req.method === "GET") {
+        const since = Number(reqUrl.searchParams.get("since") || 0);
+        const st = loadState();
+        sendJson(
+          res,
+          200,
+          {
+            ...aiButler.getEventsSince(since),
+            enabled: Boolean(st.settings?.aiButlerEnabled),
+            provider: st.settings?.aiButlerProvider || "codex",
+            providers: localTrusted ? aiButler.detectAvailableProviders() : [],
+          },
+          corsOrigin,
+          authCookieHeader
+        );
+        return;
+      }
+      if (pathname === "/api/ai-butler/simulate" && req.method === "POST") {
+        if (!localTrusted) {
+          sendJson(res, 403, { ok: false, error: "desktop only" }, corsOrigin);
+          return;
+        }
+        const body = await readJsonBody(req);
+        const st = loadState();
+        const firstWatch = st.watches[0] || { id: "demo", name: "闲鱼买家咨询" };
+        const out = await aiButler.runAiTriage(
+          {
+            sourceType: "web",
+            platformName: body.platformName || firstWatch.name,
+            targetKey: body.targetKey || `web:${firstWatch.id}`,
+            snippet: body.snippet || "你好老板，请问这个软件苹果Mac和Windows电脑都能用吗？拍下多久发货？",
+            contextSummary: firstWatch.contextSummary || "",
+            unreadCount: 1,
+          },
+          { ...st.settings, aiButlerEnabled: true, aiButlerProvider: body.provider || st.settings?.aiButlerProvider || "rule_fast" }
+        );
+        sendJson(res, 200, { ok: true, ...out }, corsOrigin);
         return;
       }
 
@@ -557,8 +620,14 @@ export function createHubServer(options = {}) {
       if (req.method === "GET" && pathname === "/api/state") {
         const sum = getPublicSummary();
         // Mask raw webhook URL on mobile view for privacy while showing whether push is active
-        if (!localTrusted && sum.settings?.webhookUrl) {
-          sum.settings = { ...sum.settings, webhookConfigured: true, webhookUrl: "••••••••" };
+        if (!localTrusted && sum.settings) {
+          sum.settings = {
+            ...sum.settings,
+            webhookConfigured: Boolean(sum.settings.webhookUrl),
+            webhookUrl: sum.settings.webhookUrl ? "••••••••" : "",
+            aiButlerApiKey: sum.settings.aiButlerApiKey ? "••••••••" : "",
+            aiButlerWebhookUrl: sum.settings.aiButlerWebhookUrl ? "••••••••" : "",
+          };
         }
         sendJson(
           res,
@@ -632,15 +701,39 @@ export function createHubServer(options = {}) {
         }
 
         let alertResult = null;
+        let butlerOut = null;
+        if (recorded.shouldAlertUnread) {
+          butlerOut = await aiButler
+            .runAiTriage(
+              {
+                sourceType: "web",
+                platformName: recorded.item.name,
+                targetKey: `web:${recorded.item.id}`,
+                snippet: recorded.item.snippet || "",
+                contextSummary: recorded.item.contextSummary || "",
+                unreadCount: recorded.item.unreadCount,
+              },
+              recorded.settings || {}
+            )
+            .catch(() => null);
+          if (butlerOut?.suggestion?.suggestedReplies?.[0]) {
+            saveReplyDraft(recorded.item.id, butlerOut.suggestion.suggestedReplies[0]);
+          }
+        }
+
         if (!body.skipExternal) {
           const mobLink = currentMobileLink(serverPortRef.port);
           if (recorded.shouldAlertUnread) {
-            alertResult = await notifyUnread(recorded.item, recorded.settings, mobLink);
+            if (!(butlerOut?.enabled && butlerOut?.ok && butlerOut?.isSpam)) {
+              alertResult = await notifyUnread(recorded.item, recorded.settings, mobLink);
+            } else {
+              alertResult = { skippedByAiButlerSpamFilter: true };
+            }
           } else if (recorded.shouldAlertAuth) {
             alertResult = await notifyAuthExpired(recorded.item, recorded.settings, mobLink);
           }
         }
-        sendJson(res, 200, { ok: true, ...recorded, alertResult }, corsOrigin);
+        sendJson(res, 200, { ok: true, ...recorded, alertResult, aiButler: butlerOut }, corsOrigin);
         return;
       }
 
@@ -713,6 +806,6 @@ if (isDirectEntrypoint()) {
   const port = Number(process.env.TABPULSE_PORT || 17890);
   const server = createHubServer({ port });
   server.listen(port, host, () => {
-    console.log(`TabPulse Hub v5.1.0 listening on http://${host}:${port}`);
+    console.log(`TabPulse Hub v5.2.0 listening on http://${host}:${port}`);
   });
 }

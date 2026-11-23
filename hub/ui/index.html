@@ -543,13 +543,31 @@
 
   <!-- MODAL: 1-CLICK AI AGENT AUTO-MOUNT (MCP + SKILL + HOOKS) -->
   <div class="modal-backdrop" id="modal-ai-mount">
-    <div class="modal" style="max-width:600px;">
-      <h2>🔌 一键给电脑上的 AI 装上（AI 自动调我推手机 &amp; 手机一键拍板）</h2>
+    <div class="modal" style="max-width:640px;">
+      <h2>🧠 AI 个人助理实时看信 &amp; 一键接入电脑全部 AI</h2>
       <p style="font-size:12.5px;color:var(--muted);margin-top:0;line-height:1.55;">
-        不用你手动盯窗口或写配置！点一下接入后，电脑上的 AI（Claude Code / Cursor / Codex / Antigravity 等）就会自带<strong>「推手机红点 (`notify_phone`)」</strong>与<strong>「发选项让你在手机一键拍板 (`ask_human`)」</strong>能力，跑完活或遇到分岔口会自动喊你手机！
+        <strong>双向打通：</strong>① 任何网页平台或电脑软件一来消息，<strong>你的 AI 个人助理立马就知道</strong>，自动替你筛广告、看重点、拟好回复草稿推到手机让你一键点发；② 电脑上的 AI 干完活也会自动调《消息总管》推手机红点！
       </p>
+
+      <div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:12px;padding:13px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <label style="font-size:13.5px;font-weight:800;color:#1e3a8a;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="butler-enabled" style="width:16px;height:16px;" />
+            开启「来消息 AI 个人助理立马看信并拟好回复」
+          </label>
+          <div style="display:flex;gap:6px;">
+            <button class="sm" onclick="simulateButlerIncoming()">⚡ 模拟来信实测效果</button>
+            <button class="sm primary" onclick="saveButlerConfig()">💾 保存助理设置</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <select id="butler-provider" style="padding:7px 9px;border:1px solid #bfdbfe;border-radius:8px;font-size:12.5px;background:#fff;"></select>
+          <input id="butler-persona" placeholder="口吻备注（可选，如：礼貌简短，报39元买断）" style="padding:7px 9px;border:1px solid #bfdbfe;border-radius:8px;font-size:12.5px;background:#fff;" />
+        </div>
+      </div>
+
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <strong style="font-size:13px;">本机检测到的 AI 工具：</strong>
+        <strong style="font-size:13px;">给电脑上的编码/工作 AI 一键装上传呼机（MCP + 技能）：</strong>
         <button class="sm primary" onclick="installAiClientAction('all')">🚀 一键接入全部已装 AI</button>
       </div>
       <div id="ai-clients-list" style="display:grid;gap:8px;margin-bottom:14px;">⏳ 正在检测本机 AI 工具...</div>
@@ -1833,8 +1851,25 @@
     async function refreshAiClientsModal() {
       const box = document.getElementById("ai-clients-list");
       try {
-        const res = await fetch("/api/ai-clients/status");
+        const [res, bRes] = await Promise.all([fetch("/api/ai-clients/status"), fetch("/api/ai-butler/state")]);
         const data = await res.json();
+        const bData = await bRes.json();
+
+        const chk = document.getElementById("butler-enabled");
+        if (chk) chk.checked = Boolean(appState.settings?.aiButlerEnabled);
+        const pInput = document.getElementById("butler-persona");
+        if (pInput) pInput.value = appState.settings?.aiButlerPersona || "";
+        const sel = document.getElementById("butler-provider");
+        if (sel && Array.isArray(bData.providers)) {
+          const curProv = appState.settings?.aiButlerProvider || "codex";
+          sel.innerHTML = bData.providers
+            .map(
+              (p) =>
+                `<option value="${escapeAttr(p.id)}" ${p.id === curProv ? "selected" : ""}>${escapeHtml(p.name)}${p.installed ? " ✓" : ""}</option>`
+            )
+            .join("");
+        }
+
         document.getElementById("ai-one-liner-box").value = data.oneSentenceForAnyAi || "";
         box.innerHTML = (data.clients || [])
           .map(
@@ -1870,6 +1905,32 @@
       } else {
         showToast("⚠️ " + (data.error || "接入失败"));
       }
+    }
+
+    async function saveButlerConfig() {
+      const aiButlerEnabled = Boolean(document.getElementById("butler-enabled")?.checked);
+      const aiButlerProvider = document.getElementById("butler-provider")?.value || "codex";
+      const aiButlerPersona = document.getElementById("butler-persona")?.value || "";
+      await apiCall("POST", "/api/settings", { aiButlerEnabled, aiButlerProvider, aiButlerPersona });
+      await refreshState();
+      showToast(aiButlerEnabled ? "✅ 已开启 AI 个人助理实时看信与自动拟稿！" : "已关闭 AI 个人助理自动看信");
+    }
+
+    async function simulateButlerIncoming() {
+      showToast("⏳ 正在模拟客户来信并唤醒 AI 个人助理分析拟稿...");
+      const provider = document.getElementById("butler-provider")?.value || "rule_fast";
+      const res = await fetch("/api/ai-butler/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
+      });
+      const out = await res.json();
+      if (out.suggestion?.summary) {
+        showToast("🧠 AI 助理已秒知并推到手机：" + out.suggestion.summary);
+      } else {
+        showToast("✅ 已触发实时来信事件并推送至手机端！");
+      }
+      await refreshState();
     }
 
     function copyOneLineAiPrompt() {

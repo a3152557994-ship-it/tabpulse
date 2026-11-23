@@ -129,7 +129,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
     assert.equal(health.ok, true);
-    assert.equal(health.version, "5.1.0");
+    assert.equal(health.version, "5.2.0");
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -221,7 +221,10 @@ test("MCP stdio server v0.2.0 exposes 5 tools and completes roundtrip", async ()
       method: "initialize",
       params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
     });
-    assert.equal(init.result.serverInfo.version, "5.1.0");
+    assert.equal(init.result.serverInfo.version, "5.2.0");
+
+    const resList = await sendAndWait({ jsonrpc: "2.0", id: 99, method: "resources/list", params: {} });
+    assert.equal(resList.result.resources[0].uri, "replyradar://events/live");
 
     const listed = await sendAndWait({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     assert.equal(listed.result.tools.length, 9);
@@ -408,6 +411,39 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
     assert.equal(aiStatus.clients.find((c) => c.id === "claude-code").connected, true);
     assert.equal(aiStatus.clients.find((c) => c.id === "cursor").connected, true);
     assert.equal(aiStatus.clients.find((c) => c.id === "codex").connected, true);
+
+    // 9. Verify GPT-style AI Personal Butler: immediately knows incoming platform messages, filters ads, and drafts replies
+    await fetch(`${baseUrl}/api/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aiButlerEnabled: true, aiButlerProvider: "rule_fast" }),
+    });
+
+    const spamReport = await (
+      await fetch(`${baseUrl}/api/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "xhs-creator", unreadCount: 1, snippet: "双11官方活动大促销，点击退订" }),
+      })
+    ).json();
+    assert.equal(spamReport.alertResult.skippedByAiButlerSpamFilter, true);
+
+    const realBuyerReport = await (
+      await fetch(`${baseUrl}/api/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: "eleduck-inbox", unreadCount: 5, snippet: "老板你好，请问Win和苹果都能用吗？" }),
+      })
+    ).json();
+    assert.equal(realBuyerReport.aiButler.isSpam, false);
+    assert.ok(realBuyerReport.aiButler.suggestion.suggestedReplies.length >= 1);
+
+    const butlerState = await (
+      await fetch(`${baseUrl}/api/ai-butler/state`, {
+        headers: { "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+      })
+    ).json();
+    assert.ok(butlerState.suggestions["web:eleduck-inbox"].suggestedReplies.length >= 1);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

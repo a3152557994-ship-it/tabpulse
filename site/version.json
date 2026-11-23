@@ -1,12 +1,12 @@
 {
-  "latestVersion": "5.1.0",
+  "latestVersion": "5.2.0",
   "publishedAt": "2026-11-23",
   "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg",
   "downloadUrlWinCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip",
   "downloadUrlWinEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
-  "notesCn": "v5.1.0 AI即插即用版：一键接入 Claude Code / Cursor / Codex / Antigravity！AI 装上后会自动调《消息总管》推手机红点提醒，遇到选择还能往你手机发按钮让你一键拍板，AI 拿到回复自动接着干活！",
-  "notesZh": "v5.1.0 AI即插即用版：一键接入 Claude Code / Cursor / Codex / Antigravity！AI 装上后会自动调《消息总管》推手机红点提醒，遇到选择还能往你手机发按钮让你一键拍板，AI 拿到回复自动接着干活！",
-  "notesEn": "v5.1.0 AI Plug-and-Play MCP Edition: 1-click setup for Claude Code, Cursor, Codex, Antigravity & Windsurf! Gives every AI automatic phone red-dot notifications (notify_phone) and blocking 1-tap mobile approval buttons (ask_human) alongside your unified web & desktop inbox."
+  "notesCn": "v5.2.0 全平台 AI 个人助理版：像 GPT 个人助理秒知邮件一样，任何网页（闲鱼/小红书/电鸭/Reddit）或电脑软件（微信/千牛/飞书）一来新消息，你的 AI 立马知道、自动筛掉促销垃圾、拟好回复推到手机让你一键点发！",
+  "notesZh": "v5.2.0 全平台 AI 个人助理版：像 GPT 个人助理秒知邮件一样，任何网页（闲鱼/小红书/电鸭/Reddit）或电脑软件（微信/千牛/飞书）一来新消息，你的 AI 立马知道、自动筛掉促销垃圾、拟好回复推到手机让你一键点发！",
+  "notesEn": "v5.2.0 AI Personal Butler Edition: Just like an AI assistant watching your email, your local AI (Codex/GPT, Claude Code, Antigravity, or Webhook Agent) now immediately knows whenever ANY web platform or desktop app receives a message—filtering spam and drafting 1-tap replies straight to your phone!"
 }

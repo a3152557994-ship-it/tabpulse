@@ -399,6 +399,7 @@
 
     <!-- Direct Reply Input Dock -->
     <div class="reply-dock">
+      <div id="butler-draft-box" style="display:none;background:rgba(37,99,235,0.14);border:1px solid rgba(96,165,250,0.4);border-radius:12px;padding:9px 11px;margin-bottom:8px;"></div>
       <div class="qr-chips" id="chat-qr-chips"></div>
       <div class="warn-tip" id="sensitive-warn"></div>
       <div class="reply-row">
@@ -437,6 +438,7 @@
     let desktopState = { windows: [], badges: [], recentAlerts: [], installedApps: [] };
     let ccState = { sessions: [], hookEvents: [], agents: [] };
     let aiInboxState = { channels: [] };
+    let aiButlerState = { suggestions: {}, events: [] };
 
     let currentFilter = "all";
     let unifiedChannels = [];
@@ -934,6 +936,7 @@
 
       document.getElementById("thread-bar").style.display = "none";
       document.getElementById("msg-stream").innerHTML = `<div class="empty-state">⏳ 正在读取「${esc(ch.title)}」的最新文字消息...</div>`;
+      renderButlerDraftBar(ch);
       renderChatQuickReplyChips();
       document.getElementById("chat-page").classList.add("open");
 
@@ -1174,6 +1177,48 @@
     }
 
     /* ---------------- Direct Reply + Spintax Quick Replies ---------------- */
+    function renderButlerDraftBar(ch) {
+      const box = document.getElementById("butler-draft-box");
+      if (!box || !ch) return;
+      const sugMap = aiButlerState.suggestions || {};
+      const sug = sugMap[ch.key] || (ch.appMatchKey ? sugMap[ch.appMatchKey] : null);
+      if (!sug || (!sug.summary && !(sug.suggestedReplies || []).length)) {
+        box.style.display = "none";
+        return;
+      }
+      const draftsHtml = (sug.suggestedReplies || [])
+        .map(
+          (r, i) => `
+          <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+            <button class="btn primary" style="flex:1;justify-content:flex-start;text-align:left;white-space:normal;line-height:1.35;border-radius:10px;padding:7px 10px;" onclick="sendButlerSuggestedReply(${i})">🚀 直接发：${esc(r)}</button>
+            <button class="btn" style="flex-shrink:0;padding:7px 9px;" onclick="fillButlerSuggestedReply(${i})">改字</button>
+          </div>`
+        )
+        .join("");
+      box.innerHTML = `
+        <div style="font-size:12px;font-weight:800;color:#93c5fd;">🧠 AI 个人助理已看完来信：${esc(sug.summary || "")}</div>
+        ${draftsHtml}
+      `;
+      box.style.display = "block";
+    }
+
+    function fillButlerSuggestedReply(idx) {
+      if (!activeChannel) return;
+      const sugMap = aiButlerState.suggestions || {};
+      const sug = sugMap[activeChannel.key] || (activeChannel.appMatchKey ? sugMap[activeChannel.appMatchKey] : null);
+      const txt = sug?.suggestedReplies?.[idx];
+      if (!txt) return;
+      const inp = document.getElementById("reply-input");
+      inp.value = txt;
+      onReplyInput();
+      inp.focus();
+    }
+
+    async function sendButlerSuggestedReply(idx) {
+      fillButlerSuggestedReply(idx);
+      await sendActiveReply();
+    }
+
     function renderChatQuickReplyChips() {
       const box = document.getElementById("chat-qr-chips");
       const qrs = hubState.quickReplies || [];
@@ -1397,15 +1442,20 @@
 
     async function pollAll() {
       try {
-        const [s, d, c, ai] = await Promise.all([
+        const [s, d, c, ai, bt] = await Promise.all([
           api("/api/state").catch(() => null),
           api("/api/desktop/state").catch(() => null),
           api("/api/cc/state").catch(() => null),
           api("/api/ai-inbox/state").catch(() => null),
+          api("/api/ai-butler/state").catch(() => null),
         ]);
         if (s && s.watches) hubState = s;
         if (d && (d.windows || d.badges)) desktopState = d;
         if (ai && ai.channels) aiInboxState = ai;
+        if (bt && bt.suggestions) {
+          aiButlerState = bt;
+          if (activeChannel) renderButlerDraftBar(activeChannel);
+        }
         if (c && c.ok) {
           // Mark finished CC sessions unread if they transitioned from running -> done
           for (const ns of c.sessions || []) {

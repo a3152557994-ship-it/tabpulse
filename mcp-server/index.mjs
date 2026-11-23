@@ -363,8 +363,49 @@ async function handleRequest(msg) {
       if (!isNotification) {
         writeResponse(id, {
           protocolVersion: PROTOCOL_VERSION,
-          capabilities: { tools: {} },
-          serverInfo: { name: "replyradar-mcp", version: "5.1.0" },
+          capabilities: { tools: {}, resources: { subscribe: true, listChanged: false } },
+          serverInfo: { name: "replyradar-mcp", version: "5.2.0" },
+        });
+      }
+      return;
+    }
+
+    if (method === "resources/list") {
+      if (!isNotification) {
+        writeResponse(id, {
+          resources: [
+            {
+              uri: "replyradar://events/live",
+              name: "全平台实时新消息流 (网页 + 电脑软件)",
+              description: "一旦任何监听网页或电脑软件收到新消息，此资源实时更新并推送 notifications/resources/updated",
+              mimeType: "application/json",
+            },
+          ],
+        });
+      }
+      return;
+    }
+
+    if (method === "resources/subscribe") {
+      startLiveResourcePushLoop();
+      if (!isNotification) writeResponse(id, {});
+      return;
+    }
+
+    if (method === "resources/read") {
+      const feed = await callHubOrLocal("GET", "/api/ai-butler/state?since=0", undefined, () => ({
+        ok: true,
+        events: [],
+      }));
+      if (!isNotification) {
+        writeResponse(id, {
+          contents: [
+            {
+              uri: params?.uri || "replyradar://events/live",
+              mimeType: "application/json",
+              text: JSON.stringify(feed, null, 2),
+            },
+          ],
         });
       }
       return;
@@ -411,6 +452,29 @@ async function handleRequest(msg) {
       }
     }
   }
+}
+
+let livePushTimer = null;
+let lastSeenEventSeq = 0;
+
+function startLiveResourcePushLoop() {
+  if (livePushTimer) return;
+  livePushTimer = setInterval(async () => {
+    try {
+      const data = await callHubOrLocal("GET", `/api/ai-butler/state?since=${lastSeenEventSeq}`, undefined, null, 1500);
+      if (data && Number(data.latestSeq) > lastSeenEventSeq) {
+        lastSeenEventSeq = Number(data.latestSeq);
+        process.stdout.write(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            method: "notifications/resources/updated",
+            params: { uri: "replyradar://events/live" },
+          }) + "\n"
+        );
+      }
+    } catch {}
+  }, 3000);
+  if (livePushTimer.unref) livePushTimer.unref();
 }
 
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
