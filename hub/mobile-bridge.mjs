@@ -261,9 +261,12 @@ class CloudflaredManager {
 
       const onChunk = (buf) => {
         const text = buf.toString("utf-8");
-        const m = text.match(/https:\/\/[a-z0-9.-]+\.lhr\.life/i);
-        if (m && (!this.publicUrl || this.publicUrl !== m[0])) {
-          this.publicUrl = m[0];
+        const m =
+          text.match(/tunneled with tls termination,\s*(https:\/\/[a-z0-9.-]+\.lhr\.life)/i) ||
+          text.match(/(https:\/\/[a-z0-9]{10,}\.lhr\.life)\b/i);
+        const url = m ? m[1] : "";
+        if (url && (!this.publicUrl || this.publicUrl !== url)) {
+          this.publicUrl = url;
           this.status = "running";
           if (!settled) {
             settled = true;

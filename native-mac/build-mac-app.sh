@@ -158,14 +158,17 @@ PLIST
 bundle_embedded_server() {
   local app_dir="$1"
   local srv_root="$app_dir/Contents/Resources/app-server"
-  mkdir -p "$srv_root/hub/ui" "$srv_root/seed" "$srv_root/docs" "$srv_root/bin"
+  mkdir -p "$srv_root/hub/ui" "$srv_root/mcp-server" "$srv_root/skills/replyradar-notify" "$srv_root/seed" "$srv_root/docs" "$srv_root/bin"
   cp "$PROJECT_ROOT/hub/"*.mjs "$srv_root/hub/"
   cp "$PROJECT_ROOT/hub/ui/"* "$srv_root/hub/ui/"
+  cp "$PROJECT_ROOT/mcp-server/index.mjs" "$srv_root/mcp-server/"
+  cp "$PROJECT_ROOT/skills/replyradar-notify/SKILL.md" "$srv_root/skills/replyradar-notify/"
+  cp "$PROJECT_ROOT/bin/setup-ai.mjs" "$srv_root/bin/"
   cp "$PROJECT_ROOT/seed/"*.mjs "$srv_root/seed/"
   cp "$PROJECT_ROOT/docs/cold-reply-playbook.html" "$srv_root/docs/"
   cp "$PROJECT_ROOT/llms.txt" "$srv_root/"
   cp "$UNIVERSAL_HELPER" "$srv_root/bin/mac-desktop-helper"
-  chmod +x "$srv_root/bin/mac-desktop-helper"
+  chmod +x "$srv_root/bin/mac-desktop-helper" "$srv_root/mcp-server/index.mjs" "$srv_root/bin/setup-ai.mjs"
 }
 
 SIGN_IDENTITY="-"
@@ -174,11 +177,11 @@ if security find-identity -v -p codesigning | grep -q "Apple Development: Yang H
 fi
 
 echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
-populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.0.0" "5"
+populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.1.0" "6"
 bundle_embedded_server "$DIST_DIR/消息总管.app"
 /usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/消息总管.app"
 
-populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.0.0" "5"
+populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.1.0" "6"
 bundle_embedded_server "$DIST_DIR/ReplyRadar.app"
 /usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/ReplyRadar.app"
 

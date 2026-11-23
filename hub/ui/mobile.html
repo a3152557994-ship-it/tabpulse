@@ -228,6 +228,18 @@
       background: var(--primary); color: #fff;
       border-bottom-right-radius: 4px;
     }
+    .ask-opts {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+    }
+    .ask-opt-btn {
+      border: 1px solid #3b82f6; background: rgba(37, 99, 235, 0.22); color: #bfdbfe;
+      padding: 8px 13px; border-radius: 10px; font-size: 13.5px; font-weight: 700;
+      cursor: pointer;
+    }
+    .ask-opt-btn:active { background: #2563eb; color: #fff; transform: scale(0.97); }
+    .ask-done-tag {
+      margin-top: 8px; font-size: 12px; color: #34d399; font-weight: 700;
+    }
     .msg-meta {
       font-size: 11px; color: #64748b; text-align: center; margin: 4px 0;
     }
@@ -424,6 +436,7 @@
     let hubState = { watches: [], quickReplies: [], stats: {} };
     let desktopState = { windows: [], badges: [], recentAlerts: [], installedApps: [] };
     let ccState = { sessions: [], hookEvents: [], agents: [] };
+    let aiInboxState = { channels: [] };
 
     let currentFilter = "all";
     let unifiedChannels = [];
@@ -718,7 +731,23 @@
         });
       }
 
-      // 3. Claude Code / Local AI Sessions & Terminal Hook Alerts
+      // 3. Plug-and-Play AI MCP Channels (tabpulse_notify_phone / tabpulse_ask_human)
+      for (const aic of aiInboxState.channels || []) {
+        list.push({
+          key: aic.key,
+          kind: "cc",
+          subKind: "ai-inbox",
+          channelId: aic.id,
+          tag: aic.hasPendingAsk ? "❓等你拍板" : "AI主动提醒",
+          title: aic.agentName,
+          unreadCount: Number(aic.unreadCount) || 0,
+          snippet: aic.snippet || "AI 自动推送与手机一键拍板通道",
+          updatedAt: aic.updatedAt || "",
+          icon: "🤖",
+        });
+      }
+
+      // 4. Claude Code / Local AI Sessions & Terminal Hook Alerts
       if ((ccState.hookEvents || []).length > 0) {
         const latestHook = ccState.hookEvents[0];
         if (!seenHookIds.has(latestHook.id) && initializedUnreadBaseline) {
@@ -927,7 +956,14 @@
           body: JSON.stringify({ appName: ch.appName }),
         }).catch(() => {});
       } else if (ch.kind === "cc") {
-        ccUnreadSet.delete(ch.key);
+        if (ch.subKind === "ai-inbox") {
+          api("/api/ai-inbox/clear-unread", {
+            method: "POST",
+            body: JSON.stringify({ channelId: ch.channelId }),
+          }).catch(() => {});
+        } else {
+          ccUnreadSet.delete(ch.key);
+        }
       }
 
       ch.unreadCount = 0;
@@ -997,6 +1033,28 @@
       }
 
       if (ch.kind === "cc") {
+        if (ch.subKind === "ai-inbox") {
+          const aRes = await api("/api/ai-inbox/state").catch(() => null);
+          if (aRes && aRes.channels) aiInboxState = aRes;
+          const found = (aiInboxState.channels || []).find((x) => x.id === ch.channelId);
+          const msgs = (found?.messages || []).map((m) => ({
+            text: m.text,
+            isMe: m.role === "user",
+            isQuestion: Boolean(m.isQuestion),
+            answered: Boolean(m.answered),
+            answer: m.answer || "",
+            requestId: m.requestId || "",
+            options: m.options || [],
+            channelId: ch.channelId,
+          }));
+          renderPureTextConversation({
+            threads: [],
+            messages: msgs,
+            fallbackSnippet: "AI 正在后台运行，需要通知或拍板时会自动推送到这里。",
+          });
+          if (manualToast) showToast("已同步 AI 最新通知");
+          return;
+        }
         await pollCcOnly();
         if (ch.key === "cc:hooks") {
           const msgs = (ccState.hookEvents || [])
@@ -1056,9 +1114,41 @@
       }
 
       stream.innerHTML = messages
-        .map((m) => `<div class="msg-bubble ${m.isMe ? "me" : "peer"}">${esc(m.text)}</div>`)
+        .map((m, mIdx) => {
+          let extra = "";
+          if (!m.isMe && Array.isArray(m.options) && m.options.length > 0) {
+            if (m.answered) {
+              extra = `<div class="ask-done-tag">✓ 你已拍板：${esc(m.answer)}</div>`;
+            } else {
+              extra = `<div class="ask-opts">${m.options
+                .map(
+                  (opt, oIdx) =>
+                    `<button class="ask-opt-btn" onclick="pickAiOption(${mIdx}, ${oIdx})">${esc(opt)}</button>`
+                )
+                .join("")}</div>`;
+            }
+          }
+          return `<div class="msg-bubble ${m.isMe ? "me" : "peer"}">${esc(m.text)}${extra}</div>`;
+        })
         .join("");
       stream.scrollTop = stream.scrollHeight;
+    }
+
+    async function pickAiOption(msgIdx, optIdx) {
+      const m = activeMessagesCache[msgIdx];
+      if (!m || !activeChannel) return;
+      const chosen = (m.options || [])[optIdx];
+      if (!chosen) return;
+      await api("/api/ai-inbox/reply", {
+        method: "POST",
+        body: JSON.stringify({
+          channelId: m.channelId || activeChannel.channelId || activeChannel.title,
+          requestId: m.requestId || "",
+          text: chosen,
+        }),
+      });
+      showToast("✅ 已把决定传回电脑 AI，AI 已继续执行！");
+      await refreshActiveChannel(false);
     }
 
     async function switchThread(idx, xRatio, yRatio) {
@@ -1156,19 +1246,35 @@
           }
           showToast("✅ 已通过电脑软件发出");
         } else if (activeChannel.kind === "cc") {
-          let sid = activeChannel.sessionId;
-          if (!sid) {
-            const cr = await api("/api/cc/sessions", { method: "POST", body: JSON.stringify({}) });
-            sid = cr.session?.id;
-            activeChannel.sessionId = sid;
-            activeChannel.key = `cc:${sid}`;
+          if (activeChannel.subKind === "ai-inbox") {
+            const out = await api("/api/ai-inbox/reply", {
+              method: "POST",
+              body: JSON.stringify({
+                channelId: activeChannel.channelId || activeChannel.title,
+                text: finalText,
+              }),
+            });
+            showToast(
+              out.deliveredLiveToWaitingAi
+                ? "✅ 已实时传回等待中的电脑 AI！"
+                : "✅ 留言已存入 AI 收件箱，AI 随时可读取"
+            );
+            setTimeout(() => refreshActiveChannel(false), 400);
+          } else {
+            let sid = activeChannel.sessionId;
+            if (!sid) {
+              const cr = await api("/api/cc/sessions", { method: "POST", body: JSON.stringify({}) });
+              sid = cr.session?.id;
+              activeChannel.sessionId = sid;
+              activeChannel.key = `cc:${sid}`;
+            }
+            await api(`/api/cc/sessions/${encodeURIComponent(sid)}/send`, {
+              method: "POST",
+              body: JSON.stringify({ prompt: finalText }),
+            });
+            showToast("⏳ 指令已发给电脑 AI 执行，完成后自动提醒您");
+            setTimeout(() => refreshActiveChannel(false), 1500);
           }
-          await api(`/api/cc/sessions/${encodeURIComponent(sid)}/send`, {
-            method: "POST",
-            body: JSON.stringify({ prompt: finalText }),
-          });
-          showToast("⏳ 指令已发给电脑 AI 执行，完成后自动提醒您");
-          setTimeout(() => refreshActiveChannel(false), 1500);
         }
       } catch (err) {
         showToast("发送失败: " + err.message);
@@ -1291,13 +1397,15 @@
 
     async function pollAll() {
       try {
-        const [s, d, c] = await Promise.all([
+        const [s, d, c, ai] = await Promise.all([
           api("/api/state").catch(() => null),
           api("/api/desktop/state").catch(() => null),
           api("/api/cc/state").catch(() => null),
+          api("/api/ai-inbox/state").catch(() => null),
         ]);
         if (s && s.watches) hubState = s;
         if (d && (d.windows || d.badges)) desktopState = d;
+        if (ai && ai.channels) aiInboxState = ai;
         if (c && c.ok) {
           // Mark finished CC sessions unread if they transitioned from running -> done
           for (const ns of c.sessions || []) {

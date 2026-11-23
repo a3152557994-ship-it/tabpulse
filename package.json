@@ -1,15 +1,18 @@
 {
   "name": "tabpulse",
-  "version": "5.0.0",
-  "description": "消息总管 (CN) / ReplyRadar (Global) — Native macOS all-in-one unread inbox guard, live 24h buyer-intent scanner & 5-tool MCP server.",
+  "version": "5.1.0",
+  "description": "消息总管 (CN) / ReplyRadar (Global) — AI-to-Phone Notification & 1-Tap Approval MCP Server + Unified Pure-Text Unread Inbox.",
   "type": "module",
   "bin": {
+    "replyradar-mcp": "./mcp-server/index.mjs",
     "tabpulse-mcp": "./mcp-server/index.mjs",
-    "tabpulse-hub": "./hub/server.mjs"
+    "tabpulse-hub": "./hub/server.mjs",
+    "replyradar-setup-ai": "./bin/setup-ai.mjs"
   },
   "scripts": {
     "start": "node ./hub/server.mjs",
     "mcp": "node ./mcp-server/index.mjs",
+    "setup:ai": "node ./bin/setup-ai.mjs",
     "build:mac": "bash ./native-mac/build-mac-app.sh",
     "keygen": "node ./bin/generate-license.mjs",
     "test": "node --test ./tests/tabpulse.test.mjs"

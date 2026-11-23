@@ -46,7 +46,7 @@ const DEFAULT_QUICK_REPLIES = [
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "5.0.0",
+    version: "5.1.0",
     extensionHeartbeatAt: null,
     license: null,
     mobileToken: crypto.randomBytes(24).toString("base64url"),
@@ -549,7 +549,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "5.0.0",
+    version: "5.1.0",
     pushSubscribersCount: (state.pushSubscriptions || []).length,
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),

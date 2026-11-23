@@ -1,12 +1,12 @@
 {
-  "latestVersion": "5.0.0",
-  "publishedAt": "2026-11-22",
+  "latestVersion": "5.1.0",
+  "publishedAt": "2026-11-23",
   "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg",
   "downloadUrlWinCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip",
   "downloadUrlWinEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
-  "notesCn": "v5.0.0 原生红点收件箱版：来新消息手机直接响铃推送亮红点，点进对应平台（网页+电脑软件微信/千牛/飞书/Claude Code）的红点直接看纯文字聊天记录并回复，彻底告别笨重卡顿的电脑屏幕截图！",
-  "notesZh": "v5.0.0 原生红点收件箱版：来新消息手机直接响铃推送亮红点，点进对应平台（网页+电脑软件微信/千牛/飞书/Claude Code）的红点直接看纯文字聊天记录并回复，彻底告别笨重卡顿的电脑屏幕截图！",
-  "notesEn": "v5.0.0 Native Red-Dot Mobile Inbox: Real Web Push notifications & app badges on your phone. Tap any unread red dot across web platforms, native desktop apps (WeChat, Slack, IDEs), or Claude Code to read clean pure-text chat bubbles and reply directly via your computer's fixed IP—zero desktop screenshots!"
+  "notesCn": "v5.1.0 AI即插即用版：一键接入 Claude Code / Cursor / Codex / Antigravity！AI 装上后会自动调《消息总管》推手机红点提醒，遇到选择还能往你手机发按钮让你一键拍板，AI 拿到回复自动接着干活！",
+  "notesZh": "v5.1.0 AI即插即用版：一键接入 Claude Code / Cursor / Codex / Antigravity！AI 装上后会自动调《消息总管》推手机红点提醒，遇到选择还能往你手机发按钮让你一键拍板，AI 拿到回复自动接着干活！",
+  "notesEn": "v5.1.0 AI Plug-and-Play MCP Edition: 1-click setup for Claude Code, Cursor, Codex, Antigravity & Windsurf! Gives every AI automatic phone red-dot notifications (notify_phone) and blocking 1-tap mobile approval buttons (ask_human) alongside your unified web & desktop inbox."
 }

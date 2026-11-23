@@ -205,6 +205,7 @@
       <div class="actions-row">
         <button class="sm" onclick="toggleLang()" id="btn-lang">English</button>
         <button class="sm" onclick="checkAppUpdate()" id="btn-update">🔄 检查更新</button>
+        <button class="sm" onclick="openAiMountModal()" id="btn-ai-mount" style="border-color:#a7f3d0;background:#ecfdf5;color:#047857;font-weight:700;">🔌 一键给电脑 AI 装上</button>
         <button class="sm" onclick="openMobileModal()" id="btn-mobile-qr" style="border-color:#93c5fd;background:#eff6ff;color:#1d4ed8;">📲 手机版扫码直连</button>
         <button class="sm" onclick="openSettingsModal()" id="btn-push">🔔 推送通知设置</button>
         <button class="sm gold" onclick="openPaywallModal()" id="btn-upgrade">💎 激活专业版</button>
@@ -257,8 +258,9 @@
             </div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="sm" onclick="installCcHooks()" id="btn-cc-hook">🔗 一键绑定终端 Claude Code 完成提醒</button>
-            <button class="sm primary" onclick="openMobileModal()">📲 打开手机版二维码</button>
+            <button class="sm primary" onclick="openAiMountModal()">🔌 一键接入电脑全部 AI（MCP + 自动提醒技能）</button>
+            <button class="sm" onclick="installCcHooks()" id="btn-cc-hook">🔗 绑定终端 Claude 完成提醒</button>
+            <button class="sm" onclick="openMobileModal()">📲 手机版二维码</button>
           </div>
         </div>
 
@@ -532,6 +534,31 @@
       </div>
       <div style="font-size:12px;color:#475569;margin-top:10px;">
         💡 提示：手机浏览器扫码打开后，点分享菜单选<strong>「添加到主屏幕」</strong>，就会在手机桌面生成独立的《消息总管》图标！
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+        <button onclick="closeModals()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: 1-CLICK AI AGENT AUTO-MOUNT (MCP + SKILL + HOOKS) -->
+  <div class="modal-backdrop" id="modal-ai-mount">
+    <div class="modal" style="max-width:600px;">
+      <h2>🔌 一键给电脑上的 AI 装上（AI 自动调我推手机 &amp; 手机一键拍板）</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:0;line-height:1.55;">
+        不用你手动盯窗口或写配置！点一下接入后，电脑上的 AI（Claude Code / Cursor / Codex / Antigravity 等）就会自带<strong>「推手机红点 (`notify_phone`)」</strong>与<strong>「发选项让你在手机一键拍板 (`ask_human`)」</strong>能力，跑完活或遇到分岔口会自动喊你手机！
+      </p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <strong style="font-size:13px;">本机检测到的 AI 工具：</strong>
+        <button class="sm primary" onclick="installAiClientAction('all')">🚀 一键接入全部已装 AI</button>
+      </div>
+      <div id="ai-clients-list" style="display:grid;gap:8px;margin-bottom:14px;">⏳ 正在检测本机 AI 工具...</div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <strong style="font-size:12.5px;color:#334155;">💬 万能一句话指令（发给任何其他 AI，它自己就会调《消息总管》）：</strong>
+          <button class="sm" onclick="copyOneLineAiPrompt()">📋 一键复制这句话</button>
+        </div>
+        <textarea id="ai-one-liner-box" rows="3" readonly style="width:100%;font-size:11.5px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:8px;padding:8px;"></textarea>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:12px;">
         <button onclick="closeModals()">关闭</button>
@@ -1796,6 +1823,60 @@
       } else {
         window.open("/bonus/cold-reply-playbook", "_blank");
       }
+    }
+
+    async function openAiMountModal() {
+      document.getElementById("modal-ai-mount").classList.add("open");
+      await refreshAiClientsModal();
+    }
+
+    async function refreshAiClientsModal() {
+      const box = document.getElementById("ai-clients-list");
+      try {
+        const res = await fetch("/api/ai-clients/status");
+        const data = await res.json();
+        document.getElementById("ai-one-liner-box").value = data.oneSentenceForAnyAi || "";
+        box.innerHTML = (data.clients || [])
+          .map(
+            (c) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:${c.connected ? "#f0fdf4" : "#fff"};gap:10px;">
+              <div>
+                <div style="font-size:13.5px;font-weight:700;">${escapeHtml(c.name)} ${c.detected ? '<span class="badge badge-blue">本机已装</span>' : '<span class="badge badge-slate">未检测到</span>'}</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHtml(c.desc)}</div>
+              </div>
+              ${
+                c.connected
+                  ? `<button class="sm" onclick="installAiClientAction('${escapeAttr(c.id)}')">✅ 已接入（重刷）</button>`
+                  : `<button class="sm primary" onclick="installAiClientAction('${escapeAttr(c.id)}')">一键接入</button>`
+              }
+            </div>`
+          )
+          .join("");
+      } catch {
+        box.innerHTML = `<div style="font-size:12.5px;color:var(--muted);">请确认本地服务已运行（端口 17890）。</div>`;
+      }
+    }
+
+    async function installAiClientAction(clientId) {
+      const res = await fetch("/api/ai-clients/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast("✅ 已成功给 AI 装上自动通知与手机拍板能力！（重启对应 AI 会话即可生效）");
+        await refreshAiClientsModal();
+      } else {
+        showToast("⚠️ " + (data.error || "接入失败"));
+      }
+    }
+
+    function copyOneLineAiPrompt() {
+      const el = document.getElementById("ai-one-liner-box");
+      if (!el) return;
+      navigator.clipboard.writeText(el.value);
+      showToast("📋 已复制！直接粘贴发给任意 AI 即可让它自动调用消息总管");
     }
 
     function closeModals() {

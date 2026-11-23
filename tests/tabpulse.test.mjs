@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { signLicensePayload } from "../bin/generate-license.mjs";
+import { installAiClient, listAiClientsStatus } from "../hub/ai-installer.mjs";
 import { verifyLicenseKey } from "../hub/license.mjs";
 import { notificationLog } from "../hub/notifier.mjs";
 import { createHubServer } from "../hub/server.mjs";
@@ -128,7 +129,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
     assert.equal(health.ok, true);
-    assert.equal(health.version, "5.0.0");
+    assert.equal(health.version, "5.1.0");
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -220,11 +221,25 @@ test("MCP stdio server v0.2.0 exposes 5 tools and completes roundtrip", async ()
       method: "initialize",
       params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
     });
-    assert.equal(init.result.serverInfo.version, "0.2.0");
+    assert.equal(init.result.serverInfo.version, "5.1.0");
 
     const listed = await sendAndWait({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-    assert.equal(listed.result.tools.length, 5);
-    assert.ok(listed.result.tools.some((t) => t.name === "tabpulse_scan_buyer_leads"));
+    assert.equal(listed.result.tools.length, 9);
+    assert.ok(listed.result.tools.some((t) => t.name === "tabpulse_notify_phone"));
+    assert.ok(listed.result.tools.some((t) => t.name === "tabpulse_ask_human"));
+
+    const notifyCall = await sendAndWait({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: "tabpulse_notify_phone",
+        arguments: { agentName: "Claude Code", title: "构建完成", message: "所有测试已通过" },
+      },
+    });
+    const notifyPayload = JSON.parse(notifyCall.result.content[0].text);
+    assert.equal(notifyPayload.ok, true);
+    assert.equal(notifyPayload.targetKey, "ai:claude-code");
   } finally {
     child.kill();
   }
@@ -345,6 +360,54 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
       })
     ).json();
     assert.ok(Array.isArray(deskRes.windows));
+
+    // 7. Verify AI ask_human blocking wait + mobile 1-tap option resolution
+    const askPromise = fetch(`${baseUrl}/api/ai-inbox/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agentName: "Cursor",
+        question: "是否按 39 元给客户发报价？",
+        options: ["同意发送", "先不发"],
+        timeoutSeconds: 10,
+      }),
+    }).then((r) => r.json());
+
+    await new Promise((r) => setTimeout(r, 80));
+
+    const mobAiState = await (
+      await fetch(`${baseUrl}/api/ai-inbox/state`, {
+        headers: { "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+      })
+    ).json();
+    const cursorCh = mobAiState.channels.find((c) => c.id === "cursor");
+    assert.ok(cursorCh && cursorCh.unreadCount >= 1 && cursorCh.hasPendingAsk === true);
+
+    const replyRes = await (
+      await fetch(`${baseUrl}/api/ai-inbox/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+        body: JSON.stringify({ channelId: "cursor", text: "同意发送" }),
+      })
+    ).json();
+    assert.equal(replyRes.deliveredLiveToWaitingAi, true);
+
+    const askResult = await askPromise;
+    assert.equal(askResult.answered, true);
+    assert.equal(askResult.answer, "同意发送");
+
+    // 8. Verify 1-click AI installer in isolated sandbox home directory
+    const fakeHome = path.join(tmpDir, "fake-home");
+    fs.mkdirSync(path.join(fakeHome, ".claude"), { recursive: true });
+    fs.mkdirSync(path.join(fakeHome, ".cursor"), { recursive: true });
+    fs.mkdirSync(path.join(fakeHome, ".codex"), { recursive: true });
+    installAiClient("claude-code", { homeDir: fakeHome });
+    installAiClient("cursor", { homeDir: fakeHome });
+    installAiClient("codex", { homeDir: fakeHome });
+    const aiStatus = listAiClientsStatus({ homeDir: fakeHome });
+    assert.equal(aiStatus.clients.find((c) => c.id === "claude-code").connected, true);
+    assert.equal(aiStatus.clients.find((c) => c.id === "cursor").connected, true);
+    assert.equal(aiStatus.clients.find((c) => c.id === "codex").connected, true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

@@ -3,6 +3,8 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PRESET_PACKS } from "../seed/preset-packs.mjs";
+import { aiInbox } from "./ai-inbox.mjs";
+import { installAiClient, listAiClientsStatus } from "./ai-installer.mjs";
 import { desktopMonitor } from "./desktop-monitor.mjs";
 import {
   agentEngine,
@@ -125,6 +127,12 @@ export function createHubServer(options = {}) {
     const link = currentMobileLink(serverPortRef.port);
     notifyAgentAlert({ title, summary, targetKey: targetKey || "" }, st.settings || {}, link).catch(() => {});
   };
+
+  aiInbox.onAiAlert = ({ title, summary, targetKey }) => {
+    const st = loadState();
+    const link = currentMobileLink(serverPortRef.port);
+    notifyAgentAlert({ title, summary, targetKey: targetKey || "" }, st.settings || {}, link).catch(() => {});
+  };
   desktopMonitor.startBackgroundWatcher();
 
   const server = http.createServer(async (req, res) => {
@@ -163,7 +171,7 @@ export function createHubServer(options = {}) {
     try {
       // Public lightweight endpoints
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "5.0.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "5.1.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
         return;
       }
       if (req.method === "GET" && pathname === "/sw.js") {
@@ -303,6 +311,86 @@ export function createHubServer(options = {}) {
         }
         const body = await readJsonBody(req);
         sendJson(res, 200, desktopRelay.submitCommandResult(body.taskId, body), corsOrigin);
+        return;
+      }
+
+      // AI-First Plug-and-Play Inbox & 1-Tap Mobile Approval (MCP + Webhook) routes
+      if (pathname === "/api/ai-inbox/state" && req.method === "GET") {
+        sendJson(res, 200, { ok: true, channels: aiInbox.listChannels() }, corsOrigin, authCookieHeader);
+        return;
+      }
+      if (pathname === "/api/ai-inbox/push" && req.method === "POST") {
+        if (!localTrusted) {
+          sendJson(res, 403, { ok: false, error: "local AI only" }, corsOrigin);
+          return;
+        }
+        const body = await readJsonBody(req);
+        const out = aiInbox.pushNotification(body);
+        sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+      if (pathname === "/api/ai-inbox/ask" && req.method === "POST") {
+        if (!localTrusted) {
+          sendJson(res, 403, { ok: false, error: "local AI only" }, corsOrigin);
+          return;
+        }
+        const body = await readJsonBody(req);
+        const out = await aiInbox.askHumanAndWait(body);
+        sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+      if (pathname === "/api/ai-inbox/reply" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const out = aiInbox.submitHumanReply(body);
+        sendJson(res, out.ok ? 200 : 400, out, corsOrigin);
+        return;
+      }
+      if (pathname === "/api/ai-inbox/pull" && req.method === "POST") {
+        if (!localTrusted) {
+          sendJson(res, 403, { ok: false, error: "local AI only" }, corsOrigin);
+          return;
+        }
+        const body = await readJsonBody(req);
+        sendJson(res, 200, aiInbox.pullPendingRepliesForAi(body), corsOrigin);
+        return;
+      }
+      if (pathname === "/api/ai-inbox/clear-unread" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, aiInbox.clearChannelUnread(body.channelId || ""), corsOrigin);
+        return;
+      }
+
+      // Desktop 1-Click Local AI Client Auto-Installer routes
+      if (pathname === "/api/ai-clients/status" && req.method === "GET") {
+        if (!localTrusted) {
+          sendJson(res, 403, { ok: false, error: "desktop only" }, corsOrigin);
+          return;
+        }
+        sendJson(res, 200, listAiClientsStatus({ localPort: serverPortRef.port }), corsOrigin);
+        return;
+      }
+      if (pathname === "/api/ai-clients/install" && req.method === "POST") {
+        if (!localTrusted) {
+          sendJson(res, 403, { ok: false, error: "desktop only" }, corsOrigin);
+          return;
+        }
+        const body = await readJsonBody(req);
+        if (body.clientId === "all") {
+          const st = listAiClientsStatus({ localPort: serverPortRef.port });
+          const results = [];
+          for (const c of st.clients) {
+            if (c.detected) results.push(installAiClient(c.id, { localPort: serverPortRef.port }));
+          }
+          sendJson(res, 200, { ok: true, results, ...listAiClientsStatus({ localPort: serverPortRef.port }) }, corsOrigin);
+          return;
+        }
+        const resInst = installAiClient(body.clientId || "", { localPort: serverPortRef.port });
+        sendJson(
+          res,
+          resInst.ok ? 200 : 400,
+          { ...resInst, ...listAiClientsStatus({ localPort: serverPortRef.port }) },
+          corsOrigin
+        );
         return;
       }
 
@@ -625,6 +713,6 @@ if (isDirectEntrypoint()) {
   const port = Number(process.env.TABPULSE_PORT || 17890);
   const server = createHubServer({ port });
   server.listen(port, host, () => {
-    console.log(`TabPulse Hub v5.0.0 listening on http://${host}:${port}`);
+    console.log(`TabPulse Hub v5.1.0 listening on http://${host}:${port}`);
   });
 }

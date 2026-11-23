@@ -9,7 +9,7 @@ on:
       tag:
         description: "Release tag to upload Windows zips to"
         required: true
-        default: "v5.0.0"
+        default: "v5.1.0"
 
 permissions:
   contents: write
