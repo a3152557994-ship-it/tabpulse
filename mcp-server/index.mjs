@@ -364,7 +364,7 @@ async function handleRequest(msg) {
         writeResponse(id, {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: { tools: {}, resources: { subscribe: true, listChanged: false } },
-          serverInfo: { name: "replyradar-mcp", version: "5.2.0" },
+          serverInfo: { name: "replyradar-mcp", version: "5.3.0" },
         });
       }
       return;

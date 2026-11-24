@@ -17,7 +17,7 @@ export function getDataFilePath() {
   return process.env.TABPULSE_DATA_FILE || DEFAULT_DATA_FILE;
 }
 
-const DEFAULT_QUICK_REPLIES = [
+const DEFAULT_QUICK_REPLIES_RAW = [
   {
     id: "qr-1",
     cat: "破冰秒回",
@@ -39,14 +39,47 @@ const DEFAULT_QUICK_REPLIES = [
     cat: "售后安抚",
     titleZh: "化解不满防差评",
     titleEn: "De-escalate & Protect 5-Star",
-    textZh: "非常抱谦给您添麻烦了！您看具体是哪一步没达到预期？咱们支持{免费重调补发|14天无忧售后}，一定给您妥善解决到位，辛苦先别急着评，给我个弥补机会~",
+    textZh: "非常抱歉给您添麻烦了！您看具体是哪一步没达到预期？咱们支持{免费重调补发|14天无忧售后}，一定给您妥善解决到位，辛苦先别急着评，给我个弥补机会~",
     textEn: "So sorry about the hiccup! Let me fix this for you right away — would you prefer an immediate patch today or a full no-questions-asked refund?",
+  },
+  {
+    id: "qr-4",
+    cat: "合规防封",
+    titleZh: "平台内安全沟通留痕（零导流违禁词）",
+    titleEn: "On-Platform Safe Scope Reply",
+    textZh: "{放心哈|没问题的}，咱们全程在平台内沟通留痕保障双方权益！您把具体要求直接发当前对话框就行，拍下后我在订单里给您发完整交付包~",
+    textEn: "{Sounds great|Happy to help}! Let's keep all scope details right here on the platform so everything stays protected. Drop your requirements below and I'll get right on it!",
   },
 ];
 
+export function normalizeQuickReply(item = {}, idx = 0) {
+  const category = String(item.category || item.cat || "常用话术").trim();
+  const titleZh = String(item.titleZh || item.title || "快捷话术").trim();
+  const titleEn = String(item.titleEn || item.title || titleZh).trim();
+  const textZh = String(item.body || item.template || item.text || item.textZh || item.textEn || "")
+    .replace(/抱谦/g, "抱歉")
+    .trim();
+  const textEn = String(item.textEn || item.body || item.template || item.text || textZh).trim();
+  return {
+    id: String(item.id || `qr-${idx + 1}`),
+    category,
+    cat: category,
+    title: String(item.title || titleZh).trim(),
+    titleZh,
+    titleEn,
+    body: textZh,
+    template: textZh,
+    text: textZh,
+    textZh,
+    textEn,
+  };
+}
+
+const DEFAULT_QUICK_REPLIES = DEFAULT_QUICK_REPLIES_RAW.map(normalizeQuickReply);
+
 function makeDefaultState(now = new Date()) {
   return {
-    version: "5.2.0",
+    version: "5.3.0",
     extensionHeartbeatAt: null,
     license: null,
     mobileToken: crypto.randomBytes(24).toString("base64url"),
@@ -82,6 +115,8 @@ export function loadState(now = new Date()) {
     }
     if (!Array.isArray(parsed.quickReplies) || parsed.quickReplies.length === 0) {
       parsed.quickReplies = DEFAULT_QUICK_REPLIES;
+    } else {
+      parsed.quickReplies = parsed.quickReplies.map(normalizeQuickReply);
     }
     let dirty = false;
     if (!parsed.mobileToken || typeof parsed.mobileToken !== "string" || parsed.mobileToken.length < 16) {
@@ -500,7 +535,7 @@ export function deleteWatch(id) {
 export function saveQuickReplies(list = [], nowDate = new Date()) {
   const state = loadState(nowDate);
   if (Array.isArray(list)) {
-    state.quickReplies = list.slice(0, 200);
+    state.quickReplies = list.slice(0, 200).map(normalizeQuickReply);
     saveState(state);
   }
   return state.quickReplies || DEFAULT_QUICK_REPLIES;
@@ -569,7 +604,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "5.2.0",
+    version: "5.3.0",
     pushSubscribersCount: (state.pushSubscriptions || []).length,
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),

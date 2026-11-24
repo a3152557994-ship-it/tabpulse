@@ -6,14 +6,18 @@
   <title>消息总管</title>
   <style>
     :root {
-      --bg: #f4f6fb;
+      --sidebar-bg: #f8fafc;
+      --canvas-bg: #f3f5f9;
       --card: #ffffff;
       --border: #e2e8f0;
+      --border-soft: #edf2f7;
       --text: #0f172a;
+      --text-secondary: #334155;
       --muted: #64748b;
       --primary: #2563eb;
       --primary-hover: #1d4ed8;
       --primary-soft: #eff6ff;
+      --primary-border: #bfdbfe;
       --red: #dc2626;
       --red-bg: #fef2f2;
       --red-border: #fecaca;
@@ -23,93 +27,585 @@
       --green: #059669;
       --green-bg: #ecfdf5;
       --green-border: #a7f3d0;
-      --purple: #7c3aed;
+      --purple: #6d28d9;
       --purple-bg: #f5f3ff;
-      --radius: 14px;
-      --shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+      --radius: 12px;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
     }
     * { box-sizing: border-box; }
-    body {
+    html, body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
-      background: var(--bg);
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--canvas-bg);
       color: var(--text);
-      line-height: 1.5;
+      font-size: 13.5px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
     }
     a { color: inherit; text-decoration: none; }
-    .wrap { max-width: 1260px; margin: 0 auto; padding: 16px 20px 56px; }
-    .topbar {
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-      gap: 12px; background: var(--card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 14px 18px; box-shadow: var(--shadow);
+
+    /* App Split Shell */
+    .app-shell {
+      display: grid;
+      grid-template-columns: 224px 1fr;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Left macOS Sidebar */
+    .sidebar {
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 14px 10px 12px;
+      user-select: none;
+    }
+    .brand-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 2px 8px 12px;
+      border-bottom: 1px solid var(--border-soft);
+      margin-bottom: 10px;
+    }
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: linear-gradient(145deg, #2563eb, #4338ca);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 17px;
+      box-shadow: 0 3px 8px rgba(37, 99, 235, 0.24);
+      flex-shrink: 0;
+    }
+    .brand-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .brand-status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      color: var(--green);
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .dot-pulse {
+      width: 6.5px;
+      height: 6.5px;
+      border-radius: 50%;
+      background: #10b981;
+      display: inline-block;
+    }
+
+    .side-group-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      padding: 6px 10px 4px;
+      letter-spacing: 0.02em;
+    }
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .nav-item {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      cursor: pointer;
+      text-align: left;
+      white-space: nowrap;
+      transition: background 0.12s, color 0.12s;
+    }
+    .nav-item:hover {
+      background: #eef2f7;
+      color: var(--text);
+    }
+    .nav-item.active {
+      background: #e0eaff;
+      color: var(--primary);
+      font-weight: 700;
+    }
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .nav-ico {
+      width: 18px;
+      text-align: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .nav-cnt {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .nav-item.active .nav-cnt {
+      background: #bfdbfe;
+      color: #1e40af;
+    }
+    .nav-cnt.red {
+      background: var(--red);
+      color: #fff;
+    }
+
+    /* Quick Jump Channels inside Sidebar */
+    .quick-channels {
+      flex: 1;
+      overflow-y: auto;
+      margin-top: 6px;
+      padding-right: 2px;
+    }
+    .quick-channels::-webkit-scrollbar { width: 4px; }
+    .quick-channels::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .q-row {
+      width: 100%;
+      border: none;
+      background: transparent;
+      padding: 5.5px 9px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 7px;
+      cursor: pointer;
+      font-size: 12.5px;
+      color: #475569;
+      text-align: left;
+    }
+    .q-row:hover { background: #eef2f7; color: var(--text); }
+    .q-row-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .q-mini-ava {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      color: #fff;
+      font-weight: 700;
+    }
+    .q-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .q-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .q-dot.unread { background: var(--red); box-shadow: 0 0 0 2px #fee2e2; }
+    .q-dot.auth { background: var(--amber); }
+
+    /* Sidebar Footer */
+    .side-footer {
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .mobile-card-btn {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 9px;
+      border: 1px solid var(--primary-border);
+      background: linear-gradient(180deg, #eff6ff 0%, #e0ebff 100%);
+      color: #1e40af;
+      font-weight: 700;
+      font-size: 12.5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+    .mobile-card-btn:hover { border-color: #93c5fd; background: #dbeafe; }
+    .foot-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .foot-btn {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: #475569;
+      padding: 5px 9px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .foot-btn:hover { background: #f1f5f9; color: var(--text); }
+    .pro-chip {
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 5px 8px;
+      border-radius: 7px;
+      background: var(--purple-bg);
+      color: var(--purple);
+      border: 1px solid #ddd6fe;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Right Workspace Area */
+    .main-pane {
+      height: 100vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .pane-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(243, 245, 249, 0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 58px;
+    }
+    .pane-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      flex-wrap: nowrap;
+    }
+    .pane-title {
+      margin: 0;
+      font-size: 16.5px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .pane-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .pane-body {
+      padding: 18px 22px 44px;
+      max-width: 1220px;
+      width: 100%;
+    }
+
+    /* Segmented Filter Bar */
+    .seg-bar {
+      display: inline-flex;
+      align-items: center;
+      background: #e2e8f0;
+      padding: 3px;
+      border-radius: 9px;
+      gap: 2px;
+      overflow-x: auto;
+    }
+    .seg-btn {
+      border: none;
+      background: transparent;
+      color: #475569;
+      padding: 4.5px 10px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .seg-btn:hover { color: var(--text); }
+    .seg-btn.active {
+      background: #fff;
+      color: var(--text);
+      font-weight: 700;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+
+    /* Standard Buttons & Inputs */
+    button, .btn {
+      font-family: inherit;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text-secondary);
+      padding: 6.5px 12px;
+      font-size: 12.5px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      transition: all 0.14s;
+    }
+    button:hover, .btn:hover { background: #f8fafc; border-color: #cbd5e1; color: var(--text); }
+    button.primary, .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    button.primary:hover, .btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); color: #fff; }
+    button.soft-primary { background: var(--primary-soft); color: var(--primary); border-color: var(--primary-border); }
+    button.soft-primary:hover { background: #dbeafe; }
+    button.danger { color: var(--red); border-color: var(--red-border); background: var(--red-bg); }
+    button.sm, .btn.sm { padding: 4.5px 9px; font-size: 12px; border-radius: 7px; }
+
+    .search-mini {
+      width: 176px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #fff;
+      font-size: 12.5px;
+      font-family: inherit;
+      color: var(--text);
+    }
+    .search-mini:focus { outline: none; border-color: #93c5fd; width: 210px; }
+
+    /* Compact Notice Strips & Unread Cards */
+    .auth-strip {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 7px 12px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12.5px;
+      color: #92400e;
+    }
+    .auth-strip-chips {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .unread-banner-list {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .unread-card {
+      background: #fff;
+      border: 1.5px solid var(--red-border);
+      border-left: 4px solid var(--red);
+      border-radius: var(--radius);
+      padding: 12px 15px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Uniform Platform Cards Grid */
+    .cat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 16px 0 9px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .cat-header:first-child { margin-top: 2px; }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
+      gap: 12px;
+    }
+    .p-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 13px 14px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+      position: relative;
+      transition: border-color 0.14s, box-shadow 0.14s;
+    }
+    .p-card:hover {
+      border-color: #cbd5e1;
+      box-shadow: var(--shadow-md);
+    }
+    .p-card.is-unread { border-color: #fca5a5; background: #fffcfc; }
+    .p-card.is-paused { opacity: 0.65; }
+
+    .p-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .p-id {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .p-ava {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      font-size: 17px;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .p-titles { min-width: 0; }
+    .p-name {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .p-host {
+      font-size: 11.5px;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2.5px 7.5px;
+      border-radius: 999px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .st-ok { background: var(--green-bg); color: var(--green); }
+    .st-unread { background: var(--red); color: #fff; }
+    .st-auth { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+    .st-pause { background: #f1f5f9; color: #64748b; }
+
+    .p-desc {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .p-meta-tags {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .micro-tag {
+      background: #f8fafc;
+      border: 1px solid var(--border-soft);
+      padding: 1.5px 6px;
+      border-radius: 5px;
+      white-space: nowrap;
+    }
+
+    .p-foot {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-top: 9px;
+      border-top: 1px solid var(--border-soft);
+    }
+    .p-foot .main-act {
+      flex: 1;
+      justify-content: center;
+    }
+
+    /* Card More Dropdown Menu */
+    .more-wrap { position: relative; }
+    .more-menu {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 6px);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+      padding: 4px;
+      min-width: 132px;
+      display: none;
+      z-index: 50;
+    }
+    .more-menu.open { display: block; }
+    .more-item {
+      width: 100%;
+      border: none;
+      background: transparent;
+      padding: 6.5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-radius: 6px;
+      justify-content: flex-start;
+    }
+    .more-item:hover { background: #f1f5f9; }
+    .more-item.danger-item { color: var(--red); }
+    .more-item.danger-item:hover { background: var(--red-bg); }
+
+    /* Panel Boxes (Desktop / AI / Replies / Scanner) */
+    .panel-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: var(--shadow-sm);
       margin-bottom: 14px;
     }
-    .brand { display: flex; align-items: center; gap: 11px; }
-    .brand-icon {
-      width: 40px; height: 40px; border-radius: 11px;
-      background: linear-gradient(135deg, #2563eb, #4f46e5); color: #fff;
-      display: grid; place-items: center; font-size: 20px; font-weight: 800;
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
-    }
-    .brand h1 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
-    .brand .sub { font-size: 12px; color: var(--muted); }
-    .stats-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .pill {
-      display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px;
-      border-radius: 999px; font-size: 12px; font-weight: 600; background: #f1f5f9; color: #334155;
-      border: 1px solid var(--border);
-    }
-    .pill.hot { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
-    .pill.ok { background: var(--green-bg); color: var(--green); border-color: var(--green-border); }
-    .pill.pro { background: var(--purple-bg); color: var(--purple); border-color: #ddd6fe; cursor: pointer; }
-
-    .actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    button, .btn {
-      font-family: inherit; cursor: pointer; border-radius: 9px; border: 1px solid var(--border);
-      background: var(--card); color: var(--text); padding: 7px 12px; font-size: 13px; font-weight: 600;
-      transition: all 0.15s; display: inline-flex; align-items: center; gap: 5px;
-    }
-    button:hover, .btn:hover { background: #f8fafc; border-color: #cbd5e1; }
-    button.primary, .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-    button.primary:hover, .btn.primary:hover { background: var(--primary-hover); }
-    button.gold { background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; border: none; }
-    button.danger { color: var(--red); border-color: var(--red-border); background: var(--red-bg); }
-    button.sm { padding: 4px 9px; font-size: 12px; border-radius: 7px; }
-
-    .nav-tabs {
-      display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px;
-    }
-    .nav-tab {
-      padding: 8px 16px; border-radius: 10px; font-size: 13.5px; font-weight: 700;
-      border: 1px solid transparent; background: transparent; color: var(--muted);
-    }
-    .nav-tab.active {
-      background: var(--card); color: var(--primary); border-color: var(--border); box-shadow: var(--shadow);
-    }
-
-    .packs-bar {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-bottom: 18px;
-    }
-    .pack-card {
-      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-      border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px;
-      display: flex; justify-content: space-between; align-items: center; gap: 12px; box-shadow: var(--shadow);
-    }
-    .pack-card h3 { margin: 0 0 3px; font-size: 14px; font-weight: 700; }
-    .pack-card p { margin: 0; font-size: 12px; color: var(--muted); }
-
-    .section-title {
-      display: flex; align-items: center; justify-content: space-between;
-      margin: 18px 0 10px; font-size: 14px; font-weight: 700; color: #334155;
-    }
-    .alerts-dock { display: grid; gap: 12px; margin-bottom: 18px; }
-    .alert-card {
-      background: var(--card); border: 1.5px solid var(--red-border); border-left: 5px solid var(--red);
-      border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow);
-    }
-    .alert-card.auth { border-color: var(--amber-border); border-left-color: var(--amber); }
-    .alert-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
-    .alert-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
+    .panel-card h3 { margin: 0 0 4px; font-size: 15px; font-weight: 800; }
+    .panel-sub { font-size: 12.5px; color: var(--muted); margin: 0; }
 
     .badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 6px; font-size: 11px; font-weight: 600; }
     .badge-red { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
@@ -119,32 +615,16 @@
 
     .snippet-box {
       background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;
-      padding: 8px 11px; font-size: 13px; color: #1e293b; margin: 8px 0; white-space: pre-wrap;
+      padding: 8px 11px; font-size: 12.5px; color: #1e293b; margin: 8px 0; white-space: pre-wrap;
     }
     .draft-area {
-      width: 100%; min-height: 68px; margin-top: 6px; padding: 9px 11px;
+      width: 100%; min-height: 64px; margin-top: 6px; padding: 8px 11px;
       border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 13px;
     }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(285px, 1fr)); gap: 12px; }
-    .card {
-      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 14px 15px; box-shadow: var(--shadow); display: flex; flex-direction: column; justify-content: space-between;
-    }
-    .card.is-unread { border-color: var(--red-border); background: #fffafa; }
-    .card.is-auth { border-color: var(--amber-border); background: #fffdf7; }
-    .card.is-paused { opacity: 0.7; }
-    .card-title { font-size: 14.5px; font-weight: 700; margin: 0 0 4px; }
-    .card-meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; word-break: break-all; }
-    .card-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1f5f9; }
-
-    .scanner-box {
-      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px;
-    }
-    .search-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .search-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
     .search-row input {
-      flex: 1; min-width: 240px; padding: 10px 14px; border-radius: 10px;
-      border: 1px solid #cbd5e1; font-size: 14px; font-family: inherit;
+      flex: 1; min-width: 220px; padding: 9px 12px; border-radius: 9px;
+      border: 1px solid #cbd5e1; font-size: 13.5px; font-family: inherit;
     }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .chip {
@@ -152,217 +632,314 @@
       color: #334155; cursor: pointer; border: 1px solid var(--border);
     }
     .chip:hover { background: var(--primary-soft); color: var(--primary); border-color: #bfdbfe; }
+
     .lead-list { display: grid; gap: 10px; }
     .lead-item {
       background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-      padding: 14px 16px; box-shadow: var(--shadow);
+      padding: 13px 16px; box-shadow: var(--shadow-sm);
     }
-    .lead-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 6px; }
-    .lead-title { font-size: 15px; font-weight: 700; color: #0f172a; }
+    .lead-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 5px; }
+    .lead-title { font-size: 14.5px; font-weight: 700; color: #0f172a; }
     .lead-title:hover { color: var(--primary); text-decoration: underline; }
 
+    /* Modals */
     .modal-backdrop {
-      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.48);
+      backdrop-filter: blur(3px);
       display: none; place-items: center; z-index: 999; padding: 16px;
     }
     .modal-backdrop.open { display: grid; }
     .modal {
-      background: var(--card); border-radius: 16px; max-width: 680px; width: 100%;
-      padding: 22px 24px; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25); max-height: 92vh; overflow-y: auto;
+      background: var(--card); border-radius: 16px; max-width: 620px; width: 100%;
+      padding: 20px 22px; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.22); max-height: 90vh; overflow-y: auto;
     }
-    .modal h2 { margin: 0 0 6px; font-size: 19px; }
-    .form-row { margin-bottom: 12px; }
-    .form-row label { display: block; font-size: 12.5px; font-weight: 700; margin-bottom: 4px; color: #334155; }
+    .modal h2 { margin: 0 0 6px; font-size: 17.5px; font-weight: 800; }
+    .form-row { margin-bottom: 11px; }
+    .form-row label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 4px; color: #334155; }
     .form-row input, .form-row select, .form-row textarea {
-      width: 100%; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 13.5px;
+      width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 13px;
     }
-    .pricing-cards { display: grid; grid-template-columns: 1fr 1.15fr; gap: 12px; margin: 14px 0; }
-    @media (max-width: 640px) { .pricing-cards { grid-template-columns: 1fr; } }
-    .price-box { border: 1.5px solid var(--border); border-radius: 12px; padding: 15px; background: #f8fafc; }
-    .price-box.featured { border-color: var(--primary); background: #eff6ff; position: relative; }
-    .price-num { font-size: 26px; font-weight: 800; color: #0f172a; margin: 4px 0; }
-    .offer-list { font-size: 12.5px; color: #334155; padding-left: 18px; margin: 8px 0; }
+    .pricing-cards { display: grid; grid-template-columns: 1fr 1.15fr; gap: 12px; margin: 12px 0; }
+    @media (max-width: 720px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .pricing-cards { grid-template-columns: 1fr; }
+    }
+    .price-box { border: 1.5px solid var(--border); border-radius: 12px; padding: 14px; background: #f8fafc; }
+    .price-box.featured { border-color: var(--primary); background: #eff6ff; }
+    .price-num { font-size: 24px; font-weight: 800; color: #0f172a; margin: 4px 0; }
+    .offer-list { font-size: 12px; color: #334155; padding-left: 18px; margin: 8px 0; line-height: 1.6; }
+
     .toast {
-      position: fixed; bottom: 20px; right: 20px; background: #0f172a; color: #fff;
-      padding: 10px 16px; border-radius: 10px; font-size: 13px; display: none; z-index: 1200;
+      position: fixed; bottom: 20px; right: 22px; background: #0f172a; color: #fff;
+      padding: 9px 15px; border-radius: 10px; font-size: 12.5px; font-weight: 600;
+      display: none; z-index: 1200; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25);
     }
   </style>
 </head>
 <body>
   <!-- Brand identifiers: 消息总管 (CN) / ReplyRadar (EN) -->
-  <div class="wrap">
-    <div class="topbar">
-      <div class="brand">
-        <div class="brand-icon">🔔</div>
-        <div>
-          <h1 id="t-title">消息总管</h1>
-          <div class="sub" id="t-sub">多平台未读消息提醒与找单盒子 · 免装浏览器插件</div>
+  <div class="app-shell">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand-box">
+        <div class="brand-logo">🔔</div>
+        <div style="min-width:0;">
+          <div class="brand-title" id="t-title">消息总管</div>
+          <div class="brand-status">
+            <span class="dot-pulse"></span>
+            <span id="t-guard-text">零刷页守护中</span>
+          </div>
         </div>
       </div>
 
-      <div class="stats-row" id="stats-row"></div>
+      <div class="side-group-label" id="lbl-side-ws">工作台</div>
+      <nav class="nav-list">
+        <button class="nav-item active" id="tab-inbox" onclick="switchTab('inbox')">
+          <span class="nav-left"><span class="nav-ico">📬</span><span id="nav-txt-inbox">平台消息</span></span>
+          <span class="nav-cnt" id="badge-nav-inbox">0</span>
+        </button>
+        <button class="nav-item" id="tab-desktop" onclick="switchTab('desktop')">
+          <span class="nav-left"><span class="nav-ico">🖥️</span><span id="nav-txt-desktop">电脑软件</span></span>
+          <span class="nav-cnt" id="badge-nav-desktop" style="display:none;">0</span>
+        </button>
+        <button class="nav-item" id="tab-cc" onclick="switchTab('cc')">
+          <span class="nav-left"><span class="nav-ico">🧠</span><span id="nav-txt-cc">AI 个人助理</span></span>
+        </button>
+        <button class="nav-item" id="tab-replies" onclick="switchTab('replies')">
+          <span class="nav-left"><span class="nav-ico">⚡</span><span id="nav-txt-replies">快捷话术库</span></span>
+        </button>
+        <button class="nav-item" id="tab-scanner" onclick="switchTab('scanner')">
+          <span class="nav-left"><span class="nav-ico">🎯</span><span id="nav-txt-scanner">找单雷达</span></span>
+        </button>
+      </nav>
 
-      <div class="actions-row">
-        <button class="sm" onclick="toggleLang()" id="btn-lang">English</button>
-        <button class="sm" onclick="checkAppUpdate()" id="btn-update">🔄 检查更新</button>
-        <button class="sm" onclick="openAiMountModal()" id="btn-ai-mount" style="border-color:#a7f3d0;background:#ecfdf5;color:#047857;font-weight:700;">🔌 一键给电脑 AI 装上</button>
-        <button class="sm" onclick="openMobileModal()" id="btn-mobile-qr" style="border-color:#93c5fd;background:#eff6ff;color:#1d4ed8;">📲 手机版扫码直连</button>
-        <button class="sm" onclick="openSettingsModal()" id="btn-push">🔔 推送通知设置</button>
-        <button class="sm gold" onclick="openPaywallModal()" id="btn-upgrade">💎 激活专业版</button>
-        <button class="primary" onclick="openAddModal()" id="btn-add">+ 添加平台</button>
+      <div class="side-group-label" style="margin-top:8px;" id="lbl-side-quick">直达会话</div>
+      <div class="quick-channels" id="sidebar-channels"></div>
+
+      <div class="side-footer">
+        <button class="mobile-card-btn" id="btn-mobile-qr" onclick="openMobileModal()">
+          <span id="txt-mobile-btn">📲 手机随身收件箱</span>
+          <span style="font-size:11px;opacity:0.8;">扫码 ›</span>
+        </button>
+        <div class="foot-bar">
+          <button class="foot-btn" onclick="openSettingsModal()" id="btn-push">⚙️ 设置</button>
+          <span class="pro-chip" onclick="openPaywallModal()" id="btn-upgrade">💎 专业版</span>
+        </div>
       </div>
-    </div>
+    </aside>
 
-    <div class="nav-tabs">
-      <button class="nav-tab active" id="tab-inbox" onclick="switchTab('inbox')">📬 网页各平台消息（同窗直回）</button>
-      <button class="nav-tab" id="tab-desktop" onclick="switchTab('desktop')">🖥️ 电脑桌面软件监控（微信/IDE/千牛）</button>
-      <button class="nav-tab" id="tab-cc" onclick="switchTab('cc')">🤖 Claude Code / AI 远程仓</button>
-      <button class="nav-tab" id="tab-replies" onclick="switchTab('replies')">⚡ 防封快捷话术与违禁词检测</button>
-      <button class="nav-tab" id="tab-scanner" onclick="switchTab('scanner')">🎯 实时找单扫描器</button>
-      <button class="nav-tab" id="tab-playbook" onclick="openPlaybook()">🎁 高成交回复话术库</button>
-    </div>
+    <!-- RIGHT WORKSPACE -->
+    <main class="main-pane">
+      <!-- VIEW 1: PLATFORM INBOXES -->
+      <section id="view-inbox">
+        <header class="pane-header">
+          <div class="pane-title-wrap">
+            <h2 class="pane-title" id="hdr-inbox-title">平台消息</h2>
+            <div class="seg-bar" id="cat-filter-bar"></div>
+          </div>
+          <div class="pane-actions">
+            <input class="search-mini" id="watch-search" oninput="renderGrid()" placeholder="🔍 搜索平台..." />
+            <button class="sm" onclick="openPacksModal()" id="btn-packs">📦 模板包</button>
+            <button class="primary sm" onclick="openAddModal()" id="btn-add">+ 添加平台</button>
+          </div>
+        </header>
 
-    <div id="view-inbox">
-      <div class="packs-bar" id="packs-bar"></div>
-      <div id="alerts-section"></div>
-      <div id="categories-section"></div>
-    </div>
+        <div class="pane-body">
+          <div id="empty-packs-guide"></div>
+          <div id="alerts-section"></div>
+          <div id="categories-section"></div>
+        </div>
+      </section>
 
-    <div id="view-desktop" style="display:none;">
-      <div class="scanner-box">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
-          <div>
-            <h2 style="margin:0 0 4px;font-size:18px;">🖥️ 全电脑桌面软件实时监控（不限网页版 · 微信 / 千牛 / Antigravity / 飞书全覆盖）</h2>
-            <div style="font-size:13px;color:var(--muted);">
-              零注入读取系统程序坞未读红点与右上角通知弹窗（0 封号隐患）；出门时来消息手机自动响铃亮红点，点进<strong>「手机随身版」</strong>对应平台的红点即可直接看纯文字聊天记录并代打回复（无需看电脑屏幕截图）！
+      <!-- VIEW 2: DESKTOP SOFTWARE MONITOR -->
+      <section id="view-desktop" style="display:none;">
+        <header class="pane-header">
+          <div class="pane-title-wrap">
+            <h2 class="pane-title" id="hdr-desk-title">电脑桌面软件看护</h2>
+            <span style="font-size:12px;color:var(--muted);" id="hdr-desk-sub">程序坞红点与通知纯文字同步 · 零注入不伤号</span>
+          </div>
+          <div class="pane-actions">
+            <button class="sm" onclick="refreshDesktopMonitorView()">↻ 刷新状态</button>
+            <button class="primary sm" onclick="openMobileModal()">📲 手机随身收消息</button>
+          </div>
+        </header>
+        <div class="pane-body">
+          <div id="desk-mon-badges" style="margin-bottom:12px;"></div>
+          <div id="desk-mon-alerts" style="margin-bottom:14px;"></div>
+          <div id="desk-mon-windows" class="cards-grid"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: UNIFIED AI PERSONAL ASSISTANT + MCP + REMOTE TERMINAL -->
+      <section id="view-cc" style="display:none;">
+        <header class="pane-header">
+          <div class="pane-title-wrap">
+            <h2 class="pane-title" id="cc-d-title">AI 个人助理与远程协作</h2>
+            <span style="font-size:12px;color:var(--muted);" id="cc-d-desc">来新消息自动筛广告拟稿 · 任务跑完自动推手机</span>
+          </div>
+          <div class="pane-actions">
+            <button class="sm" onclick="installCcHooks()" id="btn-cc-hook">🔗 绑定 Claude 完成提醒</button>
+            <button class="primary sm" onclick="installAiClientAction('all')">🚀 一键接入全部本机 AI</button>
+          </div>
+        </header>
+
+        <div class="pane-body">
+          <!-- Block A: Real-time AI Butler Triage -->
+          <div class="panel-card" style="border-color:#bfdbfe;background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+              <div>
+                <h3 style="color:#1e3a8a;">🧠 来消息 AI 自动看信、筛广告并拟好回复</h3>
+                <p class="panel-sub">平时 0 消耗静默守候；任何平台或软件一跳红点，立即唤醒本机 AI 过滤促销垃圾并生成一键回复草稿推到手机。</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <label style="display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#1e3a8a;cursor:pointer;background:#eff6ff;padding:5px 10px;border-radius:8px;border:1px solid #bfdbfe;">
+                  <input type="checkbox" id="butler-enabled" onchange="saveButlerConfig()" />
+                  <span>开启实时看信</span>
+                </label>
+                <button class="sm" onclick="simulateButlerIncoming()">⚡ 模拟来信测试</button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:220px 1fr auto;gap:8px;">
+              <select id="butler-provider" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12.5px;background:#fff;"></select>
+              <input id="butler-persona" placeholder="回复口吻备注（可选，如：礼貌简短，报一口价 39 元永久买断）" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12.5px;" />
+              <button class="soft-primary sm" onclick="saveButlerConfig()">保存设置</button>
             </div>
           </div>
-          <div style="display:flex;gap:8px;">
-            <button class="sm" onclick="refreshDesktopMonitorView()">↻ 立即刷新窗口列表</button>
-            <button class="sm primary" onclick="openMobileModal()">📲 手机扫码随身收消息</button>
-          </div>
-        </div>
-        <div id="desk-mon-badges" style="margin-top:12px;"></div>
-        <div id="desk-mon-alerts" style="margin-top:10px;"></div>
-      </div>
-      <div id="desk-mon-windows" class="grid"></div>
-    </div>
 
-    <div id="view-cc" style="display:none;">
-      <div class="scanner-box">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
-          <div>
-            <h2 style="margin:0 0 4px;font-size:18px;" id="cc-d-title">🤖 电脑固定干净网络跑 Claude Code (CC) · 手机随时收提醒并发指令</h2>
-            <div style="font-size:13px;color:var(--muted);" id="cc-d-desc">
-              把 Claude Code / Codex / Opus 稳稳挂在网络干净的电脑上，手机切 Wi-Fi 或 5G 流量绝不触发异地封号；任务一跑完自动弹手机提醒，点进手机随身端即可继续回复发指令！
+          <!-- Block B: 1-Click Local AI MCP Mount -->
+          <div class="panel-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
+              <div>
+                <h3>🔌 已检测到的本机 AI 工具（MCP 手机通知与拍板）</h3>
+                <p class="panel-sub">装上后，Claude Code / Cursor / Codex / Antigravity 干完活或遇到卡点会自动推红点到你手机。</p>
+              </div>
+              <button class="sm" onclick="copyOneLineAiPrompt()">📋 复制万能接入指令</button>
+            </div>
+            <textarea id="ai-one-liner-box" style="display:none;"></textarea>
+            <div id="ai-clients-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;">⏳ 正在检测本机 AI 工具...</div>
+          </div>
+
+          <!-- Block C: Fixed-IP Remote Terminal Runner -->
+          <div class="panel-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+              <div>
+                <h3>⌨️ 电脑固定网络远程会话（手机端实时同步）</h3>
+                <p class="panel-sub">把 Claude Code / Codex 挂在家里干净网络执行，出门用手机随时看进度并发下一条指令。</p>
+              </div>
+              <button class="sm danger" onclick="desktopStopCc()">⏹ 停止当前任务</button>
+            </div>
+            <div style="display:grid;grid-template-columns:160px 1fr 160px auto;gap:8px;margin-bottom:10px;">
+              <select id="d-cc-agent" style="padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font-size:12.5px;"></select>
+              <input id="d-cc-cwd" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12.5px;" placeholder="工作目录（留空默认主目录 ~）" />
+              <input id="d-cc-name" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:12.5px;" placeholder="会话备注名" />
+              <button class="primary sm" onclick="desktopCreateCcSession()">+ 新建会话</button>
+            </div>
+            <div id="d-cc-hooks-log" style="margin-bottom:8px;"></div>
+            <select id="d-cc-session-sel" style="width:100%;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font-size:12.5px;margin-bottom:8px;" onchange="desktopSelectCc(this.value)"></select>
+            <div id="d-cc-stream" style="background:#0f172a;color:#e2e8f0;border-radius:10px;padding:12px 14px;min-height:150px;max-height:300px;overflow-y:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre-wrap;line-height:1.55;"></div>
+            <div class="search-row">
+              <input id="d-cc-prompt" placeholder="输入发给本地 AI 终端的指令，回车立即执行..." onkeydown="if(event.key==='Enter')desktopSendCc()" />
+              <button class="primary" onclick="desktopSendCc()">🚀 发送执行</button>
             </div>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="sm primary" onclick="openAiMountModal()">🔌 一键接入电脑全部 AI（MCP + 自动提醒技能）</button>
-            <button class="sm" onclick="installCcHooks()" id="btn-cc-hook">🔗 绑定终端 Claude 完成提醒</button>
-            <button class="sm" onclick="openMobileModal()">📲 手机版二维码</button>
-          </div>
         </div>
+      </section>
 
-        <div style="display:grid;grid-template-columns:180px 1fr 180px auto;gap:8px;margin-top:14px;">
-          <select id="d-cc-agent" style="padding:9px;border:1px solid #cbd5e1;border-radius:10px;font-size:13px;"></select>
-          <input id="d-cc-cwd" style="padding:9px 11px;border:1px solid #cbd5e1;border-radius:10px;font-size:13px;" placeholder="项目文件夹路径（留空默认主目录 ~，如 /Users/你的名字/项目）" />
-          <input id="d-cc-name" style="padding:9px 11px;border:1px solid #cbd5e1;border-radius:10px;font-size:13px;" placeholder="会话备注名（可选）" />
-          <button class="primary" onclick="desktopCreateCcSession()">+ 新建远程会话</button>
-        </div>
-
-        <div id="d-cc-hooks-log" style="margin-top:10px;"></div>
-
-        <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-            <select id="d-cc-session-sel" style="flex:1;padding:9px;border:1px solid #cbd5e1;border-radius:10px;font-size:13px;" onchange="desktopSelectCc(this.value)"></select>
-            <button class="sm danger" onclick="desktopStopCc()">⏹ 停止运行</button>
+      <!-- VIEW 4: QUICK REPLIES & ANTI-BAN GUARD -->
+      <section id="view-replies" style="display:none;">
+        <header class="pane-header">
+          <div class="pane-title-wrap">
+            <h2 class="pane-title" id="qr-heading">防封快捷话术与违禁词检测</h2>
           </div>
-          <div id="d-cc-stream" style="background:#0f172a;color:#e2e8f0;border-radius:12px;padding:14px;min-height:180px;max-height:360px;overflow-y:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;white-space:pre-wrap;line-height:1.55;"></div>
-          <div class="search-row" style="margin-top:10px;">
-            <input id="d-cc-prompt" placeholder="输入发给 Claude Code / Codex / 终端的指令（在手机随身端也能实时同步看结果并继续发指令）..." onkeydown="if(event.key==='Enter')desktopSendCc()" />
-            <button class="primary" onclick="desktopSendCc()">🚀 立即执行</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div id="view-replies" style="display:none;">
-      <div class="scanner-box">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
-          <div>
-            <h2 style="margin:0 0 4px;font-size:18px;" id="qr-heading">⚡ 防封快捷话术 · 随机同义变体 &amp; 违禁词避雷针</h2>
-            <div style="font-size:13px;color:var(--muted);" id="qr-desc">
-              支持 <code>{你好|哈喽|亲}</code> 随机变体（每次复制自动换词防平台判重限流），永久免费 JSON 导出备份，绝不锁死你的话术资产。
-            </div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="sm" onclick="exportQuickReplies()" id="btn-qr-export">💾 导出备份 (JSON)</button>
-            <button class="sm" onclick="document.getElementById('qr-import-file').click()" id="btn-qr-import">📂 导入备份</button>
+          <div class="pane-actions">
+            <button class="sm" onclick="openPlaybook()" id="tab-playbook">🎁 高成交破冰话术锦囊</button>
+            <button class="sm" onclick="exportQuickReplies()" id="btn-qr-export">💾 导出 JSON</button>
+            <button class="sm" onclick="document.getElementById('qr-import-file').click()" id="btn-qr-import">📂 导入</button>
             <input type="file" id="qr-import-file" accept=".json,application/json" style="display:none" onchange="importQuickReplies(event)" />
-            <button class="sm primary" onclick="openNewQuickReplyForm()" id="btn-qr-new">+ 新增快捷话术</button>
+            <button class="primary sm" onclick="openNewQuickReplyForm()" id="btn-qr-new">+ 新增话术</button>
           </div>
-        </div>
+        </header>
 
-        <!-- Real-Time Sensitive / Ban-Word Detector -->
-        <div style="margin-top:14px;background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
-            <strong style="font-size:13px;" id="guard-title">🛡️ 发送前违禁词 / 导流敏感词实时避雷针（防闲鱼/小红书吞评封号）</strong>
-            <button class="sm" onclick="copyCheckedSafeDraft()" id="btn-guard-copy">📋 复制检测后内容</button>
+        <div class="pane-body">
+          <div class="panel-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+              <strong style="font-size:13.5px;" id="guard-title">🛡️ 发送前站外导流词 / 违禁词实时避雷针（防闲鱼/小红书吞评禁言）</strong>
+              <button class="sm soft-primary" onclick="copyCheckedSafeDraft()" id="btn-guard-copy">📋 复制检测后内容</button>
+            </div>
+            <textarea id="qr-draft-check" class="draft-area" style="margin-top:4px;min-height:58px;" oninput="runBanWordCheck()" placeholder="把准备发给客户的话粘贴到这里检测（自动识别微信变体、手机号、私下交易词与极限广告词）..."></textarea>
+            <div id="qr-guard-result" style="font-size:12px;margin-top:6px;color:var(--green);font-weight:600;">🟢 未检测到平台高危导流词或极限违禁词</div>
           </div>
-          <textarea id="qr-draft-check" class="draft-area" style="margin-top:0;min-height:64px;background:#fff;" oninput="runBanWordCheck()" placeholder="把准备发给客户的话粘贴到这里检测（自动识别微信号、站外导流词、极限广告词并给出安全替代表达）..."></textarea>
-          <div id="qr-guard-result" style="font-size:12.5px;margin-top:6px;color:var(--green);font-weight:600;">🟢 未检测到平台高危导流词或极限违禁词</div>
-        </div>
 
-        <!-- New Quick Reply Inline Editor -->
-        <div id="qr-editor" style="display:none;margin-top:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-            <input id="qr-edit-title" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" placeholder="话术标题（如：首句秒回 / 报价逼单）" />
-            <input id="qr-edit-cat" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;" placeholder="分组标签（如：售前秒回 / 防封导流）" />
-          </div>
-          <textarea id="qr-edit-body" class="draft-area" style="background:#fff;min-height:70px;" placeholder="话术正文，可用 {你好呀|哈喽|嗨} 写同义词变体，每次复制自动随机抽一个词防重复判罚！"></textarea>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap;">
-            <button class="sm" onclick="pasteClipboardToQrEditor()" id="btn-qr-clip">📋 粘贴剪贴板文字</button>
-            <div style="display:flex;gap:8px;">
-              <button class="sm" onclick="document.getElementById('qr-editor').style.display='none'">取消</button>
-              <button class="sm primary" onclick="saveQuickReplyItem()">💾 保存话术</button>
+          <div id="qr-editor" class="panel-card" style="display:none;background:#eff6ff;border-color:#bfdbfe;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <input id="qr-edit-title" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;" placeholder="话术标题（如：首句秒回 / 报价逼单）" />
+              <input id="qr-edit-cat" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;" placeholder="分组标签（如：破冰秒回 / 防砍价）" />
+            </div>
+            <textarea id="qr-edit-body" class="draft-area" style="background:#fff;min-height:68px;" placeholder="话术正文，可用 {你好呀|哈喽|嗨} 写同义变体，每次复制自动随机换词防重复判罚！"></textarea>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;">
+              <span style="font-size:12px;color:#475569;" id="qr-desc">支持 <code>{你好|哈喽|亲}</code> 随机同义变体</span>
+              <div style="display:flex;gap:8px;">
+                <button class="sm" onclick="pasteClipboardToQrEditor()" id="btn-qr-clip">📋 粘贴剪贴板</button>
+                <button class="sm" onclick="document.getElementById('qr-editor').style.display='none'">取消</button>
+                <button class="sm primary" onclick="saveQuickReplyItem()">💾 保存话术</button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="search-row" style="margin-top:12px;">
-          <input id="qr-search" oninput="renderQuickReplies()" placeholder="🔍 输入关键词秒搜话术（如：报价、发货、售后、价格）..." />
+          <div style="margin-bottom:12px;">
+            <input id="qr-search" style="width:100%;padding:8.5px 12px;border-radius:9px;border:1px solid var(--border);background:#fff;font-size:13px;" oninput="renderQuickReplies()" placeholder="🔍 搜索话术标题、分类或正文关键词..." />
+          </div>
+          <div id="qr-list" class="cards-grid"></div>
         </div>
-      </div>
-      <div id="qr-list" class="grid"></div>
-    </div>
+      </section>
 
-    <div id="view-scanner" style="display:none;">
-      <div class="scanner-box">
-        <h2 style="margin:0 0 4px;font-size:18px;" id="scan-heading">过去 24～72 小时全网真实求购与外包线索扫描</h2>
-        <div style="font-size:13px;color:var(--muted);" id="scan-desc">
-          输入你的手艺或业务关键词，实时检索全网公开求购、悬赏与找人帖，按成交意向自动排序。
+      <!-- VIEW 5: LIVE BUYER LEAD SCANNER -->
+      <section id="view-scanner" style="display:none;">
+        <header class="pane-header">
+          <div class="pane-title-wrap">
+            <h2 class="pane-title" id="scan-heading">全网求购与外包线索雷达</h2>
+            <span style="font-size:12px;color:var(--muted);" id="scan-desc">检索过去 24～72 小时公开求购、悬赏与找人帖</span>
+          </div>
+        </header>
+        <div class="pane-body">
+          <div class="panel-card">
+            <div class="search-row" style="margin-top:0;">
+              <input id="scan-input" value="Shopify" onkeydown="if(event.key==='Enter')runLeadScan()" />
+              <button class="primary" onclick="runLeadScan()" id="btn-scan">🔍 扫描最新商机</button>
+            </div>
+            <div class="chips" id="scan-chips"></div>
+          </div>
+          <div id="scan-results" class="lead-list"></div>
         </div>
-        <div class="search-row">
-          <input id="scan-input" value="Shopify" onkeydown="if(event.key==='Enter')runLeadScan()" />
-          <button class="primary" onclick="runLeadScan()" id="btn-scan">🔍 立即扫描新商机</button>
-        </div>
-        <div class="chips" id="scan-chips"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: PRESET PACKS -->
+  <div class="modal-backdrop" id="modal-packs" onclick="if(event.target===this)closeModals()">
+    <div class="modal" style="max-width:560px;">
+      <h2 id="packs-modal-title">📦 一键导入常用平台模板包</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;" id="packs-modal-desc">
+        导入后自动分配独立防串号隔离仓，已存在的同网址平台不会重复覆盖。
+      </p>
+      <div id="packs-modal-list" style="display:grid;gap:10px;"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+        <button onclick="closeModals()">关闭</button>
       </div>
-      <div id="scan-results" class="lead-list"></div>
     </div>
   </div>
 
   <!-- MODAL: ADD WATCH -->
-  <div class="modal-backdrop" id="modal-add">
-    <div class="modal">
-      <h2 id="add-modal-title">添加要盯守的网站平台</h2>
+  <div class="modal-backdrop" id="modal-add" onclick="if(event.target===this)closeModals()">
+    <div class="modal" style="max-width:520px;">
+      <h2 id="add-modal-title">添加看护平台</h2>
       <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="add-modal-desc">
-        添加后点击卡片上的「打开工作台」登录一次即可，关掉窗口后后台照样安静听新消息，不刷网页不伤号。
+        添加后点卡片「打开会话」登录一次即可，后台常驻静默听新消息，零定时刷页不伤号。
       </p>
       <div class="form-row">
-        <label id="lbl-name">网站或店铺名称</label>
-        <input id="f-name" placeholder="例如：闲鱼买家咨询 / 小红书后台 / 电鸭私信" />
+        <label id="lbl-name">平台或店铺名称</label>
+        <input id="f-name" placeholder="例如：闲鱼买家咨询 / 小红书私信 / 电鸭社区" />
       </div>
       <div class="form-row">
         <label id="lbl-url">消息页网址</label>
@@ -370,30 +947,30 @@
       </div>
       <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div>
-          <label id="lbl-cat">所属分类</label>
+          <label id="lbl-cat">所属分组</label>
           <select id="f-cat">
-            <option value="接单外包" id="opt-cat-1">接单与客户询盘</option>
-            <option value="主力阵地" id="opt-cat-2">自媒体与店铺消息</option>
-            <option value="开发者商店" id="opt-cat-3">应用与商品审核后台</option>
-            <option value="长尾蹲守" id="opt-cat-4">其他常用网站</option>
+            <option value="主力阵地" id="opt-cat-2">主力阵地（店铺与自媒体）</option>
+            <option value="接单外包" id="opt-cat-1">接单外包（客户询盘）</option>
+            <option value="开发者商店" id="opt-cat-3">开发者商店（审核后台）</option>
+            <option value="长尾蹲守" id="opt-cat-4">长尾蹲守（其他网站）</option>
           </select>
         </div>
         <div>
-          <label id="lbl-interval">检查间隔（分钟）</label>
+          <label id="lbl-interval">低频巡检间隔（分钟）</label>
           <input id="f-interval" type="number" value="60" min="15" />
         </div>
       </div>
       <div class="form-row">
-        <label id="lbl-tier">安全看护方式</label>
+        <label id="lbl-tier">安全看护模式</label>
         <select id="f-tier">
           <option value="red" id="opt-tier-red">🛡️ 零刷页常驻监听（最稳防封：适合闲鱼/小红书/社交平台）</option>
-          <option value="yellow" id="opt-tier-yellow">🟡 温和低频看护（适合普通论坛/外包网）</option>
-          <option value="green" id="opt-tier-green">🟢 常规后台看护（适合开发者与工作台后台）</option>
+          <option value="yellow" id="opt-tier-yellow">🟡 温和低频看护（适合外包社区/论坛）</option>
+          <option value="green" id="opt-tier-green">🟢 常规后台看护（适合应用商店与工作台）</option>
         </select>
       </div>
       <div class="form-row">
-        <label id="lbl-ctx">备注备忘（来消息时提醒你当初干了啥）</label>
-        <input id="f-ctx" placeholder="例如：挂了定制服务，报价 300 元起" />
+        <label id="lbl-ctx">备注备忘（可选）</label>
+        <input id="f-ctx" placeholder="例如：主号店铺私信，报价 39 元起" />
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
         <button onclick="closeModals()" id="btn-cancel-add">取消</button>
@@ -403,38 +980,36 @@
   </div>
 
   <!-- MODAL: UPGRADE & LICENSE -->
-  <div class="modal-backdrop" id="modal-paywall">
+  <div class="modal-backdrop" id="modal-paywall" onclick="if(event.target===this)closeModals()">
     <div class="modal">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-        <h2 id="pw-title">解锁《消息总管》专业版 · 不漏掉任何一笔客户消息</h2>
-      </div>
-      <p style="font-size:13px;color:var(--muted);margin:4px 0 10px;" id="paywall-reason">
-        免费版可同时盯守 2 个平台。解锁专业版即可添加无限个网站、一键导入常用包、开启手机实时提醒并获赠破冰话术库！
+      <h2 id="pw-title">解锁《消息总管》专业版 · 不漏掉任何一笔客户消息</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin:4px 0 10px;" id="paywall-reason">
+        免费版支持同时看护 2 个平台。解锁专业版即可添加无限个平台、同站无限多开防串号并开启手机实时推送！
       </p>
 
       <div id="price-cn" class="pricing-cards">
         <div class="price-box">
-          <span class="badge badge-slate">轻量体验年卡</span>
-          <div class="price-num" id="cn-p1">¥9.9 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 年</span></div>
-          <div style="font-size:12px;color:var(--muted);">一杯水钱，全年防漏单</div>
+          <span class="badge badge-slate">轻量年卡</span>
+          <div class="price-num" id="cn-p1">¥9.9 <span style="font-size:12.5px;font-weight:500;color:var(--muted);">/ 年</span></div>
+          <div style="font-size:12px;color:var(--muted);">一杯奶茶钱，全年防漏单</div>
           <ul class="offer-list">
-            <li>支持最多 6 个网站或账号同时盯守</li>
-            <li>独立防串号隔离仓（2 个闲鱼/小红书号同挂）</li>
+            <li>支持最多 6 个网站或账号同时看护</li>
+            <li>独立防串号隔离仓（同挂 2 个号）</li>
             <li>零刷页常驻安全防封保护</li>
           </ul>
-          <button class="btn" id="mas-buy-yearly-cn" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.yearly')"> Apple 账户订阅 (¥9.9/年)</button>
+          <button class="btn" id="mas-buy-yearly-cn" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.yearly')"> Apple 订阅 (¥9.9/年)</button>
         </div>
         <div class="price-box featured">
-          <span class="badge badge-green">🔥 92% 多号卖家首选 · 一次付清</span>
-          <div class="price-num" id="cn-p2">¥39 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 永久买断</span></div>
-          <div style="font-size:12px;color:var(--primary);font-weight:600;" id="cn-p2-sub">同行客服软件十分之一价格 · 支持同平台无限多开防串号</div>
+          <span class="badge badge-green">🔥 一次付清 · 永久买断</span>
+          <div class="price-num" id="cn-p2">¥39 <span style="font-size:12.5px;font-weight:500;color:var(--muted);">/ 永久</span></div>
+          <div style="font-size:12px;color:var(--primary);font-weight:600;" id="cn-p2-sub">支持同平台无限多开防串号 · 含手机随身收件箱</div>
           <ul class="offer-list">
-            <li><strong>无限个闲鱼 / 小红书 / 店铺账号独立隔离同时在线</strong></li>
-            <li><strong>手机飞书 / 微信服务通知秒级推送</strong></li>
-            <li>🎁 <strong>白送赠品</strong>：《高成交率外包与商务回复话术库》</li>
-            <li>🛡️ <strong>售后承诺</strong>：14 天不满意无理由全额退！</li>
+            <li><strong>无限个闲鱼 / 小红书 / 店铺账号物理隔离同挂</strong></li>
+            <li><strong>手机扫码随身收红点 + 飞书/企微秒级推送</strong></li>
+            <li>🎁 <strong>附赠</strong>：《高成交率外包与商务回复话术库》</li>
+            <li>🛡️ <strong>保障</strong>：14 天不满意无理由全额退</li>
           </ul>
-          <a class="btn primary" id="direct-buy-cn" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">获取正版买断激活码（秒发货）→</a>
+          <a class="btn primary" id="direct-buy-cn" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">获取正版买断激活码 →</a>
           <button class="btn primary" id="mas-buy-life-cn" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.lifetime')"> Apple 一键永久买断 (¥28)</button>
         </div>
       </div>
@@ -442,7 +1017,7 @@
       <div id="price-global" class="pricing-cards" style="display:none;">
         <div class="price-box">
           <span class="badge badge-slate">Annual Pro</span>
-          <div class="price-num" id="gl-p1">$4.99 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ yr</span></div>
+          <div class="price-num" id="gl-p1">$4.99 <span style="font-size:12.5px;font-weight:500;color:var(--muted);">/ yr</span></div>
           <div style="font-size:12px;color:var(--muted);">Multi-account inbox &amp; 24/7 lead radar</div>
           <ul class="offer-list">
             <li>Up to 10 isolated marketplace &amp; social accounts</li>
@@ -453,7 +1028,7 @@
         </div>
         <div class="price-box featured">
           <span class="badge badge-green">🔥 Most Popular · Pay Once</span>
-          <div class="price-num" id="gl-p2">$14.99 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ Lifetime</span></div>
+          <div class="price-num" id="gl-p2">$14.99 <span style="font-size:12.5px;font-weight:500;color:var(--muted);">/ Lifetime</span></div>
           <div style="font-size:12px;color:var(--primary);font-weight:600;" id="gl-p2-sub">Unlimited isolated accounts · Own forever</div>
           <ul class="offer-list">
             <li><strong>Unlimited isolated cookie sandboxes per platform</strong></li>
@@ -465,7 +1040,7 @@
         </div>
       </div>
 
-      <div id="mas-restore-bar" style="display:none;border-top:1px solid var(--border);padding-top:12px;margin-top:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted);">
+      <div id="mas-restore-bar" style="display:none;border-top:1px solid var(--border);padding-top:10px;margin-top:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted);">
         <button class="sm" onclick="restoreMasIap()" id="btn-mas-restore">🔄 恢复已购项目 / Restore Purchases</button>
         <div>
           <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="text-decoration:underline;">使用条款 (EULA)</a> ·
@@ -474,9 +1049,9 @@
       </div>
 
       <div id="direct-license-bar" style="border-top:1px solid var(--border);padding-top:12px;margin-top:10px;">
-        <label style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;" id="lbl-lic-input">已有正版激活码？粘贴到下方立即解锁：</label>
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:6px;" id="lbl-lic-input">已有正版激活码？粘贴到下方立即解锁：</label>
         <div style="display:flex;gap:8px;">
-          <input id="license-input" style="flex:1;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;font-size:12.5px;" placeholder="TP1...." />
+          <input id="license-input" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;font-size:12.5px;" placeholder="TP1...." />
           <button class="primary" onclick="activateKey()" id="btn-lic-act">立即激活</button>
         </div>
         <div id="license-msg" style="font-size:12px;margin-top:6px;"></div>
@@ -487,53 +1062,57 @@
     </div>
   </div>
 
-  <!-- MODAL: SETTINGS -->
-  <div class="modal-backdrop" id="modal-settings">
-    <div class="modal" style="max-width:520px;">
-      <h2 id="set-title">手机实时消息提醒设置</h2>
+  <!-- MODAL: UNIFIED SETTINGS (PUSH WEBHOOK + LANGUAGE + UPDATE CHECK) -->
+  <div class="modal-backdrop" id="modal-settings" onclick="if(event.target===this)closeModals()">
+    <div class="modal" style="max-width:500px;">
+      <h2 id="set-title">⚙️ 软件设置与外部推送</h2>
       <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="set-desc">
-        填入飞书机器人、企业微信、Server酱或 Bark 的通知链接，有新客户私信时第一时间发到你手机上。
+        可选配置飞书机器人、企业微信、Bark 或 Server酱 Webhook，来新消息时同步推送到手机。
       </p>
       <div class="form-row">
-        <label id="lbl-hook">通知推送链接</label>
+        <label id="lbl-hook">外部推送 Webhook 链接（可选）</label>
         <input id="s-webhook" placeholder="https://..." />
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;margin:12px 0;gap:8px;flex-wrap:wrap;">
+        <div style="font-size:12.5px;color:#475569;">界面语言与软件版本</div>
+        <div style="display:flex;gap:8px;">
+          <button class="sm" onclick="toggleLang()" id="btn-lang">切换 English</button>
+          <button class="sm" onclick="checkAppUpdate()" id="btn-update">🔄 检查更新</button>
+        </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
         <button onclick="closeModals()" id="btn-cancel-set">取消</button>
-        <button class="primary" onclick="saveWebhookSettings()" id="btn-save-set">保存</button>
+        <button class="primary" onclick="saveWebhookSettings()" id="btn-save-set">保存设置</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL: MOBILE POCKET CONSOLE & QR PAIRING -->
-  <div class="modal-backdrop" id="modal-mobile">
-    <div class="modal" style="max-width:560px;">
-      <h2 id="mob-title">📲 手机随身收件箱（来消息响铃亮红点 · 点红点直看文字回复）</h2>
+  <div class="modal-backdrop" id="modal-mobile" onclick="if(event.target===this)closeModals()">
+    <div class="modal" style="max-width:550px;">
+      <h2 id="mob-title">📲 手机随身收件箱（纯文字红点直连）</h2>
       <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="mob-desc">
-        手机扫码即可添加到主屏幕当原生收件箱用！无论手机怎么切 Wi-Fi / 5G 流量，所有请求都由家里电脑的固定干净网络发出；来新消息手机自动提醒亮红点，<strong>点进对应平台的红点就能直接看纯文字消息并回复（不传笨重电脑屏幕图）</strong>！
+        手机扫码即可打开随身收件箱并「添加到主屏幕」。来新消息手机响铃亮红点，点进对应红点即可直接看纯文字聊天并由家里电脑固定网络代发回复！
       </p>
-      <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:center;background:#f8fafc;border:1px solid var(--border);border-radius:14px;padding:14px;">
-        <div id="mob-qr-box" style="width:210px;height:210px;background:#fff;border-radius:12px;border:1px solid var(--border);display:grid;place-items:center;">
+      <div style="display:grid;grid-template-columns:206px 1fr;gap:14px;align-items:center;background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;">
+        <div id="mob-qr-box" style="width:198px;height:198px;background:#fff;border-radius:10px;border:1px solid var(--border);display:grid;place-items:center;">
           ⏳ 生成中...
         </div>
         <div style="min-width:0;">
-          <div style="margin-bottom:10px;">
-            <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">🏠 同 Wi-Fi 局域网秒连地址：</div>
-            <input id="mob-lan-url" readonly onclick="this.select()" style="width:100%;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11.5px;font-family:monospace;background:#fff;" />
+          <div style="margin-bottom:9px;">
+            <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:3px;">🏠 同 Wi-Fi 局域网直连：</div>
+            <input id="mob-lan-url" readonly onclick="this.select()" style="width:100%;padding:6.5px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:11.5px;font-family:monospace;background:#fff;" />
           </div>
           <div style="margin-bottom:10px;">
-            <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:4px;">🌐 出门在外 4G/5G 免翻墙加密直连：</div>
-            <input id="mob-tun-url" readonly onclick="this.select()" placeholder="点击下方按钮一键开启公网加密隧道..." style="width:100%;padding:7px 9px;border:1px solid #bfdbfe;border-radius:8px;font-size:11.5px;font-family:monospace;background:#eff6ff;" />
+            <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:3px;">🌐 出门 4G/5G 免翻墙加密直连：</div>
+            <input id="mob-tun-url" readonly onclick="this.select()" placeholder="点击下方按钮开启出门穿透..." style="width:100%;padding:6.5px 9px;border:1px solid #bfdbfe;border-radius:7px;font-size:11.5px;font-family:monospace;background:#eff6ff;" />
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="sm primary" id="btn-toggle-tunnel" onclick="toggleMobileTunnel()">🌐 一键开启出门 4G/5G 穿透</button>
-            <button class="sm" onclick="copyPrimaryMobileUrl()">📋 复制手机链接</button>
-            <button class="sm danger" onclick="resetMobileToken()">🔄 重置密钥</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="sm primary" id="btn-toggle-tunnel" onclick="toggleMobileTunnel()">🌐 开启出门 4G/5G 穿透</button>
+            <button class="sm" onclick="copyPrimaryMobileUrl()">📋 复制链接</button>
+            <button class="sm danger" onclick="resetMobileToken()">重置密钥</button>
           </div>
         </div>
-      </div>
-      <div style="font-size:12px;color:#475569;margin-top:10px;">
-        💡 提示：手机浏览器扫码打开后，点分享菜单选<strong>「添加到主屏幕」</strong>，就会在手机桌面生成独立的《消息总管》图标！
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:12px;">
         <button onclick="closeModals()">关闭</button>
@@ -541,91 +1120,48 @@
     </div>
   </div>
 
-  <!-- MODAL: 1-CLICK AI AGENT AUTO-MOUNT (MCP + SKILL + HOOKS) -->
-  <div class="modal-backdrop" id="modal-ai-mount">
-    <div class="modal" style="max-width:640px;">
-      <h2>🧠 AI 个人助理实时看信 &amp; 一键接入电脑全部 AI</h2>
-      <p style="font-size:12.5px;color:var(--muted);margin-top:0;line-height:1.55;">
-        <strong>双向打通：</strong>① 任何网页平台或电脑软件一来消息，<strong>你的 AI 个人助理立马就知道</strong>，自动替你筛广告、看重点、拟好回复草稿推到手机让你一键点发；② 电脑上的 AI 干完活也会自动调《消息总管》推手机红点！
-      </p>
-
-      <div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:12px;padding:13px;margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <label style="font-size:13.5px;font-weight:800;color:#1e3a8a;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="butler-enabled" style="width:16px;height:16px;" />
-            开启「来消息 AI 个人助理立马看信并拟好回复」
-          </label>
-          <div style="display:flex;gap:6px;">
-            <button class="sm" onclick="simulateButlerIncoming()">⚡ 模拟来信实测效果</button>
-            <button class="sm primary" onclick="saveButlerConfig()">💾 保存助理设置</button>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <select id="butler-provider" style="padding:7px 9px;border:1px solid #bfdbfe;border-radius:8px;font-size:12.5px;background:#fff;"></select>
-          <input id="butler-persona" placeholder="口吻备注（可选，如：礼貌简短，报39元买断）" style="padding:7px 9px;border:1px solid #bfdbfe;border-radius:8px;font-size:12.5px;background:#fff;" />
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <strong style="font-size:13px;">给电脑上的编码/工作 AI 一键装上传呼机（MCP + 技能）：</strong>
-        <button class="sm primary" onclick="installAiClientAction('all')">🚀 一键接入全部已装 AI</button>
-      </div>
-      <div id="ai-clients-list" style="display:grid;gap:8px;margin-bottom:14px;">⏳ 正在检测本机 AI 工具...</div>
-      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <strong style="font-size:12.5px;color:#334155;">💬 万能一句话指令（发给任何其他 AI，它自己就会调《消息总管》）：</strong>
-          <button class="sm" onclick="copyOneLineAiPrompt()">📋 一键复制这句话</button>
-        </div>
-        <textarea id="ai-one-liner-box" rows="3" readonly style="width:100%;font-size:11.5px;background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:8px;padding:8px;"></textarea>
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
-        <button onclick="closeModals()">关闭</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: CLONE MULTI-ACCOUNT (REPLACES JS PROMPT) -->
-  <div class="modal-backdrop" id="modal-clone">
-    <div class="modal" style="max-width:480px;">
-      <h2 id="clone-title">➕ 创建同平台独立防串号新仓</h2>
+  <!-- MODAL: CLONE MULTI-ACCOUNT -->
+  <div class="modal-backdrop" id="modal-clone" onclick="if(event.target===this)closeModals()">
+    <div class="modal" style="max-width:460px;">
+      <h2 id="clone-title">➕ 创建同平台独立防串号副号</h2>
       <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="clone-desc">
-        新账号将分配 100% 物理隔离的专属登录存储池，与原账号 Cookie、缓存完全隔绝，同台电脑挂多个闲鱼/小红书号绝不串号。
+        新账号将分配 100% 物理隔离的独立登录存储池，与主号 Cookie 完全隔绝，同挂多个闲鱼/小红书号绝不串号。
       </p>
       <input type="hidden" id="clone-src-id" />
       <div class="form-row">
-        <label id="clone-lbl-name">给新账号起个好认的备注名</label>
+        <label id="clone-lbl-name">新账号备注名称</label>
         <input id="clone-name-input" onkeydown="if(event.key==='Enter')confirmCloneMultiAccount()" />
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
         <button onclick="closeModals()" id="btn-cancel-clone">取消</button>
-        <button class="primary" onclick="confirmCloneMultiAccount()" id="btn-confirm-clone">立即创建并打开登录</button>
+        <button class="primary" onclick="confirmCloneMultiAccount()" id="btn-confirm-clone">创建并打开登录</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: UPDATE AVAILABLE (REPLACES JS CONFIRM) -->
-  <div class="modal-backdrop" id="modal-update">
-    <div class="modal" style="max-width:460px;">
+  <!-- MODAL: UPDATE AVAILABLE -->
+  <div class="modal-backdrop" id="modal-update" onclick="if(event.target===this)closeModals()">
+    <div class="modal" style="max-width:440px;">
       <h2 id="upd-title">🎉 发现新版本</h2>
       <p style="font-size:13px;color:var(--muted);line-height:1.6;" id="upd-desc"></p>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
         <button onclick="closeModals()" id="btn-cancel-upd">稍后再说</button>
-        <a class="btn primary" id="btn-go-upd" href="#" target="_blank" onclick="closeModals()">立即前往下载新版 →</a>
+        <a class="btn primary" id="btn-go-upd" href="#" target="_blank" onclick="closeModals()">前往下载新版 →</a>
       </div>
     </div>
   </div>
 
   <!-- MODAL: FIRST-RUN CONSENT -->
   <div class="modal-backdrop" id="modal-consent">
-    <div class="modal" style="max-width:560px;">
-      <h2 id="cs-title">欢迎使用《消息总管》· 安全与隐私确认</h2>
-      <ul style="font-size:13px;color:#334155;line-height:1.75;padding-left:20px;margin:10px 0 14px;" id="cs-list">
-        <li><strong>零刷页安全防封</strong>：针对闲鱼、小红书等严管平台，软件采用与苹果自带浏览器一致的「常驻页面被动听消息」方式，<strong>绝不定时反复刷新网页、绝不自动群发消息</strong>。</li>
+    <div class="modal" style="max-width:540px;">
+      <h2 id="cs-title">欢迎使用《消息总管》· 安全与隐私说明</h2>
+      <ul style="font-size:13px;color:#334155;line-height:1.7;padding-left:20px;margin:10px 0 14px;" id="cs-list">
+        <li><strong>零刷页安全防封</strong>：针对闲鱼、小红书等严管平台，采用常驻页面被动听消息方式，<strong>绝不定时刷新网页、绝不自动群发消息</strong>。</li>
         <li><strong>账号 100% 留在本机</strong>：您在软件内登录的网站状态仅保存在您自己的电脑里，绝不上传至任何外部服务器。</li>
-        <li><strong>售后与服务边界</strong>：本软件仅作本地消息提醒辅助，提供 14 天不满意无理由全额退款保障，软件最高责任上限不超过您实际支付的软件费用。</li>
+        <li><strong>售后与服务边界</strong>：提供 14 天无理由全额退款保障，软件最高责任上限不超过实际支付的软件费用。</li>
       </ul>
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer;background:#f8fafc;padding:10px 12px;border-radius:10px;border:1px solid var(--border);">
-        <input type="checkbox" id="consent-checkbox" onchange="document.getElementById('btn-accept-consent').disabled = !this.checked" style="margin-top:3px;width:16px;height:16px;" />
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;cursor:pointer;background:#f8fafc;padding:10px 12px;border-radius:10px;border:1px solid var(--border);">
+        <input type="checkbox" id="consent-checkbox" onchange="document.getElementById('btn-accept-consent').disabled = !this.checked" style="margin-top:2px;width:15px;height:15px;" />
         <span id="cs-check-label">
           我已阅读并同意
           <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《用户服务与软件许可协议》</a>
@@ -633,7 +1169,7 @@
           <a href="https://a3152557994-ship-it.github.io/tabpulse/privacy.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《隐私政策》</a>
         </span>
       </label>
-      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+      <div style="display:flex;justify-content:flex-end;margin-top:14px;">
         <button class="primary" id="btn-accept-consent" disabled onclick="acceptTermsConsent()">同意并开始使用</button>
       </div>
     </div>
@@ -645,23 +1181,35 @@
     let appState = { watches: [], stats: {}, license: { valid: false, plan: "free" }, settings: { lang: "zh", webhookUrl: "" } };
     let presetPacks = [];
     let currentLang = (navigator.language || "zh").toLowerCase().startsWith("zh") ? "zh" : "en";
+    let activeCatFilter = "all";
+    let openMenuWatchId = null;
+    let authBannerDismissed = false;
+
     const isMacNative = Boolean(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tabpulse);
     const isWinNative = Boolean(window.chrome && window.chrome.webview);
     const isNativeApp = isMacNative || isWinNative;
 
+    const CAT_ORDER = ["主力阵地", "接单外包", "开发者商店", "长尾蹲守"];
     const CAT_EN = {
+      "主力阵地": "Core Storefronts & Social",
       "接单外包": "Freelance & Client Leads",
-      "主力阵地": "Core Social & Storefronts",
       "开发者商店": "App & Developer Portals",
       "长尾蹲守": "Other Watched Sites"
     };
+
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".more-wrap")) {
+        openMenuWatchId = null;
+        document.querySelectorAll(".more-menu.open").forEach((el) => el.classList.remove("open"));
+      }
+    });
 
     function showToast(msg) {
       const el = document.getElementById("toast");
       el.textContent = msg;
       el.style.display = "block";
       clearTimeout(window.__toastTimer);
-      window.__toastTimer = setTimeout(() => { el.style.display = "none"; }, 2800);
+      window.__toastTimer = setTimeout(() => { el.style.display = "none"; }, 2600);
     }
 
     function nativePost(action, payload = {}) {
@@ -700,79 +1248,101 @@
       }
     };
 
+    function getBrandStyle(name = "", url = "") {
+      const s = `${name} ${url}`.toLowerCase();
+      if (s.includes("闲鱼") || s.includes("goofish")) return { ico: "🐟", bg: "linear-gradient(135deg,#f59e0b,#ea580c)" };
+      if (s.includes("小红书") || s.includes("xiaohongshu")) return { ico: "📕", bg: "linear-gradient(135deg,#ef4444,#e11d48)" };
+      if (s.includes("电鸭") || s.includes("eleduck")) return { ico: "⚡", bg: "linear-gradient(135deg,#4f46e5,#2563eb)" };
+      if (s.includes("v2ex")) return { ico: "V2", bg: "linear-gradient(135deg,#334155,#0f172a)" };
+      if (s.includes("知乎") || s.includes("zhihu")) return { ico: "知", bg: "linear-gradient(135deg,#2563eb,#1d4ed8)" };
+      if (s.includes("x.com") || s.includes("twitter") || s.includes("x (")) return { ico: "𝕏", bg: "linear-gradient(135deg,#1e293b,#090d16)" };
+      if (s.includes("github")) return { ico: "🐙", bg: "linear-gradient(135deg,#334155,#1e293b)" };
+      if (s.includes("apple") || s.includes("app store") || s.includes("appstore")) return { ico: "", bg: "linear-gradient(135deg,#0284c7,#2563eb)" };
+      if (s.includes("makerworld") || s.includes("拓竹")) return { ico: "🧩", bg: "linear-gradient(135deg,#059669,#047857)" };
+      if (s.includes("reddit")) return { ico: "🎯", bg: "linear-gradient(135deg,#ea580c,#dc2626)" };
+      if (s.includes("upwork")) return { ico: "💼", bg: "linear-gradient(135deg,#16a34a,#15803d)" };
+      if (s.includes("product hunt") || s.includes("producthunt")) return { ico: "🚀", bg: "linear-gradient(135deg,#ea580c,#db2777)" };
+      if (s.includes("微信") || s.includes("wechat")) return { ico: "💬", bg: "linear-gradient(135deg,#10b981,#059669)" };
+      const ch = String(name || "信").trim()[0] || "信";
+      return { ico: ch.toUpperCase(), bg: "linear-gradient(135deg,#2563eb,#4f46e5)" };
+    }
+
+    function cleanHostname(url = "") {
+      try {
+        return new URL(url).hostname.replace(/^www\./i, "");
+      } catch {
+        return url;
+      }
+    }
+
+    function normalizeQrItem(item = {}) {
+      const en = currentLang === "en";
+      const title = en
+        ? (item.titleEn || item.title || item.titleZh || "Quick Reply")
+        : (item.title || item.titleZh || item.titleEn || "快捷话术");
+      const category = item.category || item.cat || (en ? "General" : "常用话术");
+      const body = en
+        ? (item.textEn || item.body || item.template || item.text || item.textZh || "")
+        : (item.body || item.template || item.text || item.textZh || item.textEn || "");
+      return {
+        id: item.id || "qr_" + Math.random().toString(36).slice(2),
+        title,
+        category,
+        body,
+      };
+    }
+
     function applyStaticLanguage() {
       const en = currentLang === "en";
-      document.title = en ? "ReplyRadar — All-in-One Unread Inbox & Lead Alerts" : "消息总管 — 多平台未读消息提醒与找单盒子";
-      document.getElementById("t-title").textContent = en ? "ReplyRadar" : "消息总管";
-      document.getElementById("t-sub").textContent = en
-        ? "All-in-One Unread Inbox & Live Buyer Lead Radar · No Browser Extension Needed"
-        : "多平台未读消息提醒与找单盒子 · 免装浏览器插件";
-      document.getElementById("btn-lang").textContent = en ? "中文界面" : "English";
-      document.getElementById("btn-update").textContent = en ? "🔄 Check Updates" : "🔄 检查更新";
       const isMas = Boolean(window.__TABPULSE_MAS_MODE);
+      document.title = en ? "ReplyRadar — Multi-Account Unread Inbox" : "消息总管 — 多平台未读消息与找单工作台";
+      document.getElementById("t-title").textContent = en ? "ReplyRadar" : "消息总管";
+      document.getElementById("t-guard-text").textContent = en ? "Zero-Reload Active" : "零刷页守护中";
+      document.getElementById("lbl-side-ws").textContent = en ? "WORKSPACE" : "工作台";
+      document.getElementById("lbl-side-quick").textContent = en ? "DIRECT CHANNELS" : "直达会话";
+
+      document.getElementById("nav-txt-inbox").textContent = en ? "Inboxes" : "平台消息";
+      document.getElementById("nav-txt-desktop").textContent = en ? "Desktop Apps" : "电脑软件";
+      document.getElementById("nav-txt-cc").textContent = en ? "AI Assistant" : "AI 个人助理";
+      document.getElementById("nav-txt-replies").textContent = en ? "Quick Replies" : "快捷话术库";
+      document.getElementById("nav-txt-scanner").textContent = en ? "Lead Radar" : "找单雷达";
+
       const mobBtn = document.getElementById("btn-mobile-qr");
-      const ccTab = document.getElementById("tab-cc");
-      if (mobBtn) {
-        mobBtn.style.display = isMas ? "none" : "inline-flex";
-        mobBtn.textContent = en ? "📲 Mobile Remote App" : "📲 手机版扫码直连";
-      }
       const deskTab = document.getElementById("tab-desktop");
-      if (deskTab) {
-        deskTab.style.display = isMas ? "none" : "inline-block";
-        deskTab.textContent = en ? "🖥️ Desktop Apps Monitor" : "🖥️ 电脑桌面软件监控（微信/IDE/千牛）";
-      }
-      if (ccTab) {
-        ccTab.style.display = isMas ? "none" : "inline-block";
-        ccTab.textContent = en ? "🤖 Claude Code / AI Remote" : "🤖 Claude Code / AI 远程仓";
-      }
-      document.getElementById("btn-push").textContent = en ? "🔔 Push Settings" : "🔔 推送通知设置";
+      const ccTab = document.getElementById("tab-cc");
+      if (mobBtn) mobBtn.style.display = isMas ? "none" : "flex";
+      if (deskTab) deskTab.style.display = isMas ? "none" : "flex";
+      if (ccTab) ccTab.style.display = isMas ? "none" : "flex";
+
+      document.getElementById("txt-mobile-btn").textContent = en ? "📲 Mobile Companion" : "📲 手机随身收件箱";
+      document.getElementById("btn-push").textContent = en ? "⚙️ Settings" : "⚙️ 设置";
+      document.getElementById("btn-lang").textContent = en ? "切换中文界面" : "Switch to English";
+      document.getElementById("btn-update").textContent = en ? "🔄 Check Updates" : "🔄 检查更新";
+
+      document.getElementById("hdr-inbox-title").textContent = en ? "Platform Inboxes" : "平台消息";
+      document.getElementById("watch-search").placeholder = en ? "🔍 Search platforms..." : "🔍 搜索平台...";
+      document.getElementById("btn-packs").textContent = en ? "📦 Preset Packs" : "📦 模板包";
       document.getElementById("btn-add").textContent = en ? "+ Add Site" : "+ 添加平台";
 
-      document.getElementById("tab-inbox").textContent = en ? "📬 Inboxes (Click to Reply Inside App)" : "📬 我的各平台消息（点卡片直接同窗回消息）";
-      document.getElementById("tab-replies").textContent = en ? "⚡ Spintax Quick Replies & Anti-Ban Guard" : "⚡ 防封快捷话术与违禁词检测";
-      document.getElementById("tab-scanner").textContent = en ? "🎯 24h Buyer Lead Scanner" : "🎯 实时找单扫描器";
-      document.getElementById("tab-playbook").textContent = en ? "🎁 Cold-Reply Playbook" : "🎁 高成交回复话术库";
+      document.getElementById("hdr-desk-title").textContent = en ? "Desktop App Monitor" : "电脑桌面软件看护";
+      document.getElementById("hdr-desk-sub").textContent = en ? "Zero-injection Dock badge & notification sync" : "程序坞红点与通知纯文字同步 · 零注入不伤号";
 
-      document.getElementById("qr-heading").textContent = en
-        ? "⚡ Anti-Ban Quick Replies · Spintax Variations & Spam-Trigger Guard"
-        : "⚡ 防封快捷话术 · 随机同义变体 & 违禁词避雷针";
-      document.getElementById("qr-desc").innerHTML = en
-        ? "Use <code>{Hey|Hi there|Hello}</code> spintax to rotate wording automatically on every copy so platforms never flag repetitive replies. 100% free JSON backup export."
-        : "支持 <code>{你好|哈喽|亲}</code> 随机变体（每次复制自动换词防平台判重限流），永久免费 JSON 导出备份，绝不锁死你的话术资产。";
-      document.getElementById("btn-qr-export").textContent = en ? "💾 Export JSON" : "💾 导出备份 (JSON)";
-      document.getElementById("btn-qr-import").textContent = en ? "📂 Import JSON" : "📂 导入备份";
-      document.getElementById("btn-qr-new").textContent = en ? "+ New Quick Reply" : "+ 新增快捷话术";
+      document.getElementById("qr-heading").textContent = en ? "Quick Replies & Anti-Ban Guard" : "防封快捷话术与违禁词检测";
+      document.getElementById("tab-playbook").textContent = en ? "🎁 Cold-Reply Playbook" : "🎁 高成交破冰话术锦囊";
+      document.getElementById("btn-qr-export").textContent = en ? "💾 Export JSON" : "💾 导出 JSON";
+      document.getElementById("btn-qr-import").textContent = en ? "📂 Import" : "📂 导入";
+      document.getElementById("btn-qr-new").textContent = en ? "+ New Template" : "+ 新增话术";
       document.getElementById("guard-title").textContent = en
-        ? "🛡️ Pre-Send Sensitive & Off-Platform Trigger Detector"
-        : "🛡️ 发送前违禁词 / 导流敏感词实时避雷针（防闲鱼/小红书吞评封号）";
-      document.getElementById("btn-guard-copy").textContent = en ? "📋 Copy Draft" : "📋 复制检测后内容";
-      document.getElementById("qr-draft-check").placeholder = en
-        ? "Paste your reply draft here to check for off-platform solicitation or spam trigger phrases before sending..."
-        : "把准备发给客户的话粘贴到这里检测（自动识别微信号、站外导流词、极限广告词并给出安全替代表达）...";
-      document.getElementById("qr-search").placeholder = en
-        ? "🔍 Search quick replies by keyword (e.g. quote, delivery, intro)..."
-        : "🔍 输入关键词秒搜话术（如：报价、发货、售后、价格）...";
+        ? "🛡️ Pre-Send Off-Platform & Spam Trigger Detector"
+        : "🛡️ 发送前站外导流词 / 违禁词实时避雷针（防闲鱼/小红书吞评禁言）";
+      document.getElementById("btn-guard-copy").textContent = en ? "📋 Copy Safe Text" : "📋 复制检测后内容";
+      document.getElementById("qr-search").placeholder = en ? "🔍 Filter quick replies..." : "🔍 搜索话术标题、分类或正文关键词...";
 
-      document.getElementById("clone-title").textContent = en
-        ? "➕ Create Isolated Multi-Account Sandbox"
-        : "➕ 创建同平台独立防串号新仓";
-      document.getElementById("clone-desc").textContent = en
-        ? "Assigns a 100% physically isolated cookie & storage container so you can run multiple accounts on the same site simultaneously without session crossover."
-        : "新账号将分配 100% 物理隔离的专属登录存储池，与原账号 Cookie、缓存完全隔绝，同台电脑挂多个闲鱼/小红书号绝不串号。";
-      document.getElementById("clone-lbl-name").textContent = en ? "Account Label" : "给新账号起个好认的备注名";
-      document.getElementById("btn-cancel-clone").textContent = en ? "Cancel" : "取消";
-      document.getElementById("btn-confirm-clone").textContent = en ? "Create & Sign In" : "立即创建并打开登录";
-
-      document.getElementById("scan-heading").textContent = en
-        ? "Scan Fresh Freelance & Buyer-Intent Posts (Last 24–72 Hours)"
-        : "过去 24～72 小时全网真实求购与外包线索扫描";
+      document.getElementById("scan-heading").textContent = en ? "Live Buyer Lead Radar" : "全网求购与外包线索雷达";
       document.getElementById("scan-desc").textContent = en
-        ? "Enter your skill or product keyword to search live hiring, contract, and buyer threads across Reddit, Hacker News & GitHub."
-        : "输入你的手艺或业务关键词，实时检索全网公开求购、悬赏与找人帖，按成交意向自动排序。";
-      document.getElementById("scan-input").placeholder = en
-        ? "e.g. Shopify, Python scraper, iOS Swift, Next.js, UI Figma..."
-        : "例如：Shopify、Python 爬虫、小程序、UI设计、苹果开发...";
-      document.getElementById("btn-scan").textContent = en ? "🔍 Scan Live Leads" : "🔍 立即扫描新商机";
+        ? "Search fresh hiring, contract & buyer posts from the past 24–72h"
+        : "检索过去 24～72 小时公开求购、悬赏与找人帖";
+      document.getElementById("btn-scan").textContent = en ? "🔍 Scan Leads" : "🔍 扫描最新商机";
 
       const chipData = en
         ? [["Shopify", "Shopify Dev"], ["Python scraper", "Python Automation"], ["iOS Swift", "iOS / macOS"], ["Next.js SaaS", "Next.js MVP"], ["UI Figma", "UI / Landing Page"], ["SEO content", "SEO Growth"]]
@@ -781,65 +1351,11 @@
         .map(([q, label]) => `<span class="chip" onclick="quickScan('${q}')">${label}</span>`)
         .join("");
 
-      // Modals
-      document.getElementById("add-modal-title").textContent = en ? "Add Platform Inbox to Watch" : "添加要盯守的网站平台";
-      document.getElementById("add-modal-desc").textContent = en
-        ? "Click 'Open Workspace' on the card to sign in once. Even after closing the window, ReplyRadar listens passively without auto-refreshing."
-        : "添加后点击卡片上的「打开工作台」登录一次即可，关掉窗口后后台照样安静听新消息，不刷网页不伤号。";
-      document.getElementById("lbl-name").textContent = en ? "Platform or Store Name" : "网站或店铺名称";
-      document.getElementById("f-name").placeholder = en ? "e.g. Upwork Messages / Reddit Inbox" : "例如：闲鱼买家咨询 / 小红书后台 / 电鸭私信";
-      document.getElementById("lbl-url").textContent = en ? "Inbox / Notification URL" : "消息页网址";
-      document.getElementById("lbl-cat").textContent = en ? "Category" : "所属分类";
-      document.getElementById("opt-cat-1").textContent = en ? "Freelance & Client Leads" : "接单与客户询盘";
-      document.getElementById("opt-cat-2").textContent = en ? "Core Social & Storefronts" : "自媒体与店铺消息";
-      document.getElementById("opt-cat-3").textContent = en ? "App & Developer Portals" : "应用与商品审核后台";
-      document.getElementById("opt-cat-4").textContent = en ? "Other Watched Sites" : "其他常用网站";
-      document.getElementById("lbl-interval").textContent = en ? "Check Interval (mins)" : "检查间隔（分钟）";
-      document.getElementById("lbl-tier").textContent = en ? "Protection Mode" : "安全看护方式";
-      document.getElementById("opt-tier-red").textContent = en
-        ? "🛡️ Zero-Reload Passive Listener (Safest for Reddit / X / Social)"
-        : "🛡️ 零刷页常驻监听（最稳防封：适合闲鱼/小红书/社交平台）";
-      document.getElementById("opt-tier-yellow").textContent = en ? "🟡 Gentle Low-Frequency Check" : "🟡 温和低频看护（适合普通论坛/外包网）";
-      document.getElementById("opt-tier-green").textContent = en ? "🟢 Standard Dev Portal Check" : "🟢 常规后台看护（适合开发者与工作台后台）";
-      document.getElementById("lbl-ctx").textContent = en ? "Context Note (reminds you why you're watching)" : "备注备忘（来消息时提醒你当初干了啥）";
-      document.getElementById("f-ctx").placeholder = en ? "e.g. Sent $1,500 Shopify migration proposal" : "例如：挂了定制服务，报价 300 元起";
-      document.getElementById("btn-cancel-add").textContent = en ? "Cancel" : "取消";
-      document.getElementById("btn-save-add").textContent = en ? "Save & Watch" : "保存添加";
-
       document.getElementById("pw-title").textContent = en
-        ? "Unlock ReplyRadar Pro · Never Miss a High-Ticket Reply"
+        ? "Unlock ReplyRadar Pro · Never Miss a Client Message"
         : "解锁《消息总管》专业版 · 不漏掉任何一笔客户消息";
       document.getElementById("price-cn").style.display = en ? "none" : "grid";
       document.getElementById("price-global").style.display = en ? "grid" : "none";
-      document.getElementById("lbl-lic-input").textContent = en
-        ? "Already have a license key? Paste below to unlock instantly:"
-        : "已有正版激活码？粘贴到下方立即解锁：";
-      document.getElementById("btn-lic-act").textContent = en ? "Activate" : "立即激活";
-      document.getElementById("btn-close-pw").textContent = en ? "Close" : "关闭";
-
-      document.getElementById("set-title").textContent = en ? "Mobile Push Alert Settings" : "手机实时消息提醒设置";
-      document.getElementById("set-desc").textContent = en
-        ? "Paste a Slack, Discord, Telegram, or custom Webhook URL to receive instant phone notifications when a client replies."
-        : "填入飞书机器人、企业微信、Server酱或 Bark 的通知链接，有新客户私信时第一时间发到你手机上。";
-      document.getElementById("lbl-hook").textContent = en ? "Webhook URL" : "通知推送链接";
-      document.getElementById("btn-cancel-set").textContent = en ? "Cancel" : "取消";
-      document.getElementById("btn-save-set").textContent = en ? "Save" : "保存";
-
-      // Consent Modal
-      document.getElementById("cs-title").textContent = en
-        ? "Welcome to ReplyRadar · Safety & Privacy Confirmation"
-        : "欢迎使用《消息总管》· 安全与隐私确认";
-      document.getElementById("cs-list").innerHTML = en
-        ? `<li><strong>Zero-Polling Account Safety</strong>: Strict social platforms run inside persistent Safari-grade tabs using passive event listeners — <strong>zero synthetic page reloads and zero automated posting</strong>.</li>
-           <li><strong>100% Local Privacy</strong>: Your login cookies stay strictly on your own Mac and are never uploaded to external servers.</li>
-           <li><strong>14-Day Refund &amp; Terms</strong>: Backed by a 14-day full refund guarantee; software liability is strictly capped at the license fee paid.</li>`
-        : `<li><strong>零刷页安全防封</strong>：针对闲鱼、小红书等严管平台，软件采用与苹果自带浏览器一致的「常驻页面被动听消息」方式，<strong>绝不定时反复刷新网页、绝不自动群发消息</strong>。</li>
-           <li><strong>账号 100% 留在本机</strong>：您在软件内登录的网站状态仅保存在您自己的电脑里，绝不上传至任何外部服务器。</li>
-           <li><strong>售后与服务边界</strong>：本软件仅作本地消息提醒辅助，提供 14 天不满意无理由全额退款保障，软件最高责任上限不超过您实际支付的软件费用。</li>`;
-      document.getElementById("cs-check-label").innerHTML = en
-        ? `I have read and agree to the <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="color:var(--primary);text-decoration:underline;">Terms of License (EULA)</a> and <a href="https://a3152557994-ship-it.github.io/tabpulse/privacy.html" target="_blank" style="color:var(--primary);text-decoration:underline;">Privacy Policy</a>`
-        : `我已阅读并同意 <a href="https://a3152557994-ship-it.github.io/tabpulse/terms.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《用户服务与软件许可协议》</a> 及 <a href="https://a3152557994-ship-it.github.io/tabpulse/privacy.html" target="_blank" style="color:var(--primary);text-decoration:underline;">《隐私政策》</a>`;
-      document.getElementById("btn-accept-consent").textContent = en ? "Agree & Continue" : "同意并开始使用";
     }
 
     async function refreshState() {
@@ -867,71 +1383,160 @@
       const en = currentLang === "en";
       const stats = appState.stats || {};
       const lic = appState.license || { valid: false, plan: "free" };
-      const statsEl = document.getElementById("stats-row");
-      const engineText = en ? "🟢 Safe Guard Active" : "🟢 安全看护运行中";
+      const watches = appState.watches || [];
 
-      statsEl.innerHTML = `
-        <span class="pill ok">${engineText}</span>
-        <span class="pill ${stats.unreadCount > 0 ? "hot" : ""}">
-          ${en ? "Unread" : "未读提醒"}: ${stats.unreadCount || 0} (${stats.unreadMessagesTotal || 0})
-        </span>
-        <span class="pill">${en ? "Watching" : "看护平台"}: ${stats.activeCount || 0}</span>
-        <span class="pill pro" onclick="openPaywallModal()">
-          ${lic.valid ? (en ? "💎 Pro Unlocked" : "💎 已解锁专业版") : (en ? "Free (2 max) · Upgrade" : "免费版 · 点此解锁无限")}
-        </span>
-      `;
+      const unreadTotal = Number(stats.unreadMessagesTotal) || 0;
+      const inboxBadge = document.getElementById("badge-nav-inbox");
+      if (unreadTotal > 0) {
+        inboxBadge.textContent = unreadTotal > 99 ? "99+" : String(unreadTotal);
+        inboxBadge.className = "nav-cnt red";
+      } else {
+        inboxBadge.textContent = String(watches.length);
+        inboxBadge.className = "nav-cnt";
+      }
 
-      document.getElementById("btn-upgrade").textContent = lic.valid
-        ? (en ? "💎 Pro Active" : "💎 已激活专业版")
-        : (en ? "💎 Unlock Pro" : "💎 激活专业版");
+      const upgEl = document.getElementById("btn-upgrade");
+      upgEl.textContent = lic.valid
+        ? (en ? "💎 Pro" : "💎 已激活")
+        : (en ? "💎 Upgrade" : "💎 解锁专业版");
 
-      renderPacks();
+      renderSidebarQuickChannels();
+      renderCatFilterBar();
+      renderEmptyGuide();
       renderAlerts();
       renderGrid();
       renderQuickReplies();
     }
 
-    function renderPacks() {
-      const en = currentLang === "en";
-      const el = document.getElementById("packs-bar");
-      if (!presetPacks.length) { el.innerHTML = ""; return; }
-      const ordered = en ? [...presetPacks].reverse() : presetPacks;
-      el.innerHTML = ordered.map((p) => `
-        <div class="pack-card">
-          <div>
-            <h3>${en ? p.titleEn : p.titleZh}</h3>
-            <p>${en ? p.descEn : p.descZh}</p>
-          </div>
-          <button class="sm primary" onclick="importPack('${p.packId}')">
-            ${en ? "+ Add Pack" : "+ 一键添加"}
+    function renderSidebarQuickChannels() {
+      const box = document.getElementById("sidebar-channels");
+      const watches = appState.watches || [];
+      if (!watches.length) {
+        box.innerHTML = `<div style="padding:8px 10px;font-size:11.5px;color:#94a3b8;">暂无看护平台</div>`;
+        return;
+      }
+      const sorted = [...watches].sort((a, b) => {
+        const au = a.status === "unread" ? 1 : 0;
+        const bu = b.status === "unread" ? 1 : 0;
+        return bu - au;
+      });
+      box.innerHTML = sorted.map((w) => {
+        const b = getBrandStyle(w.name, w.url);
+        const dot = w.status === "unread"
+          ? `<span class="nav-cnt red">${w.unreadCount || 1}</span>`
+          : w.status === "auth_expired"
+            ? `<span class="q-dot auth" title="待登录"></span>`
+            : "";
+        return `
+          <button class="q-row" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}', '${escapeAttr(w.profileUuid || "")}', true)" title="${escapeAttr(w.name)}">
+            <span class="q-row-left">
+              <span class="q-mini-ava" style="background:${b.bg};">${escapeHtml(b.ico)}</span>
+              <span class="q-name">${escapeHtml(w.name)}</span>
+            </span>
+            ${dot}
           </button>
+        `;
+      }).join("");
+    }
+
+    function renderCatFilterBar() {
+      const en = currentLang === "en";
+      const watches = appState.watches || [];
+      const pendingCnt = watches.filter((w) => w.status === "unread" || w.status === "auth_expired").length;
+      const opts = [
+        { key: "all", label: en ? `All (${watches.length})` : `全部 (${watches.length})` },
+      ];
+      if (pendingCnt > 0) {
+        opts.push({ key: "pending", label: en ? `Attention (${pendingCnt})` : `待处理 (${pendingCnt})` });
+      }
+      for (const c of CAT_ORDER) {
+        const cnt = watches.filter((w) => (w.category || "长尾蹲守") === c).length;
+        if (cnt > 0) {
+          const shortZh = c === "开发者商店" ? "应用后台" : c;
+          opts.push({ key: c, label: `${en ? (CAT_EN[c] || c) : shortZh} (${cnt})` });
+        }
+      }
+      if (activeCatFilter !== "all" && !opts.some((o) => o.key === activeCatFilter)) {
+        activeCatFilter = "all";
+      }
+      document.getElementById("cat-filter-bar").innerHTML = opts
+        .map((o) => `<button class="seg-btn ${activeCatFilter === o.key ? "active" : ""}" onclick="setCatFilter('${escapeAttr(o.key)}')">${escapeHtml(o.label)}</button>`)
+        .join("");
+    }
+
+    function setCatFilter(cat) {
+      activeCatFilter = cat;
+      renderCatFilterBar();
+      renderGrid();
+    }
+
+    function renderEmptyGuide() {
+      const en = currentLang === "en";
+      const box = document.getElementById("empty-packs-guide");
+      const watches = appState.watches || [];
+      if (watches.length > 0 || !presetPacks.length) {
+        box.innerHTML = "";
+        return;
+      }
+      box.innerHTML = `
+        <div class="panel-card" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+          ${presetPacks.map((p) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#f8fafc;">
+              <div>
+                <div style="font-weight:700;font-size:13.5px;">${escapeHtml(en ? p.titleEn : p.titleZh)}</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHtml(en ? p.descEn : p.descZh)}</div>
+              </div>
+              <button class="sm primary" onclick="importPack('${escapeAttr(p.packId)}')">${en ? "+ Import" : "+ 一键导入"}</button>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function openPacksModal() {
+      const en = currentLang === "en";
+      const listEl = document.getElementById("packs-modal-list");
+      const ordered = en ? [...presetPacks].reverse() : presetPacks;
+      listEl.innerHTML = ordered.map((p) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 15px;border:1px solid var(--border);border-radius:12px;background:#f8fafc;">
+          <div>
+            <div style="font-weight:800;font-size:14px;">${escapeHtml(en ? p.titleEn : p.titleZh)}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px;">${escapeHtml(en ? p.descEn : p.descZh)}</div>
+          </div>
+          <button class="sm primary" onclick="importPack('${escapeAttr(p.packId)}');closeModals();">${en ? "+ Add Pack" : "+ 一键导入"}</button>
         </div>
       `).join("");
+      document.getElementById("modal-packs").classList.add("open");
     }
 
     async function importPack(packId) {
       const en = currentLang === "en";
       const pack = presetPacks.find((x) => x.packId === packId);
       if (!pack) return;
-      if (!isProUnlocked() && (appState.watches.length + pack.items.length) > 2) {
+      const localizedItems = pack.items.map((it) => ({
+        ...it,
+        name: en ? (it.nameEn || it.name) : it.name,
+        contextSummary: en ? (it.contextSummaryEn || it.contextSummary) : it.contextSummary,
+      }));
+      if (!isProUnlocked() && (appState.watches.length + localizedItems.length) > 2) {
         const slots = Math.max(0, 2 - appState.watches.length);
-        for (const item of pack.items.slice(0, slots)) {
+        for (const item of localizedItems.slice(0, slots)) {
           await apiCall("POST", "/api/watches", item);
         }
         await refreshState();
         const priceZh = window.__TABPULSE_MAS_MODE ? "¥28" : "¥39";
         openPaywallModal(
           en
-            ? `Added ${slots} free inbox(es)! Upgrade to Pro ($14.99 Lifetime) to monitor all ${pack.items.length} platforms at once.`
-            : `已免费为你添加前 ${slots} 个平台！解锁专业版（${priceZh} 永久买断）即可一次性添加全部平台。`
+            ? `Added ${slots} free inbox(es)! Upgrade to Pro ($14.99 Lifetime) to monitor all platforms at once.`
+            : `已免费添加前 ${slots} 个平台！解锁专业版（${priceZh} 永久买断）即可导入全部平台。`
         );
         return;
       }
-      for (const item of pack.items) {
+      for (const item of localizedItems) {
         await apiCall("POST", "/api/watches", item);
       }
       await refreshState();
-      showToast(en ? "Preset pack added!" : "已成功导入常用平台包！");
+      showToast(en ? "Preset pack imported!" : "✅ 已导入常用平台模板包");
     }
 
     function openSiteLogin(url, name, id = "", profileUuid = "", dockInMain = true) {
@@ -949,13 +1554,13 @@
       if (!isProUnlocked() && (appState.watches || []).length >= 2) {
         openPaywallModal(
           en
-            ? "Free tier supports up to 2 accounts. Unlock Pro ($14.99 Lifetime) to run unlimited isolated accounts on the same site simultaneously!"
-            : "免费版支持同时挂 2 个账号。解锁专业版即可在同一平台无限多开独立防串号账号（如同时挂 5 个闲鱼号 + 5 个小红书号）！"
+            ? "Free tier supports up to 2 accounts. Unlock Pro ($14.99 Lifetime) for unlimited isolated accounts!"
+            : "免费版支持同时看护 2 个账号。解锁专业版即可在同一平台无限多开独立防串号副号！"
         );
         return;
       }
       const nextNum = (appState.watches || []).filter((x) => x.url === src.url).length + 1;
-      const defaultLabel = en ? `${src.name} (#${nextNum})` : `${src.name}（${nextNum}号店/副号）`;
+      const defaultLabel = en ? `${src.name} (#${nextNum})` : `${src.name}（${nextNum}号副店）`;
       document.getElementById("clone-src-id").value = sourceId;
       const input = document.getElementById("clone-name-input");
       input.value = defaultLabel;
@@ -981,7 +1586,7 @@
         contextSummary: en ? "Isolated multi-account container" : "独立防串号多开账号仓",
       });
       await refreshState();
-      showToast(en ? "Isolated account created! Opening workspace..." : "已创建独立防串号仓！正在打开专属工作台...");
+      showToast(en ? "Isolated account created!" : "✅ 已创建独立防串号副号，正在打开登录...");
       if (created && created.watch) {
         openSiteLogin(created.watch.url, created.watch.name, created.watch.id, created.watch.profileUuid || "");
       }
@@ -991,7 +1596,7 @@
       const en = currentLang === "en";
       if (isNativeApp) {
         nativePost("checkNow", { targetId, targetName });
-        showToast(en ? `Checking ${targetName || "inbox"}...` : `正在检查「${targetName || "平台"}」未读消息...`);
+        showToast(en ? `Checking ${targetName || "inbox"}...` : `正在检查「${targetName || "平台"}」未读状态...`);
       } else {
         refreshState();
       }
@@ -1002,136 +1607,210 @@
       refreshState();
       if (!info) return;
       if (info.authExpired) {
-        showToast(en ? `🟠 Sign-in needed for ${info.name || info.id}` : `🟠「${info.name || info.id}」还未登录，请点「打开工作台」登一次`);
+        showToast(en ? `🟠 Sign-in needed for ${info.name || info.id}` : `🟠「${info.name || info.id}」尚未登录，点「打开会话」登一次即可`);
       } else if (info.unreadCount > 0) {
-        showToast(en ? `🔴 ${info.unreadCount} new unread in ${info.name || info.id}!` : `🔴「${info.name || info.id}」有 ${info.unreadCount} 条新消息！`);
+        showToast(en ? `🔴 ${info.unreadCount} new unread in ${info.name || info.id}!` : `🔴「${info.name || info.id}」收到 ${info.unreadCount} 条新消息！`);
       } else {
-        showToast(en ? `🟢 ${info.name || info.id}: 0 unread` : `🟢「${info.name || info.id}」当前没有新未读消息`);
+        showToast(en ? `🟢 ${info.name || info.id}: 0 unread` : `🟢「${info.name || info.id}」当前无新未读`);
       }
     };
 
     function renderAlerts() {
       const en = currentLang === "en";
       const container = document.getElementById("alerts-section");
-      const alerts = (appState.watches || []).filter((w) => w.status === "unread" || w.status === "auth_expired");
-      if (!alerts.length) { container.innerHTML = ""; return; }
-      container.innerHTML = `
-        <div class="section-title">🚨 ${en ? "New Replies & Sign-In Notices" : "待处理的新消息与提醒"} (${alerts.length})</div>
-        <div class="alerts-dock">
-          ${alerts.map((w) => {
-            const isAuth = w.status === "auth_expired";
-            return `
-              <div class="alert-card ${isAuth ? "auth" : ""}">
-                <div class="alert-head">
-                  <div class="alert-title">
-                    <span>${escapeHtml(w.name)}</span>
-                    <span class="badge ${isAuth ? "badge-amber" : "badge-red"}">
-                      ${isAuth ? (en ? "Sign-in paused for safety" : "未登录 · 已自动停检保护账号") : (en ? `${w.unreadCount} Unread` : `${w.unreadCount} 条新消息`)}
-                    </span>
-                  </div>
-                  <div style="display:flex;gap:6px;">
-                    <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}')">
-                      ${isNativeApp ? (en ? "🔓 Open Workspace" : "🔓 打开工作台查看") : (en ? "↗ Open Site" : "↗ 打开网页")}
-                    </button>
-                    <button class="sm" onclick="resolveItem('${escapeAttr(w.id)}', '${isAuth ? "resume" : "resolve"}')">
-                      ${isAuth ? (en ? " Signed In · Resume" : "我已登录，恢复看护") : (en ? "✓ Mark Handled" : "✓ 标为已读")}
-                    </button>
-                  </div>
-                </div>
-                ${w.contextSummary ? `<div style="font-size:12.5px;color:#475569;">📌 ${escapeHtml(w.contextSummary)}</div>` : ""}
-                ${w.snippet ? `<div class="snippet-box">${escapeHtml(w.snippet)}</div>` : ""}
-                ${!isAuth ? `
-                  <textarea class="draft-area" id="draft-${escapeAttr(w.id)}" placeholder="${en ? "Reply draft (copy & paste manually to keep your account 100% safe)..." : "回复草稿区（点下方复制后手动粘贴发送，安全防封）..."}">${escapeHtml(w.lastDraft || "")}</textarea>
-                  <div style="display:flex;gap:8px;margin-top:6px;">
-                    <button class="sm" onclick="copyDraft('${escapeAttr(w.id)}')">${en ? "📋 Copy & Open" : "📋 复制回复并去发送"}</button>
-                    <button class="sm" onclick="saveDraft('${escapeAttr(w.id)}')">${en ? "💾 Save Draft" : "💾 保存草稿"}</button>
-                  </div>
-                ` : ""}
+      const watches = appState.watches || [];
+      const unreadItems = watches.filter((w) => w.status === "unread");
+      const authItems = watches.filter((w) => w.status === "auth_expired");
+
+      let html = "";
+
+      if (unreadItems.length > 0) {
+        html += `<div class="unread-banner-list">${unreadItems.map((w) => `
+          <div class="unread-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <strong style="font-size:14.5px;">🔴 ${escapeHtml(w.name)}</strong>
+                <span class="badge badge-red">${w.unreadCount || 1} ${en ? "Unread" : "条未读新消息"}</span>
               </div>
-            `;
-          }).join("")}
-        </div>
-      `;
+              <div style="display:flex;gap:6px;">
+                <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}', '${escapeAttr(w.profileUuid || "")}', true)">
+                  💬 ${en ? "Open & Reply" : "打开会话回复"}
+                </button>
+                <button class="sm" onclick="resolveItem('${escapeAttr(w.id)}', 'resolve')">
+                  ✓ ${en ? "Mark Read" : "标为已读"}
+                </button>
+              </div>
+            </div>
+            ${w.snippet ? `<div class="snippet-box">${escapeHtml(w.snippet)}</div>` : ""}
+            <textarea class="draft-area" id="draft-${escapeAttr(w.id)}" placeholder="${en ? "Reply draft..." : "回复草稿（如开启 AI 个人助理会自动拟好填入，点下方复制并去发送）..."}">${escapeHtml(w.lastDraft || "")}</textarea>
+            <div style="display:flex;gap:8px;margin-top:6px;">
+              <button class="sm soft-primary" onclick="copyDraft('${escapeAttr(w.id)}')">📋 ${en ? "Copy & Open" : "复制草稿并打开会话"}</button>
+              <button class="sm" onclick="saveDraft('${escapeAttr(w.id)}')">💾 ${en ? "Save Draft" : "保存草稿"}</button>
+            </div>
+          </div>
+        `).join("")}</div>`;
+      }
+
+      if (authItems.length > 0 && !authBannerDismissed) {
+        html += `
+          <div class="auth-strip">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;">
+              <span style="white-space:nowrap;">🟠 <strong>${authItems.length} ${en ? "awaiting sign-in" : "个后台待首次登录"}</strong>：</span>
+              <div class="auth-strip-chips">
+                ${authItems.map((w) => `
+                  <span style="display:inline-flex;align-items:center;background:#fff;border:1px solid #fcd34d;border-radius:7px;overflow:hidden;">
+                    <button class="sm" style="border:none;border-radius:0;background:transparent;color:#92400e;padding:3.5px 8px;" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}', '${escapeAttr(w.profileUuid || "")}', true)">
+                      🔓 ${escapeHtml(w.name)}
+                    </button>
+                    <button class="sm" style="border:none;border-left:1px solid #fde68a;border-radius:0;background:#fef3c7;color:#92400e;padding:3.5px 7px;" title="${en ? "Mark signed in" : "我已登录，恢复看护"}" onclick="resolveItem('${escapeAttr(w.id)}', 'resume')">✓已登</button>
+                  </span>
+                `).join("")}
+              </div>
+            </div>
+            <button class="sm" style="background:transparent;border:none;color:#b45309;padding:3px 6px;flex-shrink:0;" title="收起提示" onclick="authBannerDismissed=true;renderAlerts();">✕</button>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+    }
+
+    function toggleCardMenu(ev, id) {
+      ev.stopPropagation();
+      const nextOpen = openMenuWatchId === id ? null : id;
+      openMenuWatchId = nextOpen;
+      document.querySelectorAll(".more-menu").forEach((m) => m.classList.remove("open"));
+      if (nextOpen) {
+        const el = document.getElementById("menu-" + id);
+        if (el) el.classList.add("open");
+      }
     }
 
     function renderGrid() {
       const en = currentLang === "en";
       const container = document.getElementById("categories-section");
-      const watches = appState.watches || [];
-      if (!watches.length) {
-        container.innerHTML = `<div class="scanner-box" style="text-align:center;color:var(--muted);">${en ? "No platforms added yet. Click '+ Add Pack' above to start in 10 seconds." : "还没有添加网站，点击上方「+ 一键添加」或右上角「+ 添加平台」即可开始。"}</div>`;
+      const kw = (document.getElementById("watch-search")?.value || "").trim().toLowerCase();
+      const allWatches = appState.watches || [];
+
+      if (!allWatches.length) {
+        container.innerHTML = `<div class="panel-card" style="text-align:center;color:var(--muted);padding:36px 20px;">${en ? "No platforms added yet. Click '+ Add Site' or 'Preset Packs' above to start." : "暂未添加平台，点击右上角「📦 模板包」或「+ 添加平台」即可开始静默看护。"}</div>`;
         return;
       }
+
+      const filtered = allWatches.filter((w) => {
+        if (activeCatFilter === "pending") {
+          if (w.status !== "unread" && w.status !== "auth_expired") return false;
+        } else if (activeCatFilter !== "all") {
+          if ((w.category || "长尾蹲守") !== activeCatFilter) return false;
+        }
+        if (kw) {
+          const hay = `${w.name || ""} ${w.url || ""} ${w.contextSummary || ""}`.toLowerCase();
+          if (!hay.includes(kw)) return false;
+        }
+        return true;
+      });
+
+      if (!filtered.length) {
+        container.innerHTML = `<div class="panel-card" style="text-align:center;color:var(--muted);padding:28px;">${en ? "No matching platforms found." : "没有找到匹配的平台，试试切换顶部分组或清空搜索框。"}</div>`;
+        return;
+      }
+
       const groups = {};
-      for (const w of watches) {
-        const c = w.category || "长尾蹲守";
-        if (!groups[c]) groups[c] = [];
+      for (const c of CAT_ORDER) groups[c] = [];
+      for (const w of filtered) {
+        const c = CAT_ORDER.includes(w.category) ? w.category : "长尾蹲守";
         groups[c].push(w);
       }
-      container.innerHTML = Object.entries(groups).map(([cat, list]) => `
-        <div class="section-title">
-          <span>📂 ${escapeHtml(en ? (CAT_EN[cat] || cat) : cat)} <span style="color:var(--muted);font-weight:500;">(${list.length})</span></span>
-        </div>
-        <div class="grid">
-          ${list.map((w) => {
-            const cls = w.status === "unread" ? "is-unread" : w.status === "auth_expired" ? "is-auth" : w.status === "paused" ? "is-paused" : "";
-            const tierBadge = w.publishTier === "red"
-              ? `<span class="badge badge-green">${en ? "🛡️ Zero-Reload Safe" : "🛡️ 零刷页常驻防封"}</span>`
-              : w.publishTier === "green"
-                ? `<span class="badge badge-slate">${en ? "Portal Watch" : "后台看护"}</span>`
-                : `<span class="badge badge-amber">${en ? "Gentle Watch" : "温和看护"}</span>`;
-            const statusText = w.status === "unread"
-              ? (en ? `🔴 ${w.unreadCount} Unread` : `🔴 ${w.unreadCount} 条未读`)
-              : w.status === "auth_expired"
-                ? (en ? "🟠 Needs Sign-In" : "🟠 待点工作台登录")
-                : w.status === "paused"
-                  ? (en ? "⏸ Paused" : "⏸ 已暂停")
-                  : (w.lastCheckedAt ? (en ? "🟢 Active" : "🟢 正常看护中") : (en ? "⚪ Ready (Open Once)" : "⚪ 点下方登录一次即可"));
-            return `
-              <div class="card ${cls}">
-                <div>
-                  <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;">
-                    <h3 class="card-title">${escapeHtml(w.name)}</h3>
-                    <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
-                      ${w.isolatedProfile !== false ? `<span class="badge" style="background:var(--purple-bg);color:var(--purple);border:1px solid #ddd6fe;">${en ? "🔒 Isolated" : "🔒 独立防串号"}</span>` : ""}
-                      ${tierBadge}
-                    </div>
-                  </div>
-                  <div class="card-meta">${escapeHtml(w.url)}</div>
-                  ${w.contextSummary ? `<div style="font-size:12px;color:#334155;margin-bottom:6px;">${escapeHtml(w.contextSummary)}</div>` : ""}
-                  <div style="font-size:11.5px;color:var(--muted);">
-                    ${statusText}
-                  </div>
-                </div>
-                <div class="card-foot">
-                  <button class="sm primary" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}', '${escapeAttr(w.profileUuid || "")}', true)">
-                    ${isNativeApp ? (en ? "💬 Direct Chat & Reply" : "💬 同窗直接回消息") : (en ? "↗ Open Web" : "↗ 打开网页")}
-                  </button>
-                  <button class="sm" onclick="cloneMultiAccount('${escapeAttr(w.id)}')">
-                    ${en ? "➕ Add 2nd Acc" : "➕ 同站多开"}
-                  </button>
-                  ${w.publishTier !== "red" ? `<button class="sm" onclick="triggerNativeCheckNow('${escapeAttr(w.id)}', '${escapeAttr(w.name)}')">${en ? "⚡ Check" : "⚡ 测一下"}</button>` : ""}
-                  ${w.status === "paused"
-                    ? `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','resume')">${en ? "▶ Resume" : "▶ 恢复"}</button>`
-                    : `<button class="sm" onclick="resolveItem('${escapeAttr(w.id)}','pause')">${en ? "⏸ Pause" : "⏸ 暂停"}</button>`
-                  }
-                  <button class="sm danger" onclick="removeWatch('${escapeAttr(w.id)}')">${en ? "Remove" : "删除"}</button>
+
+      container.innerHTML = Object.entries(groups)
+        .filter(([, list]) => list.length > 0)
+        .map(([cat, list]) => `
+          <div class="cat-header">
+            <span>${escapeHtml(en ? (CAT_EN[cat] || cat) : cat)} · ${list.length}</span>
+          </div>
+          <div class="cards-grid">
+            ${list.map((w) => renderPlatformCard(w, en)).join("")}
+          </div>
+        `).join("");
+    }
+
+    function renderPlatformCard(w, en) {
+      const b = getBrandStyle(w.name, w.url);
+      const host = cleanHostname(w.url);
+      const cls = w.status === "unread" ? "is-unread" : w.status === "paused" ? "is-paused" : "";
+
+      let stHtml = `<span class="status-pill st-ok">${en ? "Active" : "守护中"}</span>`;
+      if (w.status === "unread") {
+        stHtml = `<span class="status-pill st-unread">${w.unreadCount || 1} ${en ? "Unread" : "未读"}</span>`;
+      } else if (w.status === "auth_expired") {
+        stHtml = `<span class="status-pill st-auth">${en ? "Sign In" : "待登录"}</span>`;
+      } else if (w.status === "paused") {
+        stHtml = `<span class="status-pill st-pause">${en ? "Paused" : "已暂停"}</span>`;
+      }
+
+      const tierLabel = w.publishTier === "red"
+        ? (en ? "🛡️ Zero-Reload" : "🛡️ 零刷页防封")
+        : w.publishTier === "green"
+          ? (en ? "Portal Check" : "常规后台看护")
+          : (en ? "Gentle Check" : "温和低频看护");
+
+      return `
+        <div class="p-card ${cls}">
+          <div>
+            <div class="p-head">
+              <div class="p-id">
+                <div class="p-ava" style="background:${b.bg};">${escapeHtml(b.ico)}</div>
+                <div class="p-titles">
+                  <h3 class="p-name" title="${escapeAttr(w.name)}">${escapeHtml(w.name)}</h3>
+                  <div class="p-host">${escapeHtml(host)}</div>
                 </div>
               </div>
-            `;
-          }).join("")}
+              ${stHtml}
+            </div>
+            <div class="p-desc" style="margin-top:9px;" title="${escapeAttr(w.contextSummary || "")}">
+              ${escapeHtml(w.contextSummary || (en ? "Isolated unread message listener" : "独立防串号消息静默看护"))}
+            </div>
+            <div class="p-meta-tags" style="margin-top:7px;">
+              ${w.isolatedProfile !== false ? `<span class="micro-tag">🔒 ${en ? "Isolated" : "独立隔离仓"}</span>` : ""}
+              <span class="micro-tag">${tierLabel}</span>
+            </div>
+          </div>
+
+          <div class="p-foot">
+            <button class="sm soft-primary main-act" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}', '${escapeAttr(w.profileUuid || "")}', true)">
+              💬 ${isNativeApp ? (en ? "Open Chat" : "打开会话") : (en ? "Open Site" : "打开网页")}
+            </button>
+            <button class="sm" onclick="cloneMultiAccount('${escapeAttr(w.id)}')" title="${en ? "Add 2nd isolated account" : "同平台多开第二个独立账号"}">
+              ➕ ${en ? "Clone" : "多开"}
+            </button>
+            <div class="more-wrap">
+              <button class="sm" style="padding:4.5px 8px;" onclick="toggleCardMenu(event, '${escapeAttr(w.id)}')">⋯</button>
+              <div class="more-menu" id="menu-${escapeAttr(w.id)}">
+                ${w.publishTier !== "red" ? `<button class="more-item" onclick="triggerNativeCheckNow('${escapeAttr(w.id)}', '${escapeAttr(w.name)}');openMenuWatchId=null;">⚡ ${en ? "Check Now" : "立即检测"}</button>` : ""}
+                ${w.status === "auth_expired" ? `<button class="more-item" onclick="resolveItem('${escapeAttr(w.id)}','resume')">✓ ${en ? "Mark Signed In" : "已登录·恢复看护"}</button>` : ""}
+                ${w.status === "paused"
+                  ? `<button class="more-item" onclick="resolveItem('${escapeAttr(w.id)}','resume')">▶ ${en ? "Resume" : "恢复看护"}</button>`
+                  : `<button class="more-item" onclick="resolveItem('${escapeAttr(w.id)}','pause')">⏸ ${en ? "Pause" : "暂停看护"}</button>`
+                }
+                <button class="more-item danger-item" onclick="removeWatch('${escapeAttr(w.id)}')">🗑️ ${en ? "Remove" : "移除平台"}</button>
+              </div>
+            </div>
+          </div>
         </div>
-      `).join("");
+      `;
     }
 
     async function resolveItem(id, action) {
+      openMenuWatchId = null;
       await apiCall("POST", `/api/watches/${encodeURIComponent(id)}/resolve`, { action });
       await refreshState();
     }
 
     async function removeWatch(id) {
+      openMenuWatchId = null;
       await apiCall("DELETE", `/api/watches/${encodeURIComponent(id)}`);
       await refreshState();
+      showToast(currentLang === "en" ? "Platform removed" : "已移除该平台");
     }
 
     async function saveDraft(id) {
@@ -1144,32 +1823,22 @@
       const val = document.getElementById("draft-" + id)?.value || "";
       if (val) await navigator.clipboard.writeText(val);
       const w = (appState.watches || []).find((x) => x.id === id);
-      showToast(currentLang === "en" ? "Copied! Opening workspace..." : "已复制回复，正在打开平台...");
-      if (w) openSiteLogin(w.url, w.name, w.id);
+      showToast(currentLang === "en" ? "Copied! Opening chat..." : "已复制草稿，正在打开会话...");
+      if (w) openSiteLogin(w.url, w.name, w.id, w.profileUuid || "", true);
     }
 
     function switchTab(tab) {
-      document.getElementById("tab-inbox").classList.toggle("active", tab === "inbox");
-      document.getElementById("tab-desktop")?.classList.toggle("active", tab === "desktop");
-      document.getElementById("tab-cc")?.classList.toggle("active", tab === "cc");
-      document.getElementById("tab-replies").classList.toggle("active", tab === "replies");
-      document.getElementById("tab-scanner").classList.toggle("active", tab === "scanner");
-      document.getElementById("view-inbox").style.display = tab === "inbox" ? "block" : "none";
-      const vDesk = document.getElementById("view-desktop");
-      if (vDesk) vDesk.style.display = tab === "desktop" ? "block" : "none";
-      const vCc = document.getElementById("view-cc");
-      if (vCc) vCc.style.display = tab === "cc" ? "block" : "none";
-      document.getElementById("view-replies").style.display = tab === "replies" ? "block" : "none";
-      document.getElementById("view-scanner").style.display = tab === "scanner" ? "block" : "none";
-      if (tab === "desktop") {
-        refreshDesktopMonitorView();
+      for (const k of ["inbox", "desktop", "cc", "replies", "scanner"]) {
+        document.getElementById("tab-" + k)?.classList.toggle("active", tab === k);
+        const v = document.getElementById("view-" + k);
+        if (v) v.style.display = tab === k ? "block" : "none";
       }
+      if (tab === "desktop") refreshDesktopMonitorView();
       if (tab === "cc") {
         refreshCcView();
+        refreshAiClientsModal();
       }
-      if (tab === "replies") {
-        renderQuickReplies();
-      }
+      if (tab === "replies") renderQuickReplies();
       if (tab === "scanner" && !window.__scannedOnce) {
         window.__scannedOnce = true;
         runLeadScan();
@@ -1180,35 +1849,58 @@
       const res = await apiCall("GET", "/api/desktop/state");
       if (!res) return;
       const badges = res.badges || [];
+      const totalDockUnread = badges.reduce((s, b) => s + (parseInt(b.badge, 10) || 1), 0);
+      const navDeskBadge = document.getElementById("badge-nav-desktop");
+      if (navDeskBadge) {
+        if (totalDockUnread > 0) {
+          navDeskBadge.textContent = String(totalDockUnread);
+          navDeskBadge.className = "nav-cnt red";
+          navDeskBadge.style.display = "inline-block";
+        } else {
+          navDeskBadge.style.display = "none";
+        }
+      }
+
       const badgeMap = {};
       for (const b of badges) {
         if (b.bundleId) badgeMap[b.bundleId] = b.badge;
         badgeMap[b.name] = b.badge;
       }
+
       document.getElementById("desk-mon-badges").innerHTML = badges.length
-        ? `<div style="background:#fef2f2;border:1px solid #fecaca;padding:10px 12px;border-radius:10px;font-size:13px;color:#991b1b;">🔴 <strong>程序坞实时未读角标：</strong> ${badges.map((b) => `<span class="badge badge-red" style="margin-right:6px;">${escapeHtml(b.name)}: ${escapeHtml(b.badge)}</span>`).join("")}</div>`
-        : `<div style="font-size:12.5px;color:var(--green);font-weight:600;">🟢 当前电脑所有桌面软件均无未读红点（一旦微信/千牛/IDE出现红点或弹窗将自动推送到手机）</div>`;
+        ? `<div style="background:#fef2f2;border:1px solid #fecaca;padding:10px 14px;border-radius:10px;font-size:13px;color:#991b1b;">🔴 <strong>程序坞实时未读红点：</strong> ${badges.map((b) => `<span class="badge badge-red" style="margin-right:6px;">${escapeHtml(b.name)}: ${escapeHtml(b.badge)}</span>`).join("")}</div>`
+        : `<div class="panel-card" style="padding:12px 16px;margin-bottom:0;color:var(--green);font-weight:600;font-size:13px;">🟢 当前所有电脑软件均无未读红点（微信 / 千牛 / 飞书 / IDE 一旦出现未读角标或通知横幅，将自动同步到手机随身收件箱）</div>`;
 
       const alerts = res.recentAlerts || [];
       document.getElementById("desk-mon-alerts").innerHTML = alerts.slice(0, 4).map((a) =>
-        `<div style="font-size:12px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:6px 10px;border-radius:8px;margin-bottom:5px;">🔔 [${new Date(a.at).toLocaleTimeString()}] <strong>${escapeHtml(a.appName)}</strong>：${escapeHtml(a.text)}</div>`
+        `<div style="font-size:12px;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:7px 11px;border-radius:8px;margin-top:6px;">🔔 [${new Date(a.at).toLocaleTimeString()}] <strong>${escapeHtml(a.appName)}</strong>：${escapeHtml(a.text)}</div>`
       ).join("");
 
       const wins = res.windows || [];
+      if (!wins.length) {
+        document.getElementById("desk-mon-windows").innerHTML = `<div class="panel-card" style="grid-column:1/-1;text-align:center;color:var(--muted);">当前没有打开的通讯或协作软件窗口，后台仍会自动监听程序坞红点。</div>`;
+        return;
+      }
       document.getElementById("desk-mon-windows").innerHTML = wins.map((w) => {
-        const bg = badgeMap[w.bundleId] || badgeMap[w.appName] || "";
+        const bg = badgeMap[w.bundleId] || badgeMap[w.appName] || (w.unreadCount > 0 ? String(w.unreadCount) : "");
+        const bStyle = getBrandStyle(w.appName, "");
         return `
-          <div class="card ${bg ? "is-unread" : ""}">
+          <div class="p-card ${bg ? "is-unread" : ""}">
             <div>
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                <h3 class="card-title">🖥️ ${escapeHtml(w.appName)}</h3>
-                ${bg ? `<span class="badge badge-red">🔴 ${escapeHtml(bg)} 未读</span>` : `<span class="badge badge-green">🟢 监控中</span>`}
+              <div class="p-head">
+                <div class="p-id">
+                  <div class="p-ava" style="background:${bStyle.bg};">${escapeHtml(bStyle.ico)}</div>
+                  <div class="p-titles">
+                    <h3 class="p-name">${escapeHtml(w.appName)}</h3>
+                    <div class="p-host">${escapeHtml(w.title && w.title !== w.appName ? w.title : "电脑桌面主窗口")}</div>
+                  </div>
+                </div>
+                ${bg ? `<span class="status-pill st-unread">${escapeHtml(bg)} 未读</span>` : `<span class="status-pill st-ok">静默看护</span>`}
               </div>
-              <div class="card-meta">${escapeHtml(w.title || "桌面主窗口")}</div>
-              <div style="font-size:12px;color:var(--muted);">窗口尺寸 ${w.bounds?.w || 0}×${w.bounds?.h || 0} · 手机端可随时查看画面并代打回复</div>
+              <div class="p-desc" style="margin-top:9px;">${escapeHtml(w.snippet || "支持手机随身端直接看纯文字消息并代打回复")}</div>
             </div>
-            <div class="card-foot">
-              <button class="sm primary" onclick="openMobileModal()">📲 手机扫码查看并遥控此软件</button>
+            <div class="p-foot">
+              <button class="sm soft-primary main-act" onclick="openMobileModal()">📲 手机随身收发此软件消息</button>
             </div>
           </div>
         `;
@@ -1226,7 +1918,7 @@
 
     function applyMobilePairingUi(info) {
       if (!info || !info.ok) {
-        document.getElementById("mob-qr-box").innerHTML = `<div style="padding:12px;font-size:12px;color:var(--muted);text-align:center;">正在初始化本地手机网关...</div>`;
+        document.getElementById("mob-qr-box").innerHTML = `<div style="padding:12px;font-size:12px;color:var(--muted);text-align:center;">本地手机网关启动中...</div>`;
         return;
       }
       lastMobileInfo = info;
@@ -1235,10 +1927,10 @@
       document.getElementById("mob-tun-url").value = info.tunnelMobileUrl || "";
       const tunBtn = document.getElementById("btn-toggle-tunnel");
       if (info.status === "running" && info.tunnelMobileUrl) {
-        tunBtn.textContent = "🟢 4G/5G 穿透已开启（点此关闭）";
+        tunBtn.textContent = "🟢 出门穿透已开启（点此关闭）";
         tunBtn.classList.remove("primary");
       } else {
-        tunBtn.textContent = "🌐 一键开启出门 4G/5G 穿透";
+        tunBtn.textContent = "🌐 开启出门 4G/5G 穿透";
         tunBtn.classList.add("primary");
       }
     }
@@ -1250,11 +1942,11 @@
 
     async function toggleMobileTunnel() {
       const wantAction = lastMobileInfo?.status === "running" ? "stop" : "start";
-      showToast(wantAction === "start" ? "⏳ 正在建立免翻墙加密 HTTPS 隧道（约 3 秒）..." : "正在关闭公网穿透...");
+      showToast(wantAction === "start" ? "⏳ 正在建立免翻墙 HTTPS 加密隧道..." : "正在关闭公网穿透...");
       const info = await apiCall("POST", "/api/mobile/tunnel", { action: wantAction });
       applyMobilePairingUi(info);
       if (wantAction === "start" && info?.tunnelMobileUrl) {
-        showToast("🎉 4G/5G 穿透已就绪！手机不连同 Wi-Fi 也能直接扫码用了！");
+        showToast("🎉 出门 4G/5G 穿透已就绪！手机扫码即可随身收消息");
       }
     }
 
@@ -1262,24 +1954,24 @@
       const u = lastMobileInfo?.primaryUrl || document.getElementById("mob-lan-url").value;
       if (!u) return;
       await navigator.clipboard.writeText(u);
-      showToast("✅ 已复制手机直连网址，发到手机微信/备忘录点开即可！");
+      showToast("✅ 已复制手机随身收件箱网址");
     }
 
     async function resetMobileToken() {
       const info = await apiCall("POST", "/api/mobile/tunnel", { action: "rotateToken" });
       applyMobilePairingUi(info);
-      showToast("🔄 已生成全新配对密钥，旧链接已自动作废！");
+      showToast("🔄 已生成新配对密钥，旧链接已作废");
     }
 
     async function refreshCcView() {
-      const res = await apiCall("GET", "/api/cc/state");
+      const res = await apiCall("GET", "/api/cc/state").catch(() => null);
       if (!res || !res.ok) return;
       desktopCcState = res;
       const hookBtn = document.getElementById("btn-cc-hook");
       if (hookBtn) {
         hookBtn.textContent = res.claudeHookInstalled
-          ? "✅ 已绑定终端 Claude Code 完成提醒"
-          : "🔗 一键绑定终端 Claude Code 完成提醒";
+          ? "✅ 已绑定 Claude 完成提醒"
+          : "🔗 绑定 Claude 完成提醒";
       }
       const agSel = document.getElementById("d-cc-agent");
       if (agSel && !agSel.options.length) {
@@ -1296,8 +1988,8 @@
       const sesSel = document.getElementById("d-cc-session-sel");
       const sessions = res.sessions || [];
       if (!sessions.length) {
-        sesSel.innerHTML = `<option value="">尚未创建会话 — 直接在下方发指令或点「+ 新建远程会话」</option>`;
-        document.getElementById("d-cc-stream").textContent = "👋 在此启动的 Claude Code / Codex / Opus 会话，手机扫码打开《消息总管手机版》即可实时同步查看输出、接收跑完提醒并继续发指令！";
+        sesSel.innerHTML = `<option value="">尚未创建远程会话 — 直接在下方输入指令或点「+ 新建会话」</option>`;
+        document.getElementById("d-cc-stream").textContent = "👋 在此运行的 Claude Code / Codex 会话，手机打开《消息总管随身版》即可实时看纯文字输出、接收完成红点并继续下指令。";
         return;
       }
       if (!activeDesktopCcId) activeDesktopCcId = sessions[0].id;
@@ -1314,7 +2006,7 @@
     async function installCcHooks() {
       const res = await apiCall("POST", "/api/cc/install-hooks", {});
       if (res && res.ok) {
-        showToast("🎉 已成功写入 ~/.claude/settings.json！以后终端跑完 CC 任务会自动提醒你手机！");
+        showToast("🎉 已绑定终端 Claude Code 完成提醒！");
         refreshCcView();
       }
     }
@@ -1369,33 +2061,27 @@
     const DEFAULT_LOCAL_QR = [
       {
         id: "qr_greet",
-        category: "售前秒回",
-        title: "闲鱼/小红书首句秒回（带防重变体）",
-        body: "{你好呀|哈喽|嗨亲}~ 看到你的留言啦！这款{目前还在的|现在可以直接拍|今天就能安排}，请问你是{自用还是商用|什么时候需要用到}呢？我给你发对应实拍细节~",
+        category: "破冰秒回",
+        title: "现货秒回引导拍下",
+        body: "{哈喽|你好呀|嗨}~ 宝贝目前{有现货的|今天拍下就能安排}哦！页面标价就是实在底价，您可以直接拍下，看到第一时间给您极速处理~",
       },
       {
         id: "qr_quote",
-        category: "外包报价",
-        title: "接单清边界一口价话术",
-        body: "{你好|哈喽}！刚仔细看了你的需求，核心关键是先把交付清单定清防返工。我近期刚做过同类项目，包含：{1. 全套源码与部署|1. 成品交付与调试} + 7天免费售后保障，一口价透明无增项，需要我发个演示给你看下吗？",
+        category: "防砍价",
+        title: "温和拒砍价+送小福利",
+        body: "{亲|朋友}，咱们这已经是{实在良心底价|薄利走量一口价}啦！今天定下来的话，我额外给您{附赠一份实用资料包|优先加急安排}，您看行吗？",
       },
       {
         id: "qr_safe_contact",
-        category: "防封导流",
-        title: "平台内合规发资料引导（零违禁词）",
-        body: "{放心哈|没问题的}，咱们全程在平台内沟通留痕保障双方权益！如果文件比较大，你拍下后我在订单说明里把完整说明文档发你~",
-      },
-      {
-        id: "qr_en_pitch",
-        category: "Global Freelance",
-        title: "Reddit / Upwork Fast Scope Reply",
-        body: "{Hey there|Hi|Hello}! Just read through your post — I shipped a very similar setup recently and know the exact edge cases to watch out for. Happy to share a 3-bullet fixed-price scope {today|right away} if you're still looking!",
+        category: "合规防封",
+        title: "平台内安全沟通留痕（零违禁词）",
+        body: "{放心哈|没问题的}，咱们全程在平台内沟通留痕保障双方权益！如果文件较大，您拍下后我在订单说明里把完整文档发您~",
       },
     ];
 
     function getQuickRepliesList() {
-      const list = appState.quickReplies;
-      return Array.isArray(list) && list.length ? list : DEFAULT_LOCAL_QR;
+      const raw = Array.isArray(appState.quickReplies) && appState.quickReplies.length ? appState.quickReplies : DEFAULT_LOCAL_QR;
+      return raw.map(normalizeQrItem);
     }
 
     function resolveSpintax(template) {
@@ -1407,15 +2093,15 @@
     }
 
     const BAN_RULES_ZH = [
-      { re: /微信|微信号|加V|加v|\bvx\b|\bVX\b|威信|徽信|绿泡泡/g, label: "站外导流高危词（微信变体）", tip: "闲鱼/小红书极易吞评禁言，建议改用「平台内直接发需求文档」或订单内交付" },
-      { re: /支付宝|私下转账|打款|走线下|红包转账|口令红包/g, label: "站外私下交易词", tip: "极易触发反诈风控冻结账号，请改为「直接拍平台链接担保交易」" },
-      { re: /加QQ|企鹅号|扣扣号|手机号|电话联系/g, label: "站外联系方式导流", tip: "建议删去外部号码，引导客户先在当前聊天窗确认需求" },
-      { re: /最便宜|全网第一|国家级|绝对有效|100%包过|永久包赚|稳赚不赔/g, label: "广告法极限违禁词", tip: "易被审核拦截限流，建议替换为「高性价比 / 实测稳定 / 14天售后保障」" },
+      { re: /微信|微信号|加V|加v|\bvx\b|\bVX\b|威信|徽信|绿泡泡/g, label: "站外导流高危词（微信变体）", tip: "闲鱼/小红书极易吞评禁言，建议改用「平台内直接发需求」或订单内交付" },
+      { re: /支付宝|私下转账|打款|走线下|红包转账|口令红包/g, label: "站外私下交易词", tip: "易触发风控冻结，建议改为「直接拍平台担保链接」" },
+      { re: /加QQ|企鹅号|扣扣号|手机号|电话联系/g, label: "站外联系方式导流", tip: "建议删去外部号码，先在当前聊天窗确认需求" },
+      { re: /最便宜|全网第一|国家级|绝对有效|100%包过|永久包赚|稳赚不赔/g, label: "极限广告违禁词", tip: "易被审核拦截限流，建议替换为「实测稳定 / 14天售后保障」" },
     ];
 
     const BAN_RULES_EN = [
-      { re: /\b(pay outside|off-platform|wire transfer|friends and family|whatsapp me|telegram me)\b/gi, label: "Off-platform payment/contact trigger", tip: "Marketplaces like Upwork/Fiverr auto-flag off-platform solicitation; keep initial scope chat on-platform." },
-      { re: /\b(100% guaranteed profit|get rich|zero risk forever)\b/gi, label: "Spam filter trigger phrase", tip: "Replace hype claims with concrete deliverables and a clear refund policy." },
+      { re: /\b(pay outside|off-platform|wire transfer|friends and family|whatsapp me|telegram me)\b/gi, label: "Off-platform solicitation trigger", tip: "Keep initial scope & payment inside the platform to avoid account flags." },
+      { re: /\b(100% guaranteed profit|get rich|zero risk forever)\b/gi, label: "Spam filter phrase", tip: "Replace hype claims with clear deliverables." },
     ];
 
     function runBanWordCheck() {
@@ -1425,30 +2111,24 @@
       if (!out) return;
       if (!text.trim()) {
         out.style.color = "var(--green)";
-        out.innerHTML = en
-          ? "🟢 Ready — no off-platform or spam trigger words detected"
-          : "🟢 未检测到平台高危导流词或极限违禁词";
+        out.innerHTML = en ? "🟢 Ready — no risky words detected" : "🟢 未检测到平台高危导流词或极限违禁词";
         return;
       }
       const hits = [];
-      const rules = [...BAN_RULES_ZH, ...BAN_RULES_EN];
-      for (const r of rules) {
+      for (const r of [...BAN_RULES_ZH, ...BAN_RULES_EN]) {
         const matches = text.match(r.re);
         if (matches && matches.length) {
           const uniq = [...new Set(matches)].join("、");
           hits.push(`<div>🔴 <strong>${escapeHtml(r.label)}</strong>：命中「<code>${escapeHtml(uniq)}</code>」 → <span style="color:#475569;">${escapeHtml(r.tip)}</span></div>`);
         }
       }
-      // Also detect bare 11-digit mainland mobile numbers
       const phoneMatch = text.match(/(?<!\d)1[3-9]\d{9}(?!\d)/g);
       if (phoneMatch) {
-        hits.push(`<div>🟠 <strong>疑似手机号串</strong>：命中「<code>${escapeHtml(phoneMatch.join(", "))}</code>」 → <span style="color:#475569;">公域私信直接发手机号易被系统屏蔽</span></div>`);
+        hits.push(`<div>🟠 <strong>疑似手机号</strong>：命中「<code>${escapeHtml(phoneMatch.join(", "))}</code>」 → <span style="color:#475569;">私信直接发手机号易被系统屏蔽</span></div>`);
       }
       if (!hits.length) {
         out.style.color = "var(--green)";
-        out.innerHTML = en
-          ? "🟢 Clean & safe! No risky platform trigger words found."
-          : "🟢 检测通过！未发现站外导流词或极限违禁词，可放心复制发送。";
+        out.innerHTML = en ? "🟢 Clean & safe to send!" : "🟢 检测通过！未发现站外导流词或极限违禁词，可放心发送。";
       } else {
         out.style.color = "var(--red)";
         out.innerHTML = hits.join("");
@@ -1458,9 +2138,8 @@
     async function copyCheckedSafeDraft() {
       const raw = document.getElementById("qr-draft-check")?.value || "";
       if (!raw.trim()) return;
-      const spun = resolveSpintax(raw);
-      await navigator.clipboard.writeText(spun);
-      showToast(currentLang === "en" ? "Copied to clipboard!" : "已复制检测后的回复内容！");
+      await navigator.clipboard.writeText(resolveSpintax(raw));
+      showToast(currentLang === "en" ? "Copied to clipboard!" : "✅ 已复制检测后的安全回复内容");
     }
 
     function renderQuickReplies() {
@@ -1471,33 +2150,33 @@
       const list = getQuickRepliesList().filter((item) => {
         if (!kw) return true;
         return (
-          String(item.title || "").toLowerCase().includes(kw) ||
-          String(item.category || "").toLowerCase().includes(kw) ||
-          String(item.body || "").toLowerCase().includes(kw)
+          item.title.toLowerCase().includes(kw) ||
+          item.category.toLowerCase().includes(kw) ||
+          item.body.toLowerCase().includes(kw)
         );
       });
       if (!list.length) {
-        container.innerHTML = `<div class="scanner-box" style="grid-column:1/-1;text-align:center;color:var(--muted);">${en ? "No matching quick replies. Click '+ New Quick Reply' to add one." : "没有匹配的话术，点击右上角「+ 新增快捷话术」添加即可。"}</div>`;
+        container.innerHTML = `<div class="panel-card" style="grid-column:1/-1;text-align:center;color:var(--muted);">${en ? "No matching templates. Click '+ New Template' above." : "没有匹配的话术，点击右上角「+ 新增话术」添加即可。"}</div>`;
         return;
       }
       container.innerHTML = list.map((item) => `
-        <div class="card">
+        <div class="p-card">
           <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">
-              <h3 class="card-title">${escapeHtml(item.title)}</h3>
-              <span class="badge badge-slate">${escapeHtml(item.category || (en ? "General" : "常用"))}</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+              <h3 class="p-name">${escapeHtml(item.title)}</h3>
+              <span class="badge badge-slate">${escapeHtml(item.category)}</span>
             </div>
-            <div class="snippet-box" style="margin:6px 0;white-space:pre-wrap;">${escapeHtml(item.body)}</div>
+            <div class="snippet-box" style="margin:6px 0 0;">${escapeHtml(item.body)}</div>
           </div>
-          <div class="card-foot">
-            <button class="sm primary" onclick="copySpintaxReply('${escapeAttr(item.id)}')">
-              ${en ? "🎲 Spin & Copy" : "🎲 随机变体复制"}
+          <div class="p-foot">
+            <button class="sm soft-primary main-act" onclick="copySpintaxReply('${escapeAttr(item.id)}')">
+              🎲 ${en ? "Spin & Copy" : "随机换词复制"}
             </button>
             <button class="sm" onclick="sendQrToGuard('${escapeAttr(item.id)}')">
-              ${en ? "🛡️ Check Safety" : "🛡️ 违禁词体检"}
+              🛡️ ${en ? "Check" : "体检"}
             </button>
             <button class="sm danger" onclick="deleteQuickReply('${escapeAttr(item.id)}')">
-              ${en ? "Delete" : "删除"}
+              ${en ? "Del" : "删除"}
             </button>
           </div>
         </div>
@@ -1509,20 +2188,15 @@
       if (!item) return;
       const resolved = resolveSpintax(item.body);
       await navigator.clipboard.writeText(resolved);
-      showToast(
-        currentLang === "en"
-          ? `Copied variation: "${resolved.slice(0, 34)}..."`
-          : `已生成防重变体并复制：「${resolved.slice(0, 22)}...」`
-      );
+      showToast(currentLang === "en" ? `Copied: "${resolved.slice(0, 30)}..."` : `✅ 已抽词复制：「${resolved.slice(0, 22)}...」`);
     }
 
     function sendQrToGuard(id) {
       const item = getQuickRepliesList().find((x) => x.id === id);
       if (!item) return;
-      const resolved = resolveSpintax(item.body);
       const box = document.getElementById("qr-draft-check");
       if (box) {
-        box.value = resolved;
+        box.value = resolveSpintax(item.body);
         runBanWordCheck();
         box.scrollIntoView({ behavior: "smooth", block: "center" });
       }
@@ -1534,8 +2208,8 @@
       if (!isProUnlocked() && list.length >= 6) {
         openPaywallModal(
           en
-            ? "Free tier includes up to 6 quick-reply templates (with 100% free JSON export). Unlock Pro ($14.99 Lifetime) for unlimited templates!"
-            : "免费版支持保存 6 条快捷话术（且永久免费开放 JSON 导出备份绝不锁数据）。升级专业版即可添加无限条分类话术！"
+            ? "Free tier includes 6 templates. Unlock Pro for unlimited templates!"
+            : "免费版支持保存 6 条快捷话术。解锁专业版即可添加无限条分类话术！"
         );
         return;
       }
@@ -1548,35 +2222,37 @@
         const txt = await navigator.clipboard.readText();
         if (txt) document.getElementById("qr-edit-body").value = txt;
       } catch {
-        showToast(currentLang === "en" ? "Please press Cmd/Ctrl+V inside the text box" : "请在输入框内按 Cmd+V / Ctrl+V 粘贴");
+        showToast("请在输入框内按 Cmd+V 粘贴");
       }
     }
 
     async function saveQuickReplyItem() {
       const en = currentLang === "en";
       const title = document.getElementById("qr-edit-title").value.trim();
-      const category = document.getElementById("qr-edit-cat").value.trim() || (en ? "Custom" : "自定义话术");
+      const category = document.getElementById("qr-edit-cat").value.trim() || (en ? "Custom" : "常用话术");
       const body = document.getElementById("qr-edit-body").value.trim();
       if (!body) {
-        showToast(en ? "Please enter reply text" : "请填写话术正文内容");
+        showToast(en ? "Please enter reply text" : "请填写话术正文");
         return;
       }
-      const next = [
-        {
-          id: "qr_" + Date.now().toString(36),
-          title: title || body.slice(0, 18),
-          category,
-          body,
-        },
-        ...getQuickRepliesList(),
-      ];
+      const newEntry = {
+        id: "qr_" + Date.now().toString(36),
+        title: title || body.slice(0, 18),
+        titleZh: title || body.slice(0, 18),
+        category,
+        cat: category,
+        body,
+        template: body,
+        textZh: body,
+      };
+      const next = [newEntry, ...(appState.quickReplies || getQuickRepliesList())];
       const res = await apiCall("POST", "/api/quick-replies", { quickReplies: next });
       appState.quickReplies = (res && res.quickReplies) || next;
       document.getElementById("qr-edit-title").value = "";
       document.getElementById("qr-edit-body").value = "";
       document.getElementById("qr-editor").style.display = "none";
       renderQuickReplies();
-      showToast(en ? "Quick reply saved!" : "快捷话术已保存！");
+      showToast(en ? "Saved!" : "✅ 快捷话术已保存");
     }
 
     async function deleteQuickReply(id) {
@@ -1598,7 +2274,7 @@
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      showToast(currentLang === "en" ? "Exported JSON backup!" : "已导出 JSON 话术备份文件！");
+      showToast("✅ 已导出 JSON 话术备份");
     }
 
     function importQuickReplies(ev) {
@@ -1610,13 +2286,13 @@
           const parsed = JSON.parse(String(reader.result || "{}"));
           const arr = Array.isArray(parsed) ? parsed : parsed.quickReplies;
           if (!Array.isArray(arr) || !arr.length) throw new Error("empty");
-          const merged = [...arr, ...getQuickRepliesList()].slice(0, 300);
+          const merged = [...arr.map(normalizeQrItem), ...getQuickRepliesList()].slice(0, 200);
           const res = await apiCall("POST", "/api/quick-replies", { quickReplies: merged });
           appState.quickReplies = (res && res.quickReplies) || merged;
           renderQuickReplies();
-          showToast(currentLang === "en" ? `Imported ${arr.length} templates!` : `成功导入 ${arr.length} 条快捷话术！`);
+          showToast(`✅ 成功导入 ${arr.length} 条快捷话术`);
         } catch {
-          showToast(currentLang === "en" ? "Invalid JSON backup file" : "备份文件格式不正确，请选择导出的 .json 文件");
+          showToast("备份文件格式不正确，请选择 .json 文件");
         }
         ev.target.value = "";
       };
@@ -1632,12 +2308,12 @@
       const en = currentLang === "en";
       const q = document.getElementById("scan-input").value.trim() || "Shopify";
       const out = document.getElementById("scan-results");
-      out.innerHTML = `<div class="scanner-box" style="text-align:center;">⏳ ${en ? `Scanning live buyer posts for "${escapeHtml(q)}"...` : `正在实时扫描「${escapeHtml(q)}」最新求购与外包帖...`}</div>`;
+      out.innerHTML = `<div class="panel-card" style="text-align:center;">⏳ ${en ? `Scanning live posts for "${escapeHtml(q)}"...` : `正在实时扫描「${escapeHtml(q)}」最新求购与外包帖...`}</div>`;
       try {
         const data = await apiCall("GET", `/api/scan-leads?q=${encodeURIComponent(q)}&limit=12`);
         const leads = data.leads || [];
         if (!leads.length) {
-          out.innerHTML = `<div class="scanner-box">${en ? "No recent matches found. Try broader keywords like Shopify, Python, React, or iOS." : "暂未扫到匹配的实时帖，试试更常见的业务词（如 Shopify, Python, React, 外包）。"}</div>`;
+          out.innerHTML = `<div class="panel-card">${en ? "No recent matches found. Try broader keywords like Shopify, Python, React, or iOS." : "暂未扫到匹配的实时帖，试试常见业务词（如 Shopify, Python, React, iOS）。"}</div>`;
           return;
         }
         out.innerHTML = leads.map((item, idx) => `
@@ -1649,17 +2325,17 @@
                 <span style="font-size:12px;color:var(--muted);">${new Date(item.publishedAt).toLocaleString()}</span>
               </div>
               <div style="display:flex;gap:6px;">
-                <button class="sm" onclick="copyColdPitch(${idx})">${en ? "✨ Copy Pitch" : "✨ 复制破冰话术"}</button>
-                <a class="btn sm primary" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${en ? "↗ Open Post" : "↗ 去联系客户"}</a>
+                <button class="sm" onclick="copyColdPitch(${idx})">✨ ${en ? "Copy Pitch" : "复制破冰话术"}</button>
+                <a class="btn sm primary" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">↗ ${en ? "Open Post" : "去联系客户"}</a>
               </div>
             </div>
             <a class="lead-title" href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>
-            <div style="font-size:13px;color:#475569;margin-top:4px;">${escapeHtml(item.snippet || "")}</div>
+            <div style="font-size:12.5px;color:#475569;margin-top:4px;">${escapeHtml(item.snippet || "")}</div>
           </div>
         `).join("");
         window.__lastLeads = leads;
       } catch {
-        out.innerHTML = `<div class="scanner-box">${en ? "Scan timed out. Please check your connection." : "扫描超时，请检查网络连接后重试。"}</div>`;
+        out.innerHTML = `<div class="panel-card">${en ? "Scan timed out. Check connection." : "扫描超时，请检查网络连接后重试。"}</div>`;
       }
     }
 
@@ -1668,10 +2344,10 @@
       if (!item) return;
       const isZh = /[\u4e00-\u9fa5]/.test(item.title);
       const pitch = isZh
-        ? `你好！刚看到你发的「${item.title.slice(0, 28)}」，这类需求最关键的是先把交付边界定清防返工。我近期刚做过同类项目，方便的话今天内给你列一份明确工期+一口价清单供你参考？`
+        ? `你好！刚看到你发的「${item.title.slice(0, 28)}」，这类需求最关键的是先把交付边界定清防返工。我近期刚做过同类项目，方便的话今天内给你列一份明确工期+一口价清单供参考？`
         : `Hey! Just saw your post ("${item.title.slice(0, 48)}"). I shipped a very similar workflow recently and know the exact edge cases to watch out for. Happy to send over a 3-bullet fixed-price scope today if you're still looking!`;
       await navigator.clipboard.writeText(pitch);
-      showToast(currentLang === "en" ? "Copied pitch to clipboard!" : "已复制破冰回复话术！");
+      showToast("✅ 已复制破冰回复话术");
     }
 
     function openAddModal() {
@@ -1680,8 +2356,8 @@
         const priceZh = window.__TABPULSE_MAS_MODE ? "¥28" : "¥39";
         openPaywallModal(
           en
-            ? "Free tier watches up to 2 platforms. Unlock ReplyRadar Pro ($14.99 Lifetime) for unlimited platforms!"
-            : `免费版支持同时看护 2 个网站。升级《消息总管》专业版（${priceZh} 永久买断）即可解锁无限个平台！`
+            ? "Free tier watches up to 2 platforms. Unlock Pro ($14.99 Lifetime) for unlimited platforms!"
+            : `免费版支持同时看护 2 个平台。升级专业版（${priceZh} 永久买断）即可解锁无限个平台！`
         );
         return;
       }
@@ -1692,18 +2368,21 @@
       const en = currentLang === "en";
       const name = document.getElementById("f-name").value.trim();
       const url = document.getElementById("f-url").value.trim();
-      if (!url) { showToast(en ? "Please enter a valid URL" : "请填写网站消息页网址"); return; }
+      if (!url) { showToast(en ? "Please enter a URL" : "请填写消息页网址"); return; }
       await apiCall("POST", "/api/watches", {
-        name: name || url,
+        name: name || cleanHostname(url),
         url,
         category: document.getElementById("f-cat").value,
         baseIntervalMinutes: Number(document.getElementById("f-interval").value) || 60,
         publishTier: document.getElementById("f-tier").value,
         contextSummary: document.getElementById("f-ctx").value.trim(),
       });
+      document.getElementById("f-name").value = "";
+      document.getElementById("f-url").value = "";
+      document.getElementById("f-ctx").value = "";
       closeModals();
       await refreshState();
-      showToast(en ? "Added! Click 'Open Workspace' once to sign in." : "添加成功！点卡片上的「打开工作台」登录一次即可");
+      showToast(en ? "Added! Click 'Open Chat' once to sign in." : "✅ 添加成功！点卡片「打开会话」登录一次即可");
     }
 
     function openPaywallModal(reasonText) {
@@ -1718,24 +2397,24 @@
       document.getElementById("mas-buy-yearly-gl").style.display = isMas ? "inline-flex" : "none";
       document.getElementById("mas-buy-life-gl").style.display = isMas ? "inline-flex" : "none";
       if (isMas) {
-        document.getElementById("cn-p2").innerHTML = '¥28 <span style="font-size:13px;font-weight:500;color:var(--muted);">/ 永久买断</span>';
+        document.getElementById("cn-p2").innerHTML = '¥28 <span style="font-size:12.5px;font-weight:500;color:var(--muted);">/ 永久</span>';
       }
       document.getElementById("modal-paywall").classList.add("open");
     }
 
     function buyMasIap(productId) {
-      showToast(currentLang === "en" ? "Connecting to Apple App Store..." : "正在拉起 Apple 官方支付...");
+      showToast(currentLang === "en" ? "Connecting to App Store..." : "正在拉起 Apple 官方支付...");
       nativePost("purchaseIap", { productId });
     }
 
     function restoreMasIap() {
-      showToast(currentLang === "en" ? "Restoring Apple purchases..." : "正在向 Apple 恢复已购项目...");
+      showToast(currentLang === "en" ? "Restoring purchases..." : "正在恢复已购项目...");
       nativePost("restoreIap", {});
     }
 
     window.__onMasIapResult = function(res) {
       if (res && res.ok) {
-        showToast(currentLang === "en" ? "🎉 Apple Pro Purchase Unlocked!" : "🎉 Apple 官方专业版已成功解锁！");
+        showToast("🎉 专业版已成功解锁！");
         closeModals();
         refreshState();
       } else if (res && res.error) {
@@ -1750,9 +2429,9 @@
       const res = await apiCall("POST", "/api/license/activate", { key });
       if (res && res.ok) {
         msgEl.style.color = "var(--green)";
-        msgEl.textContent = en ? "🎉 Pro Unlocked!" : "🎉 激活成功！已解锁无限平台与专属话术库！";
+        msgEl.textContent = en ? "🎉 Pro Unlocked!" : "🎉 激活成功！已解锁全部专业版能力！";
         await refreshState();
-        setTimeout(closeModals, 900);
+        setTimeout(closeModals, 800);
       } else {
         msgEl.style.color = "var(--red)";
         msgEl.textContent = (res && res.error) || (en ? "Invalid license key" : "激活码无效，请核对后重试");
@@ -1760,25 +2439,21 @@
     }
 
     function openSettingsModal() {
-      const en = currentLang === "en";
-      if (!isProUnlocked()) {
-        openPaywallModal(
-          en
-            ? "Instant mobile push alerts are included in ReplyRadar Pro."
-            : "手机实时消息推送属于专业版功能，解锁后支持飞书、企业微信、Server酱秒级提醒！"
-        );
-        return;
-      }
       document.getElementById("s-webhook").value = appState.settings?.webhookUrl || "";
       document.getElementById("modal-settings").classList.add("open");
     }
 
     async function saveWebhookSettings() {
       const webhookUrl = document.getElementById("s-webhook").value.trim();
+      if (webhookUrl && !isProUnlocked()) {
+        closeModals();
+        openPaywallModal("外部 Webhook 实时消息推送属于专业版功能，解锁后支持飞书、企业微信、Bark 秒级提醒！");
+        return;
+      }
       await apiCall("POST", "/api/settings", { webhookUrl });
       closeModals();
       await refreshState();
-      showToast(currentLang === "en" ? "Push webhook saved!" : "手机提醒链接已保存！");
+      showToast("✅ 设置已保存");
     }
 
     async function acceptTermsConsent() {
@@ -1787,43 +2462,30 @@
       await apiCall("POST", "/api/settings", { termsAcceptedAt: new Date().toISOString() });
       document.getElementById("modal-consent").classList.remove("open");
       await refreshState();
-      showToast(currentLang === "en" ? "✓ Welcome to ReplyRadar" : "✓ 欢迎使用消息总管");
+      showToast("✓ 欢迎使用消息总管");
     }
 
     async function checkAppUpdate() {
       const en = currentLang === "en";
-      const currentVer = appState.version || "2.0.0";
+      const currentVer = appState.version || "5.3.0";
       showToast(en ? "Checking for updates..." : "正在检查新版本...");
       try {
         const res = await fetch("https://a3152557994-ship-it.github.io/tabpulse/version.json?t=" + Date.now());
         const info = await res.json();
-        if (info.latestVersion && info.latestVersion !== currentVer) {
+        if (info.latestVersion && info.latestVersion !== currentVer && info.latestVersion.localeCompare(currentVer, undefined, { numeric: true }) > 0) {
           const dl = en ? (info.downloadUrlEn || info.downloadUrl) : (info.downloadUrlCn || info.downloadUrl);
-          document.getElementById("upd-title").textContent = en
-            ? `🎉 New Version v${info.latestVersion} Available`
-            : `🎉 发现新版本 v${info.latestVersion}`;
-          document.getElementById("upd-desc").textContent = en
-            ? (info.notesEn || `Upgrade from v${currentVer} to v${info.latestVersion} for the latest workspace & anti-ban tools.`)
-            : (info.notesCn || info.notes || `当前版本 v${currentVer}，建议立即免费升级至 v${info.latestVersion}。`);
-          document.getElementById("btn-cancel-upd").textContent = en ? "Later" : "稍后再说";
+          document.getElementById("upd-title").textContent = en ? `🎉 New Version v${info.latestVersion}` : `🎉 发现新版本 v${info.latestVersion}`;
+          document.getElementById("upd-desc").textContent = en ? (info.notesEn || "") : (info.notesCn || info.notes || "");
           const goBtn = document.getElementById("btn-go-upd");
-          goBtn.textContent = en ? "Download Update →" : "立即前往下载新版 →";
           goBtn.href = dl;
+          closeModals();
           document.getElementById("modal-update").classList.add("open");
         } else {
           showToast(en ? `🟢 Up to date (v${currentVer})` : `🟢 当前已是最新版 (v${currentVer})`);
         }
       } catch {
-        showToast(en ? `Running v${currentVer}` : `当前版本 v${currentVer}`);
+        showToast(`🟢 当前版本 v${currentVer}`);
       }
-    }
-
-    function openFeedback() {
-      const en = currentLang === "en";
-      window.open(
-        "mailto:a3152557994@gmail.com?subject=" + encodeURIComponent(en ? "ReplyRadar Feedback / Site Request" : "消息总管使用反馈 / 申请适配新网站"),
-        "_blank"
-      );
     }
 
     function openPlaybook() {
@@ -1831,8 +2493,8 @@
       if (!isProUnlocked()) {
         openPaywallModal(
           en
-            ? "The Cold-Reply Playbook is a free bonus included with ReplyRadar Pro."
-            : "《高成交回复话术库》为专业版/买断版附赠福利，输入激活码即可永久查看！"
+            ? "The Cold-Reply Playbook is included with ReplyRadar Pro."
+            : "《高成交破冰话术锦囊》为专业版附赠福利，解锁后永久可查！"
         );
         return;
       }
@@ -1843,13 +2505,9 @@
       }
     }
 
-    async function openAiMountModal() {
-      document.getElementById("modal-ai-mount").classList.add("open");
-      await refreshAiClientsModal();
-    }
-
     async function refreshAiClientsModal() {
       const box = document.getElementById("ai-clients-list");
+      if (!box) return;
       try {
         const [res, bRes] = await Promise.all([fetch("/api/ai-clients/status"), fetch("/api/ai-butler/state")]);
         const data = await res.json();
@@ -1863,32 +2521,30 @@
         if (sel && Array.isArray(bData.providers)) {
           const curProv = appState.settings?.aiButlerProvider || "codex";
           sel.innerHTML = bData.providers
-            .map(
-              (p) =>
-                `<option value="${escapeAttr(p.id)}" ${p.id === curProv ? "selected" : ""}>${escapeHtml(p.name)}${p.installed ? " ✓" : ""}</option>`
-            )
+            .map((p) => `<option value="${escapeAttr(p.id)}" ${p.id === curProv ? "selected" : ""}>${escapeHtml(p.name)}${p.installed ? " ✓" : ""}</option>`)
             .join("");
         }
 
-        document.getElementById("ai-one-liner-box").value = data.oneSentenceForAnyAi || "";
-        box.innerHTML = (data.clients || [])
-          .map(
-            (c) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:${c.connected ? "#f0fdf4" : "#fff"};gap:10px;">
-              <div>
-                <div style="font-size:13.5px;font-weight:700;">${escapeHtml(c.name)} ${c.detected ? '<span class="badge badge-blue">本机已装</span>' : '<span class="badge badge-slate">未检测到</span>'}</div>
-                <div style="font-size:12px;color:var(--muted);margin-top:2px;">${escapeHtml(c.desc)}</div>
+        const oneLiner = document.getElementById("ai-one-liner-box");
+        if (oneLiner) oneLiner.value = data.oneSentenceForAnyAi || "";
+
+        box.innerHTML = (data.clients || []).map((c) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:${c.connected ? "#f0fdf4" : "#f8fafc"};gap:10px;">
+            <div style="min-width:0;">
+              <div style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;">
+                <span>${escapeHtml(c.name)}</span>
+                ${c.detected ? '<span class="badge badge-green">已安装</span>' : '<span class="badge badge-slate">未安装</span>'}
               </div>
-              ${
-                c.connected
-                  ? `<button class="sm" onclick="installAiClientAction('${escapeAttr(c.id)}')">✅ 已接入（重刷）</button>`
-                  : `<button class="sm primary" onclick="installAiClientAction('${escapeAttr(c.id)}')">一键接入</button>`
-              }
-            </div>`
-          )
-          .join("");
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(c.desc)}</div>
+            </div>
+            ${c.connected
+              ? `<button class="sm" onclick="installAiClientAction('${escapeAttr(c.id)}')">✓ 已接入</button>`
+              : `<button class="sm primary" onclick="installAiClientAction('${escapeAttr(c.id)}')">接入</button>`
+            }
+          </div>
+        `).join("");
       } catch {
-        box.innerHTML = `<div style="font-size:12.5px;color:var(--muted);">请确认本地服务已运行（端口 17890）。</div>`;
+        box.innerHTML = `<div style="font-size:12px;color:var(--muted);">正在连接本地 AI 网关（端口 17890）...</div>`;
       }
     }
 
@@ -1900,7 +2556,7 @@
       });
       const data = await res.json();
       if (data.ok) {
-        showToast("✅ 已成功给 AI 装上自动通知与手机拍板能力！（重启对应 AI 会话即可生效）");
+        showToast("✅ 已接入手机通知与拍板能力！");
         await refreshAiClientsModal();
       } else {
         showToast("⚠️ " + (data.error || "接入失败"));
@@ -1913,11 +2569,11 @@
       const aiButlerPersona = document.getElementById("butler-persona")?.value || "";
       await apiCall("POST", "/api/settings", { aiButlerEnabled, aiButlerProvider, aiButlerPersona });
       await refreshState();
-      showToast(aiButlerEnabled ? "✅ 已开启 AI 个人助理实时看信与自动拟稿！" : "已关闭 AI 个人助理自动看信");
+      showToast(aiButlerEnabled ? "✅ 已开启 AI 个人助理实时看信拟稿" : "已关闭 AI 自动看信");
     }
 
     async function simulateButlerIncoming() {
-      showToast("⏳ 正在模拟客户来信并唤醒 AI 个人助理分析拟稿...");
+      showToast("⏳ 正在模拟客户来信并调 AI 助理拟稿...");
       const provider = document.getElementById("butler-provider")?.value || "rule_fast";
       const res = await fetch("/api/ai-butler/simulate", {
         method: "POST",
@@ -1926,18 +2582,18 @@
       });
       const out = await res.json();
       if (out.suggestion?.summary) {
-        showToast("🧠 AI 助理已秒知并推到手机：" + out.suggestion.summary);
+        showToast("🧠 AI 已拟稿：" + out.suggestion.summary);
       } else {
-        showToast("✅ 已触发实时来信事件并推送至手机端！");
+        showToast("✅ 已触发模拟来信");
       }
       await refreshState();
     }
 
     function copyOneLineAiPrompt() {
       const el = document.getElementById("ai-one-liner-box");
-      if (!el) return;
+      if (!el || !el.value) return;
       navigator.clipboard.writeText(el.value);
-      showToast("📋 已复制！直接粘贴发给任意 AI 即可让它自动调用消息总管");
+      showToast("📋 已复制万能 AI 接入指令");
     }
 
     function closeModals() {

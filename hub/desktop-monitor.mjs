@@ -138,16 +138,61 @@ class DesktopSoftwareMonitor {
           badgeByApp[b.name] = parseInt(b.badge, 10) || 1;
           if (b.bundleId) badgeByApp[b.bundleId] = parseInt(b.badge, 10) || 1;
         }
-        const enrichedWindows = (parsed.windows || []).map((w) => {
+        const BROWSER_NAMES = new Set(["Google Chrome", "Safari", "Brave Browser", "Arc", "Firefox", "Microsoft Edge"]);
+        const AUX_TITLE_RE = /^(快捷键|设置|偏好设置|关于|Shortcuts|Settings|Preferences|About)$/i;
+        const IM_AI_RE = /(微信|WeChat|QQ|千牛|旺旺|飞书|Lark|钉钉|DingTalk|企业微信|WeCom|Telegram|Discord|Slack|WhatsApp|信息|Messages|邮件|Mail|Claude|Cursor|Antigravity|Gemini|Windsurf)/i;
+
+        const bestByApp = new Map();
+        for (const w of parsed.windows || []) {
+          const appName = String(w.appName || "").trim();
+          if (!appName) continue;
+          const bw = Number(w.bounds?.w) || 0;
+          const bh = Number(w.bounds?.h) || 0;
+          if (bw > 0 && bh > 0 && (bw < 300 || bh < 200)) continue;
+          const title = String(w.title || "").trim();
+          if (title && AUX_TITLE_RE.test(title)) continue;
+
           const unread =
             badgeByApp[w.bundleId] ||
-            badgeByApp[w.appName] ||
-            this.appUnreadCounts.get(w.appName) ||
+            badgeByApp[appName] ||
+            this.appUnreadCounts.get(appName) ||
             0;
-          const logs = this.appMessagesLog.get(w.appName) || [];
-          const lastSnippet = logs.length ? logs[logs.length - 1].text : (w.title || "点击进入查看该软件消息");
-          return { ...w, unreadCount: unread, snippet: lastSnippet };
-        });
+          const isTargetApp = IM_AI_RE.test(appName) || IM_AI_RE.test(w.bundleId || "");
+          if (!isTargetApp && unread === 0) continue;
+          if (BROWSER_NAMES.has(appName) && unread === 0) continue;
+
+          const logs = this.appMessagesLog.get(appName) || [];
+          const lastSnippet = logs.length
+            ? logs[logs.length - 1].text
+            : unread > 0
+              ? `收到 ${unread} 条未读红点消息，支持手机随身读字秒回`
+              : "程序坞角标与系统通知静默看护中（0 注入安全）";
+          const area = bw * bh;
+          const candidate = {
+            ...w,
+            unreadCount: unread,
+            snippet: lastSnippet,
+            isMessagingOrAi: isTargetApp,
+            _area: area,
+          };
+
+          const existing = bestByApp.get(appName);
+          if (
+            !existing ||
+            candidate.unreadCount > existing.unreadCount ||
+            (candidate.unreadCount === existing.unreadCount && candidate._area > existing._area)
+          ) {
+            bestByApp.set(appName, candidate);
+          }
+        }
+
+        const enrichedWindows = Array.from(bestByApp.values())
+          .map(({ _area, ...rest }) => rest)
+          .sort((a, b) => {
+            if ((b.unreadCount > 0) !== (a.unreadCount > 0)) return b.unreadCount > 0 ? 1 : -1;
+            if (Boolean(b.isMessagingOrAi) !== Boolean(a.isMessagingOrAi)) return b.isMessagingOrAi ? 1 : -1;
+            return String(a.appName).localeCompare(String(b.appName));
+          });
 
         return {
           ...parsed,

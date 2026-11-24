@@ -122,6 +122,11 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
     const presetsRes = await (await fetch(`${baseUrl}/api/presets`)).json();
     assert.equal(presetsRes.ok, true);
     assert.equal(presetsRes.packs.length, 2);
+    assert.ok(presetsRes.packs[1].items.every((it) => it.name && it.nameEn));
+
+    const stCheck = await (await fetch(`${baseUrl}/api/state`)).json();
+    assert.ok(stCheck.quickReplies.length >= 3);
+    assert.ok(stCheck.quickReplies.every((q) => q.title && q.body && q.category));
 
     const llmsRes = await fetch(`${baseUrl}/llms.txt`);
     assert.equal(llmsRes.status, 200);
@@ -129,7 +134,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
     assert.equal(health.ok, true);
-    assert.equal(health.version, "5.2.0");
+    assert.equal(health.version, "5.3.0");
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -221,7 +226,7 @@ test("MCP stdio server v0.2.0 exposes 5 tools and completes roundtrip", async ()
       method: "initialize",
       params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
     });
-    assert.equal(init.result.serverInfo.version, "5.2.0");
+    assert.equal(init.result.serverInfo.version, "5.3.0");
 
     const resList = await sendAndWait({ jsonrpc: "2.0", id: 99, method: "resources/list", params: {} });
     assert.equal(resList.result.resources[0].uri, "replyradar://events/live");

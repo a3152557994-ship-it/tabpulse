@@ -1,12 +1,12 @@
 {
-  "latestVersion": "5.2.0",
-  "publishedAt": "2026-11-23",
+  "latestVersion": "5.3.0",
+  "publishedAt": "2026-11-24",
   "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg",
   "downloadUrlWinCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip",
   "downloadUrlWinEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
-  "notesCn": "v5.2.0 全平台 AI 个人助理版：像 GPT 个人助理秒知邮件一样，任何网页（闲鱼/小红书/电鸭/Reddit）或电脑软件（微信/千牛/飞书）一来新消息，你的 AI 立马知道、自动筛掉促销垃圾、拟好回复推到手机让你一键点发！",
-  "notesZh": "v5.2.0 全平台 AI 个人助理版：像 GPT 个人助理秒知邮件一样，任何网页（闲鱼/小红书/电鸭/Reddit）或电脑软件（微信/千牛/飞书）一来新消息，你的 AI 立马知道、自动筛掉促销垃圾、拟好回复推到手机让你一键点发！",
-  "notesEn": "v5.2.0 AI Personal Butler Edition: Just like an AI assistant watching your email, your local AI (Codex/GPT, Claude Code, Antigravity, or Webhook Agent) now immediately knows whenever ANY web platform or desktop app receives a message—filtering spam and drafting 1-tap replies straight to your phone!"
+  "notesCn": "v5.3.0 原生双栏旗舰重制版：全新 macOS 侧边栏工作台与直聊左侧秒切栏，修复快捷话术空白与桌面杂项窗口干扰，统一全中文清爽平台卡片！",
+  "notesZh": "v5.3.0 原生双栏旗舰重制版：全新 macOS 侧边栏工作台与直聊左侧秒切栏，修复快捷话术空白与桌面杂项窗口干扰，统一全中文清爽平台卡片！",
+  "notesEn": "v5.3.0 Flagship Split-View Edition: Redesigned native macOS sidebar workspace, 1-click left-rail channel switcher inside Direct Chat, unified quick-reply schema, and smart desktop window deduplication!"
 }

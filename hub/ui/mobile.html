@@ -692,9 +692,12 @@
 
       // 2. Native Desktop Software Windows + Dock Badges
       const seenApps = new Set();
+      const BROWSER_SET = new Set(["Google Chrome", "Safari", "Brave Browser", "Arc", "Firefox"]);
       for (const win of desktopState.windows || []) {
-        if (win.appName === "消息总管" || win.appName === "ReplyRadar") continue;
-        // Group multiple windows of same app or keep primary window
+        if (!win.appName || win.appName === "消息总管" || win.appName === "ReplyRadar") continue;
+        if (seenApps.has(win.appName)) continue;
+        const unread = Number(win.unreadCount) || 0;
+        if (BROWSER_SET.has(win.appName) && unread === 0) continue;
         const appKey = `app:${win.appName}:${win.windowId}`;
         seenApps.add(win.appName);
         list.push({
@@ -704,9 +707,9 @@
           tag: "电脑软件",
           windowId: win.windowId,
           appName: win.appName,
-          title: win.title && win.title !== win.appName ? `${win.appName} · ${win.title}` : win.appName,
-          unreadCount: Number(win.unreadCount) || 0,
-          snippet: win.snippet || `点击查看 ${win.appName} 当前消息并直接回复`,
+          title: win.appName,
+          unreadCount: unread,
+          snippet: win.snippet || `点击查看 ${win.appName} 当前纯文字消息并回复`,
           updatedAt: "",
           icon: pickIcon(win.appName, "app"),
         });
@@ -1225,7 +1228,7 @@
       box.innerHTML = qrs
         .map(
           (q, i) =>
-            `<span class="qr-chip" onclick="fillQuickReply(${i})">⚡ ${esc(q.title || "快捷词")}</span>`
+            `<span class="qr-chip" onclick="fillQuickReply(${i})">⚡ ${esc(q.title || q.titleZh || "快捷话术")}</span>`
         )
         .join("");
     }
@@ -1234,7 +1237,7 @@
       const q = (hubState.quickReplies || [])[idx];
       if (!q) return;
       const inp = document.getElementById("reply-input");
-      inp.value = spinText(q.template || q.text || "");
+      inp.value = spinText(q.body || q.template || q.text || q.textZh || "");
       onReplyInput();
       inp.focus();
     }
@@ -1337,8 +1340,8 @@
           (q, i) => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);gap:8px">
             <div style="min-width:0">
-              <div style="font-size:13px;font-weight:700">${esc(q.title)}</div>
-              <div style="font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(q.template || q.text)}</div>
+              <div style="font-size:13px;font-weight:700">${esc(q.title || q.titleZh || "快捷话术")}</div>
+              <div style="font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(q.body || q.template || q.text || q.textZh || "")}</div>
             </div>
             <button class="btn" style="padding:3px 8px;font-size:11px" onclick="removeQuickReply(${i})">删</button>
           </div>`
@@ -1350,7 +1353,7 @@
       const title = document.getElementById("new-qr-title").value.trim();
       const template = document.getElementById("new-qr-text").value.trim();
       if (!title || !template) return showToast("请填写简称和话术内容");
-      const next = [...(hubState.quickReplies || []), { id: "qr_" + Date.now(), title, template }];
+      const next = [...(hubState.quickReplies || []), { id: "qr_" + Date.now(), title, titleZh: title, body: template, template, textZh: template }];
       const res = await api("/api/quick-replies", { method: "POST", body: JSON.stringify({ quickReplies: next }) });
       hubState.quickReplies = res.quickReplies || next;
       document.getElementById("new-qr-title").value = "";

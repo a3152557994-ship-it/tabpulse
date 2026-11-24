@@ -262,7 +262,7 @@ final class StandaloneStore {
             ]
         ]
         let initial: [String: Any] = [
-            "version": "5.2.0",
+            "version": "5.3.0",
             "license": NSNull(),
             "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "watches": defaultWatches,
@@ -313,7 +313,7 @@ final class StandaloneStore {
         }
 
         return [
-            "version": "5.2.0",
+            "version": "5.3.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -412,10 +412,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var probeWebView: WKWebView!
     var loginWindow: NSWindow?
     var workspaceRootView: NSView?
+    var workspaceSidebarStack: NSStackView?
     var workspaceHostView: NSView?
+    var workspaceTitleLabel: NSTextField?
     var accountSwitcherPopup: NSPopUpButton?
     var quickReplyPopup: NSPopUpButton?
     var toolbarStatusLabel: NSTextField?
+    var cachedExternalState: [String: Any]?
     var loginWebView: WKWebView?
     var liveTabs: [String: WKWebView] = [:]
     var tabMeta: [String: (name: String, url: String, profileUuid: String)] = [:]
@@ -512,18 +515,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         cfg.websiteDataStore = .default()
         cfg.userContentController.add(self, name: "tabpulse")
 
-        dashboardWebView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1180, height: 780), configuration: cfg)
+        dashboardWebView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1220, height: 790), configuration: cfg)
         dashboardWebView.uiDelegate = self
         mainWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1180, height: 780),
+            contentRect: NSRect(x: 0, y: 0, width: 1220, height: 790),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
+        mainWindow.minSize = NSSize(width: 940, height: 600)
         mainWindow.center()
-        mainWindow.title = isChineseSystem
-            ? "消息总管 — 多平台未读消息提醒与找单盒子"
-            : "ReplyRadar — All-in-One Unread Inbox & Buyer Lead Alerts"
+        mainWindow.title = isChineseSystem ? "消息总管" : "ReplyRadar"
         mainWindow.isReleasedWhenClosed = false
         mainWindow.contentView = dashboardWebView
         mainWindow.makeKeyAndOrderFront(nil)
@@ -573,10 +575,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             DispatchQueue.main.async {
                 if let http = resp as? HTTPURLResponse, http.statusCode == 200, data != nil {
                     self?.useExternalHub = true
+                    self?.syncExternalHubState()
                     self?.dashboardWebView.load(URLRequest(url: URL(string: "http://127.0.0.1:17890/")!))
                 } else if self?.trySpawnBundledNodeHub() == true {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
                         self?.useExternalHub = true
+                        self?.syncExternalHubState()
                         self?.dashboardWebView.load(URLRequest(url: URL(string: "http://127.0.0.1:17890/")!))
                     }
                 } else {
@@ -595,15 +599,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
               let srvURL = Bundle.main.url(forResource: "server", withExtension: "mjs", subdirectory: "app-server/hub") else {
             return false
         }
-        let appSup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSup.appendingPathComponent("TabPulse", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let repoDataPath = "/Users/wang/OPC/projects/tabpulse/data/state.json"
+        let defaultDataPath: String
+        if FileManager.default.fileExists(atPath: repoDataPath) {
+            defaultDataPath = repoDataPath
+        } else {
+            let appSup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dir = appSup.appendingPathComponent("TabPulse", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            defaultDataPath = dir.appendingPathComponent("state.json").path
+        }
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: nodeBin)
         p.arguments = [srvURL.path]
         var env = ProcessInfo.processInfo.environment
-        env["TABPULSE_DATA_FILE"] = dir.appendingPathComponent("state.json").path
+        if env["TABPULSE_DATA_FILE"] == nil {
+            env["TABPULSE_DATA_FILE"] = defaultDataPath
+        }
         env["TABPULSE_PORT"] = "17890"
         p.environment = env
         do {
@@ -650,9 +663,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             isDockedInMainWindow = false
             dashboardWebView.frame = mainWindow.contentLayoutRect
             mainWindow.contentView = dashboardWebView
-            mainWindow.title = isChineseSystem
-                ? "消息总管 — 多平台未读消息提醒与找单盒子"
-                : "ReplyRadar — All-in-One Unread Inbox & Buyer Lead Alerts"
+            mainWindow.title = isChineseSystem ? "消息总管" : "ReplyRadar"
+            dashboardWebView.evaluateJavaScript("if(window.refreshState) window.refreshState();", completionHandler: nil)
         } else {
             mainWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -664,9 +676,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         isDockedInMainWindow = false
         dashboardWebView.frame = mainWindow.contentLayoutRect
         mainWindow.contentView = dashboardWebView
-        mainWindow.title = isChineseSystem
-            ? "消息总管 — 多平台未读消息提醒与找单盒子"
-            : "ReplyRadar — All-in-One Unread Inbox & Buyer Lead Alerts"
+        mainWindow.title = isChineseSystem ? "消息总管" : "ReplyRadar"
 
         if loginWindow == nil {
             let win = NSWindow(
@@ -737,69 +747,184 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         return nil
     }
 
-    // MARK: - Unified Single-Window Direct Chat + Top Toolbar + Auto-Inject Spintax Replies
+    // MARK: - Split-View Direct Chat (Left Channel Rail + Clean Top Bar + Isolated WebView)
+    func syncExternalHubState(completion: (() -> Void)? = nil) {
+        guard useExternalHub, let u = URL(string: "http://127.0.0.1:17890/api/state") else {
+            completion?()
+            return
+        }
+        URLSession.shared.dataTask(with: u) { [weak self] data, _, _ in
+            if let d = data, let obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] {
+                DispatchQueue.main.async {
+                    self?.cachedExternalState = obj
+                    self?.updateMenuBadge(from: obj)
+                    self?.refreshWorkspaceToolbarMenus()
+                    completion?()
+                }
+            } else {
+                DispatchQueue.main.async { completion?() }
+            }
+        }.resume()
+    }
+
+    func activeStateSnapshot() -> [String: Any] {
+        if useExternalHub, let ext = cachedExternalState {
+            return ext
+        }
+        return StandaloneStore.shared.loadState()
+    }
+
+    func iconPrefixForPlatform(_ name: String, _ url: String) -> String {
+        let s = "\(name) \(url)".lowercased()
+        if s.contains("闲鱼") || s.contains("goofish") { return "🐟" }
+        if s.contains("小红书") || s.contains("xiaohongshu") { return "📕" }
+        if s.contains("电鸭") || s.contains("eleduck") { return "⚡" }
+        if s.contains("v2ex") { return "💬" }
+        if s.contains("知乎") || s.contains("zhihu") { return "📘" }
+        if s.contains("x.com") || s.contains("twitter") || s.contains("x (") { return "𝕏" }
+        if s.contains("github") { return "🐙" }
+        if s.contains("apple") || s.contains("app store") || s.contains("appstore") { return "" }
+        if s.contains("makerworld") || s.contains("拓竹") { return "🧩" }
+        if s.contains("reddit") { return "🎯" }
+        if s.contains("upwork") { return "💼" }
+        if s.contains("product hunt") || s.contains("producthunt") { return "🚀" }
+        return "•"
+    }
+
     func ensureWorkspaceViews() {
         if workspaceRootView != nil { return }
-        let winW: CGFloat = 1180
-        let winH: CGFloat = 780
+        let winW: CGFloat = 1220
+        let winH: CGFloat = 790
+        let sideW: CGFloat = 212
         let barH: CGFloat = 44
 
         let root = NSView(frame: NSRect(x: 0, y: 0, width: winW, height: winH))
         root.autoresizingMask = [.width, .height]
 
-        let toolbar = NSView(frame: NSRect(x: 0, y: winH - barH, width: winW, height: barH))
+        // Left Native Sidebar Rail
+        let sidebar = NSView(frame: NSRect(x: 0, y: 0, width: sideW, height: winH))
+        sidebar.autoresizingMask = [.height, .maxXMargin]
+        sidebar.wantsLayer = true
+        sidebar.layer?.backgroundColor = NSColor(calibratedRed: 0.973, green: 0.980, blue: 0.988, alpha: 1.0).cgColor
+
+        let sideBorder = NSView(frame: NSRect(x: sideW - 1, y: 0, width: 1, height: winH))
+        sideBorder.autoresizingMask = [.height, .minXMargin]
+        sideBorder.wantsLayer = true
+        sideBorder.layer?.backgroundColor = NSColor(calibratedRed: 0.886, green: 0.910, blue: 0.941, alpha: 1.0).cgColor
+        sidebar.addSubview(sideBorder)
+
+        let backBtn = NSButton(frame: NSRect(x: 12, y: winH - 46, width: sideW - 24, height: 32))
+        backBtn.autoresizingMask = [.minYMargin, .width]
+        backBtn.title = isChineseSystem ? "⊞ 返回工作台总览" : "⊞ Back to Dashboard"
+        backBtn.bezelStyle = .rounded
+        backBtn.font = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
+        backBtn.target = self
+        backBtn.action = #selector(returnToDashboard)
+        sidebar.addSubview(backBtn)
+
+        let secLabel = NSTextField(labelWithString: isChineseSystem ? "切换会话平台" : "CHANNELS")
+        secLabel.frame = NSRect(x: 16, y: winH - 72, width: sideW - 32, height: 16)
+        secLabel.autoresizingMask = [.minYMargin, .width]
+        secLabel.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+        secLabel.textColor = NSColor(calibratedRed: 0.58, green: 0.64, blue: 0.72, alpha: 1.0)
+        sidebar.addSubview(secLabel)
+
+        let scroll = NSScrollView(frame: NSRect(x: 8, y: 10, width: sideW - 17, height: winH - 86))
+        scroll.autoresizingMask = [.height, .width]
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.borderType = .noBorder
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 2, left: 2, bottom: 8, right: 2)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let docView = NSView(frame: NSRect(x: 0, y: 0, width: sideW - 18, height: winH - 86))
+        docView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: docView.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: docView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: docView.trailingAnchor)
+        ])
+        scroll.documentView = docView
+        sidebar.addSubview(scroll)
+        workspaceSidebarStack = stack
+
+        // Right Top Toolbar (Auto Layout Stack so resizing NEVER overlaps!)
+        let toolbar = NSView(frame: NSRect(x: sideW, y: winH - barH, width: winW - sideW, height: barH))
         toolbar.autoresizingMask = [.width, .minYMargin]
         toolbar.wantsLayer = true
-        toolbar.layer?.backgroundColor = NSColor(calibratedRed: 0.95, green: 0.96, blue: 0.98, alpha: 1.0).cgColor
+        toolbar.layer?.backgroundColor = NSColor.white.cgColor
 
-        func makeBtn(_ title: String, x: CGFloat, w: CGFloat, action: Selector) -> NSButton {
-            let b = NSButton(frame: NSRect(x: x, y: 7, width: w, height: 30))
-            b.title = title
+        let barBottomBorder = NSView(frame: NSRect(x: 0, y: 0, width: winW - sideW, height: 1))
+        barBottomBorder.autoresizingMask = [.width, .maxYMargin]
+        barBottomBorder.wantsLayer = true
+        barBottomBorder.layer?.backgroundColor = NSColor(calibratedRed: 0.886, green: 0.910, blue: 0.941, alpha: 1.0).cgColor
+        toolbar.addSubview(barBottomBorder)
+
+        func makeNavBtn(_ title: String, action: Selector, width: CGFloat? = nil) -> NSButton {
+            let b = NSButton(title: title, target: self, action: action)
             b.bezelStyle = .rounded
             b.font = NSFont.systemFont(ofSize: 12.5, weight: .medium)
-            b.target = self
-            b.action = action
+            if let w = width {
+                b.widthAnchor.constraint(equalToConstant: w).isActive = true
+            }
             return b
         }
 
-        let backDashBtn = makeBtn(isChineseSystem ? "← 回总览" : "← Overview", x: 10, w: 84, action: #selector(returnToDashboard))
-        toolbar.addSubview(backDashBtn)
-        toolbar.addSubview(makeBtn("‹", x: 98, w: 32, action: #selector(wsBack)))
-        toolbar.addSubview(makeBtn("›", x: 132, w: 32, action: #selector(wsForward)))
-        toolbar.addSubview(makeBtn("↻", x: 166, w: 34, action: #selector(wsReload)))
-        toolbar.addSubview(makeBtn(isChineseSystem ? "🏠 消息页" : "🏠 Inbox", x: 204, w: 82, action: #selector(wsGoHome)))
+        let bBack = makeNavBtn("‹", action: #selector(wsBack), width: 30)
+        let bFwd = makeNavBtn("›", action: #selector(wsForward), width: 30)
+        let bReload = makeNavBtn("↻", action: #selector(wsReload), width: 32)
+        let bHome = makeNavBtn(isChineseSystem ? "🏠 消息页" : "🏠 Inbox", action: #selector(wsGoHome))
 
-        let accPop = NSPopUpButton(frame: NSRect(x: 292, y: 7, width: 235, height: 30), pullsDown: false)
-        accPop.font = NSFont.systemFont(ofSize: 12.5, weight: .semibold)
-        accPop.target = self
-        accPop.action = #selector(wsSwitchAccountChanged(_:))
-        toolbar.addSubview(accPop)
-        accountSwitcherPopup = accPop
+        let titleLbl = NSTextField(labelWithString: "")
+        titleLbl.font = NSFont.systemFont(ofSize: 13.5, weight: .bold)
+        titleLbl.textColor = NSColor(calibratedRed: 0.06, green: 0.09, blue: 0.16, alpha: 1.0)
+        titleLbl.lineBreakMode = .byTruncatingTail
+        titleLbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        workspaceTitleLabel = titleLbl
 
-        let qrPop = NSPopUpButton(frame: NSRect(x: 533, y: 7, width: 255, height: 30), pullsDown: true)
-        qrPop.font = NSFont.systemFont(ofSize: 12.5, weight: .medium)
-        qrPop.target = self
-        qrPop.action = #selector(wsQuickReplyPicked(_:))
-        toolbar.addSubview(qrPop)
-        quickReplyPopup = qrPop
-
-        let statusLbl = NSTextField(labelWithString: isChineseSystem ? "🛡️ 同窗直聊运行中" : "🛡️ Direct Chat Active")
-        statusLbl.frame = NSRect(x: 794, y: 13, width: 280, height: 18)
-        statusLbl.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        statusLbl.textColor = NSColor(calibratedRed: 0.08, green: 0.50, blue: 0.24, alpha: 1.0)
+        let statusLbl = NSTextField(labelWithString: isChineseSystem ? "🔒 独立防串号隔离" : "🔒 Isolated Sandbox")
+        statusLbl.font = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
+        statusLbl.textColor = NSColor(calibratedRed: 0.02, green: 0.59, blue: 0.41, alpha: 1.0)
         statusLbl.lineBreakMode = .byTruncatingTail
-        toolbar.addSubview(statusLbl)
+        statusLbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         toolbarStatusLabel = statusLbl
 
-        let popBtn = makeBtn(isChineseSystem ? "↗ 独立窗" : "↗ Pop Out", x: winW - 96, w: 86, action: #selector(popOutWorkspaceWindow))
-        popBtn.autoresizingMask = [.minXMargin]
-        toolbar.addSubview(popBtn)
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
 
-        let host = NSView(frame: NSRect(x: 0, y: 0, width: winW, height: winH - barH))
+        let qrPop = NSPopUpButton(frame: .zero, pullsDown: true)
+        qrPop.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        qrPop.target = self
+        qrPop.action = #selector(wsQuickReplyPicked(_:))
+        qrPop.widthAnchor.constraint(lessThanOrEqualToConstant: 210).isActive = true
+        quickReplyPopup = qrPop
+
+        let popBtn = makeNavBtn(isChineseSystem ? "↗ 独立窗口" : "↗ Pop Out", action: #selector(popOutWorkspaceWindow))
+
+        let hStack = NSStackView(views: [bBack, bFwd, bReload, bHome, titleLbl, statusLbl, spacer, qrPop, popBtn])
+        hStack.orientation = .horizontal
+        hStack.alignment = .centerY
+        hStack.spacing = 6
+        hStack.translatesAutoresizingMaskIntoConstraints = false
+        toolbar.addSubview(hStack)
+        NSLayoutConstraint.activate([
+            hStack.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor, constant: 12),
+            hStack.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor, constant: -12),
+            hStack.centerYAnchor.constraint(equalTo: toolbar.centerYAnchor)
+        ])
+
+        let host = NSView(frame: NSRect(x: sideW, y: 0, width: winW - sideW, height: winH - barH))
         host.autoresizingMask = [.width, .height]
 
         root.addSubview(host)
         root.addSubview(toolbar)
+        root.addSubview(sidebar)
 
         workspaceRootView = root
         workspaceHostView = host
@@ -814,46 +939,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
     }
 
+    @objc func wsSidebarChannelClicked(_ sender: NSButton) {
+        guard let wid = sender.identifier?.rawValue,
+              let meta = tabMeta[wid] else { return }
+        openLoginSheet(urlStr: meta.url, name: meta.name, watchId: wid, profileUuidStr: meta.profileUuid, isolated: true, dockInMain: isDockedInMainWindow)
+    }
+
     func refreshWorkspaceToolbarMenus() {
-        let st = StandaloneStore.shared.loadState()
+        let st = activeStateSnapshot()
         let watches = (st["watches"] as? [[String: Any]]) ?? []
+        var unreadMap: [String: Int] = [:]
+        var orderedIds: [String] = []
+
         for w in watches {
             if let wid = w["id"] as? String, let nm = w["name"] as? String, let u = w["url"] as? String {
                 let pUuid = (w["profileUuid"] as? String) ?? ""
                 tabMeta[wid] = (name: nm, url: u, profileUuid: pUuid)
+                if (w["status"] as? String) == "unread" {
+                    unreadMap[wid] = max(1, (w["unreadCount"] as? Int) ?? 1)
+                }
+                orderedIds.append(wid)
             }
         }
+        for wid in liveTabs.keys.sorted() where !orderedIds.contains(wid) {
+            orderedIds.append(wid)
+        }
 
-        if let pop = accountSwitcherPopup {
-            pop.removeAllItems()
-            var orderedIds = Array(liveTabs.keys).sorted()
-            for w in watches {
-                if let wid = w["id"] as? String, !orderedIds.contains(wid) {
-                    orderedIds.append(wid)
-                }
+        if let stack = workspaceSidebarStack {
+            stack.arrangedSubviews.forEach { v in
+                stack.removeArrangedSubview(v)
+                v.removeFromSuperview()
             }
             for wid in orderedIds {
                 guard let meta = tabMeta[wid] else { continue }
-                let isLive = liveTabs[wid] != nil
-                let title = isLive ? "🟢 \(meta.name)" : "⚪ \(meta.name)"
-                pop.addItem(withTitle: title)
-                pop.lastItem?.representedObject = wid
-                if wid == activeLoginWatchId {
-                    pop.select(pop.lastItem)
+                let isCurrent = (wid == activeLoginWatchId)
+                let unread = unreadMap[wid] ?? 0
+                let ico = iconPrefixForPlatform(meta.name, meta.url)
+                let badgeSuffix = unread > 0 ? "  🔴\(unread)" : ""
+                let btn = NSButton(title: " \(ico)  \(meta.name)\(badgeSuffix)", target: self, action: #selector(wsSidebarChannelClicked(_:)))
+                btn.identifier = NSUserInterfaceItemIdentifier(wid)
+                btn.isBordered = false
+                btn.alignment = .left
+                btn.lineBreakMode = .byTruncatingTail
+                btn.wantsLayer = true
+                btn.layer?.cornerRadius = 7
+                if isCurrent {
+                    btn.layer?.backgroundColor = NSColor(calibratedRed: 0.878, green: 0.918, blue: 1.0, alpha: 1.0).cgColor
+                    btn.contentTintColor = NSColor(calibratedRed: 0.11, green: 0.31, blue: 0.85, alpha: 1.0)
+                    btn.font = NSFont.systemFont(ofSize: 12.5, weight: .bold)
+                } else {
+                    btn.layer?.backgroundColor = NSColor.clear.cgColor
+                    btn.contentTintColor = unread > 0
+                        ? NSColor(calibratedRed: 0.82, green: 0.12, blue: 0.15, alpha: 1.0)
+                        : NSColor(calibratedRed: 0.22, green: 0.27, blue: 0.34, alpha: 1.0)
+                    btn.font = NSFont.systemFont(ofSize: 12.5, weight: unread > 0 ? .bold : .medium)
                 }
+                btn.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    btn.widthAnchor.constraint(equalToConstant: 190),
+                    btn.heightAnchor.constraint(equalToConstant: 30)
+                ])
+                stack.addArrangedSubview(btn)
             }
-            if pop.numberOfItems == 0 {
-                pop.addItem(withTitle: isChineseSystem ? "当前临时窗口" : "Workspace Preview")
+            if let docView = stack.superview {
+                let neededH = max(CGFloat(orderedIds.count) * 34.0 + 16.0, docView.superview?.bounds.height ?? 400)
+                docView.frame.size.height = neededH
             }
         }
 
         if let qrPop = quickReplyPopup {
             qrPop.removeAllItems()
-            qrPop.addItem(withTitle: isChineseSystem ? "⚡ 点此自动填入防封话术..." : "⚡ Auto-Fill Spintax Reply...")
+            qrPop.addItem(withTitle: isChineseSystem ? "⚡ 填入防封话术" : "⚡ Insert Quick Reply")
             let qrs = (st["quickReplies"] as? [[String: Any]]) ?? []
             for item in qrs {
                 let t = (item["title"] as? String) ?? (item["titleZh"] as? String) ?? "话术"
-                let body = (item["body"] as? String) ?? (item["textZh"] as? String) ?? ""
+                let body = (item["body"] as? String) ?? (item["template"] as? String) ?? (item["textZh"] as? String) ?? ""
                 if !body.isEmpty {
                     qrPop.addItem(withTitle: "⚡ \(t)")
                     qrPop.lastItem?.representedObject = body
@@ -1003,39 +1163,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             wv.autoresizingMask = [.width, .height]
             host.addSubview(wv)
         }
+        workspaceTitleLabel?.stringValue = name
+        toolbarStatusLabel?.stringValue = isChineseSystem ? "🔒 独立防串号隔离中" : "🔒 Isolated Sandbox"
         refreshWorkspaceToolbarMenus()
-        toolbarStatusLabel?.stringValue = isChineseSystem
-            ? "🛡️ 独立防串号直聊：\(name)"
-            : "🛡️ Isolated Direct Chat: \(name)"
+        if useExternalHub {
+            syncExternalHubState()
+        }
 
         if dockInMain, let root = workspaceRootView {
             loginWindow?.orderOut(nil)
             isDockedInMainWindow = true
             root.frame = mainWindow.contentLayoutRect
             mainWindow.contentView = root
-            mainWindow.title = isChineseSystem
-                ? "消息总管 · 同窗直接收发 — \(name)"
-                : "ReplyRadar · Direct Chat — \(name)"
+            mainWindow.title = isChineseSystem ? "消息总管 — \(name)" : "ReplyRadar — \(name)"
             mainWindow.makeKeyAndOrderFront(nil)
         } else if let root = workspaceRootView {
             isDockedInMainWindow = false
             if loginWindow == nil {
                 let win = NSWindow(
-                    contentRect: NSRect(x: 0, y: 0, width: 1160, height: 780),
+                    contentRect: NSRect(x: 0, y: 0, width: 1200, height: 780),
                     styleMask: [.titled, .closable, .resizable, .miniaturizable],
                     backing: .buffered,
                     defer: false
                 )
+                win.minSize = NSSize(width: 920, height: 580)
                 win.center()
                 win.isReleasedWhenClosed = false
                 win.delegate = self
                 loginWindow = win
             }
-            root.frame = NSRect(x: 0, y: 0, width: 1160, height: 780)
+            root.frame = NSRect(x: 0, y: 0, width: 1200, height: 780)
             loginWindow?.contentView = root
-            loginWindow?.title = isChineseSystem
-                ? "消息总管 · 多账号安全工作台 — \(name)"
-                : "ReplyRadar · Multi-Account Workspace — \(name)"
+            loginWindow?.title = isChineseSystem ? "消息总管 — \(name)" : "ReplyRadar — \(name)"
             loginWindow?.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
