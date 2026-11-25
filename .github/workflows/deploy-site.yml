@@ -1,0 +1,32 @@
+name: Sync Landing Site to gh-pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish site/ to gh-pages branch
+        run: |
+          TMP_SITE="$(mktemp -d)"
+          cp -R site/. "$TMP_SITE/"
+          touch "$TMP_SITE/.nojekyll"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan gh-pages-next
+          git rm -rf . >/dev/null 2>&1 || true
+          cp -R "$TMP_SITE/." .
+          git add -A
+          git commit -m "deploy(site): sync landing page & version.json"
+          git push origin HEAD:gh-pages --force
