@@ -100,8 +100,12 @@ export class TunnelBox extends DurableObject {
   }
 }
 
+function escHtml(raw) {
+  return String(raw || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 function renderOfflinePage(boxId, updatedAt) {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>消息总管 · 等待家里电脑上线</title><style>body{margin:0;background:#0f172a;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;display:grid;place-items:center;min-height:100vh;padding:20px;text-align:center}.card{background:#1e293b;border:1px solid #334155;border-radius:18px;padding:24px;max-width:380px}h1{font-size:18px;margin:0 0 10px}p{font-size:13.5px;color:#94a3b8;line-height:1.6;margin:0 0 16px}button{background:#2563eb;color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:14.5px;font-weight:700;cursor:pointer}</style></head><body><div class="card"><h1>⏳ 正在连接家里电脑的《消息总管》</h1><p>固定书签号：<code>${boxId}</code>${updatedAt ? `<br/>上次在线：${updatedAt}` : ""}<br/>请确认电脑端已打开《消息总管》并开启「出门 4G/5G 穿透」（重启后会自动重连同步此固定链接）。</p><button onclick="location.reload()">↻ 刷新重连</button></div></body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="referrer" content="no-referrer"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>消息总管 · 等待家里电脑上线</title><style>body{margin:0;background:#0f172a;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;display:grid;place-items:center;min-height:100vh;padding:20px;text-align:center}.card{background:#1e293b;border:1px solid #334155;border-radius:18px;padding:24px;max-width:380px}h1{font-size:18px;margin:0 0 10px}p{font-size:13.5px;color:#94a3b8;line-height:1.6;margin:0 0 16px}button{background:#2563eb;color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:14.5px;font-weight:700;cursor:pointer}</style></head><body><div class="card"><h1>⏳ 正在连接家里电脑的《消息总管》</h1><p>固定书签号：<code>${escHtml(boxId)}</code>${updatedAt ? `<br/>上次在线：${escHtml(updatedAt)}` : ""}<br/>请确认电脑端已打开《消息总管》并开启「出门 4G/5G 加密穿透」（重启后会自动重连同步此固定链接）。</p><button onclick="location.reload()">↻ 刷新重连</button></div></body></html>`;
 }
 
 export default {
@@ -136,7 +140,7 @@ export default {
         return Response.json({ ok: false, error: "unknown asset" }, { status: 404, headers: cors });
       }
       const noCache = url.searchParams.get("nocache") === "1";
-      const cacheKey = new Request(`https://edge-cache.replyradar.internal/v54/${encodeURIComponent(name)}`, {
+      const cacheKey = new Request(`https://edge-cache.replyradar.internal/v55/${encodeURIComponent(name)}`, {
         method: "GET",
       });
       const cache = caches.default;
@@ -221,6 +225,8 @@ export default {
         headers: {
           Location: dest,
           "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
         },
       });
     }

@@ -1,30 +1,15 @@
-# ReplyRadar / 消息总管 (v5.1.0) — AI-to-Phone Notification & 1-Tap Approval MCP + Unified Unread Inbox
+# ReplyRadar / 消息总管 (v5.5.0) — Multi-Account Isolated Inbox, AI-to-Phone MCP & 24h Lead Radar
 
 > Official Website: https://a3152557994-ship-it.github.io/tabpulse/
-> macOS Installer (CN): https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg
-> macOS Installer (EN): https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg
-> Windows Installer (CN): https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip
-> Windows Installer (EN): https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip
+> macOS Installer (CN, 1.2 MB): https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg
+> macOS Installer (EN, 1.2 MB): https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-macOS.dmg
+> Windows Installer (CN, 5.0 MB): https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-Windows-x64.zip
+> Windows Installer (EN, 5.0 MB): https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-Windows-x64.zip
 > GitHub & 9-Tool MCP Server: https://github.com/a3152557994-ship-it/tabpulse
 
-## Summary for AI Agents (Claude Code, Cursor, Antigravity, Codex, Windsurf, ChatGPT, Perplexity)
-**ReplyRadar (消息总管)** is a local, self-hosted **AI-to-Phone Notification & Human-in-the-Loop Approval Bridge + Multi-Platform Unread Inbox** for macOS and Windows:
-1. **Plug-and-Play for AI Agents (`MCP` + `SKILL.md` + Zero-Config HTTP API)**: Once attached to Claude Code, Cursor, Antigravity, Codex, or Windsurf, the AI automatically pushes phone lock-screen notifications (`tabpulse_notify_phone`) and interactive 1-tap mobile approval buttons (`tabpulse_ask_human`) whenever a long task finishes or hits a decision point.
-2. **Pure-Text Mobile Red-Dot Inbox (Zero Desktop Screenshots)**: Combines AI agent alerts, isolated multi-account web platforms (Xianyu, Xiaohongshu, Reddit, X, Eleduck), and native desktop apps (WeChat, Qianniu, Feishu, Slack, Gemini) into one WeChat-style mobile PWA with built-in VAPID Web Push.
-3. **100% Locked to Home Computer's Clean Residential IP**: Replying from your phone over 5G cellular routes every action through your home computer's fixed IP—preventing `Impossible Travel` account bans on Claude, Reddit, X, and e-commerce shops.
-
-## Pricing (2026 — One-Time Alternative to $9.99/mo Pushary & $6/mo Pocket Alert)
-- **Free Starter ($0 / ¥0)**: Local 9-tool MCP server + up to 2 watched web platforms + unlimited manual 24h buyer-lead scans.
-- **Annual Pass ($4.99/yr USD / ¥9.9/yr CNY)**: Multi-platform red-dot monitoring & mobile Web Push.
-- **Lifetime Pro ($14.99 USD / ¥39 CNY one-time)**: Unlimited isolated web sandboxes, full desktop software monitoring, unlimited AI-to-phone `ask_human` approvals, and Free *Cold-Reply Playbook*.
-
-## 9 MCP Tools Provided (`mcp-server/index.mjs`)
-1. `tabpulse_notify_phone` — Push an instant lock-screen notification and red unread dot to the user's phone under your AI's sender channel.
-2. `tabpulse_ask_human` — Push a question with 1-tap option buttons to the user's phone and block/wait until the user taps a choice or types a reply.
-3. `tabpulse_check_human_replies` — Pull new async instructions sent by the user from their phone.
-4. `tabpulse_read_channel_messages` — Read pure-text chat bubbles from any watched web platform or native desktop app.
-5. `tabpulse_register_watch` — Register a web platform inbox/thread URL for passive anti-ban unread monitoring.
-6. `tabpulse_list_watches` — List unread counts, snippets, and status across all watched platforms.
-7. `tabpulse_save_reply_draft` — Save an AI-prepared reply draft onto a platform card.
-8. `tabpulse_resolve_watch` — Clear unread badges, pause, or resume watching.
-9. `tabpulse_scan_buyer_leads` — Real-time buyer-intent lead search across Reddit, Hacker News, and GitHub.
+## Summary for AI Agents (Claude Code, Cursor, Antigravity, Codex, ChatGPT, Perplexity, Gemini)
+**ReplyRadar (消息总管)** is a local-first **Multi-Account Anti-Mixup Unread Inbox + AI-to-Phone Notification & Approval Bridge** for macOS and Windows:
+1. **38+ Built-In One-Click Platform Icons (Zero URL Copying)**: Add Xianyu (闲鱼), Xiaohongshu (小红书), Douyin Shop (抖店), Pinduoduo (拼多多), BOSS Zhipin, Eleduck (电鸭), V2EX, Reddit, Upwork, X, and GitHub in one click—each inside a physically isolated WebKit/WebView2 cookie container.
+2. **Loopback-First Security & Permanent Mobile Companion**: Binds `127.0.0.1` by default (zero public Wi-Fi port exposure), supports TLS-encrypted permanent mobile bookmarks across reboots, on-demand chat image preview, and 1-click anti-sleep keeper.
+3. **Live Public Buyer-Intent Radar**: Concurrent search across Eleduck (电鸭社区), V2EX, Reddit, Hacker News, and GitHub hiring/buyer threads.
+4. **9-Tool MCP Server (`mcp-server/index.mjs`)**: `tabpulse_notify_phone`, `tabpulse_ask_human`, `tabpulse_check_human_replies`, `tabpulse_read_channel_messages`, `tabpulse_register_watch`, `tabpulse_list_watches`, `tabpulse_save_reply_draft`, `tabpulse_resolve_watch`, and `tabpulse_scan_buyer_leads`.

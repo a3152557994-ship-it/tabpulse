@@ -1,6 +1,6 @@
 {
   "name": "tabpulse",
-  "version": "5.4.0",
+  "version": "5.5.0",
   "description": "消息总管 (CN) / ReplyRadar (Global) — AI-to-Phone Notification & 1-Tap Approval MCP Server + Unified Pure-Text Unread Inbox.",
   "type": "module",
   "bin": {

@@ -11,6 +11,7 @@ import {
   agentEngine,
   checkMobileAuth,
   desktopRelay,
+  getLanAddresses,
   isLocalDesktopTrusted,
   tunnelManager,
 } from "./mobile-bridge.mjs";
@@ -47,11 +48,14 @@ const PLAYBOOK_HTML_PATH = path.join(PROJECT_ROOT, "docs", "cold-reply-playbook.
 
 const MOBILE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#2563eb"/><circle cx="256" cy="256" r="154" fill="none" stroke="#93c5fd" stroke-width="14" opacity="0.55"/><path d="M256 128c-60 0-108 48-108 108v58l-24 28v18h264v-18l-24-28v-58c0-60-48-108-108-108zm0 264c24 0 44-18 44-40h-88c0 22 20 40 44 40z" fill="#fff"/><circle cx="356" cy="156" r="46" fill="#ef4444" stroke="#fff" stroke-width="12"/></svg>`;
 
+function escapeHtmlServer(raw = "") {
+  return String(raw).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 function isAllowedDesktopOrigin(origin) {
   if (!origin) return false;
-  if (origin === "null") return true;
   return (
-    /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin) ||
+    /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin) ||
     /^chrome-extension:\/\/[a-z0-9-]+$/i.test(origin)
   );
 }
@@ -70,6 +74,9 @@ function sendJson(res, statusCode, payload, corsOrigin, extraHeaders = {}) {
   const headers = {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
     ...extraHeaders,
   };
   if (corsOrigin) {
@@ -85,6 +92,9 @@ function sendText(res, statusCode, contentType, body, extraHeaders = {}) {
   res.writeHead(statusCode, {
     "Content-Type": contentType,
     "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
     ...extraHeaders,
   });
   res.end(body);
@@ -107,12 +117,14 @@ async function readJsonBody(req) {
 
 function currentMobileLink(localPort) {
   const tok = getMobileToken();
-  const info = tunnelManager.getInfo(localPort, tok);
+  const st = loadState();
+  const info = tunnelManager.getInfo(localPort, tok, { allowLanDirect: Boolean(st.settings?.allowLanDirect) });
   return info.primaryUrl;
 }
 
 function renderPairGateHtml(errorMsg = "") {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/><title>消息总管 · 手机安全配对</title><style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#0f172a;color:#f8fafc;display:grid;place-items:center;min-height:100vh;padding:20px}form{background:#1e293b;border:1px solid #334155;border-radius:18px;padding:24px;width:100%;max-width:360px;box-sizing:border-box}h1{font-size:19px;margin:0 0 8px}p{font-size:13px;color:#94a3b8;line-height:1.5;margin:0 0 16px}input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:14px;margin-bottom:12px}button{width:100%;padding:12px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:15px}</style></head><body><form method="GET" action="/m"><h1>🔒 消息总管 · 手机随身端</h1><p>请在电脑端打开《消息总管》点击顶部「📱 手机扫码遥控」直接扫码进入，或在下方粘贴配对密钥：</p>${errorMsg ? `<p style="color:#f87171">${errorMsg}</p>` : ""}<input name="t" placeholder="粘贴电脑端配对密钥..." required /><button type="submit">验证并进入手机工作台</button></form></body></html>`;
+  const safeErr = escapeHtmlServer(errorMsg);
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="referrer" content="no-referrer"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/><title>消息总管 · 手机安全配对</title><style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#0f172a;color:#f8fafc;display:grid;place-items:center;min-height:100vh;padding:20px}form{background:#1e293b;border:1px solid #334155;border-radius:18px;padding:24px;width:100%;max-width:360px;box-sizing:border-box}h1{font-size:19px;margin:0 0 8px}p{font-size:13px;color:#94a3b8;line-height:1.5;margin:0 0 16px}input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:14px;margin-bottom:12px}button{width:100%;padding:12px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:15px}</style></head><body><form method="GET" action="/m"><h1>🔒 消息总管 · 手机随身端</h1><p>请在电脑端打开《消息总管》点击左下角「📲 手机随身收件箱」直接扫码进入，或在下方粘贴配对密钥：</p>${safeErr ? `<p style="color:#f87171">${safeErr}</p>` : ""}<input name="t" placeholder="粘贴电脑端配对密钥..." required /><button type="submit">验证并进入手机工作台</button></form></body></html>`;
 }
 
 export function createHubServer(options = {}) {
@@ -232,9 +244,15 @@ export function createHubServer(options = {}) {
     }
   }
 
-  const server = http.createServer(async (req, res) => {
-    const localTrusted = isLocalDesktopTrusted(req);
+  const handleRequest = async (req, res) => {
+    const secFetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
     const origin = req.headers.origin;
+    if (secFetchSite === "cross-site" && !String(origin || "").startsWith("chrome-extension://")) {
+      sendJson(res, 403, { ok: false, error: "cross-site request blocked" }, "");
+      return;
+    }
+
+    const localTrusted = isLocalDesktopTrusted(req);
     const corsOrigin = localTrusted
       ? isAllowedDesktopOrigin(origin)
         ? origin
@@ -268,7 +286,7 @@ export function createHubServer(options = {}) {
     try {
       // Public lightweight endpoints
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "5.4.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "5.5.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
         return;
       }
       if (req.method === "GET" && pathname === "/sw.js") {
@@ -319,7 +337,7 @@ export function createHubServer(options = {}) {
         if (auth.fromQuery) {
           const isHttps = req.headers["x-forwarded-proto"] === "https" || Boolean(req.headers["cf-ray"]);
           authCookieHeader = {
-            "Set-Cookie": `tp_mob_tok=${encodeURIComponent(expectedTok)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${isHttps ? "; Secure" : ""}`,
+            "Set-Cookie": `tp_mob_tok=${encodeURIComponent(expectedTok)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${isHttps ? "; Secure" : ""}`,
           };
         }
       }
@@ -373,12 +391,13 @@ export function createHubServer(options = {}) {
           tunnelManager.configureBoxCredentials(getTunnelBoxCredentials());
           const tok = getMobileToken();
           const st = loadState();
+          const allowLanDirect = Boolean(st.settings?.allowLanDirect);
           sendJson(
             res,
             200,
             {
               ok: true,
-              ...tunnelManager.getInfo(serverPortRef.port, tok),
+              ...tunnelManager.getInfo(serverPortRef.port, tok, { allowLanDirect }),
               preventSleep: Boolean(st.settings?.preventSleep),
               tunnelAutoStart: Boolean(st.settings?.tunnelAutoStart),
               desktopBridgeConnected: desktopRelay.isDesktopConnected(),
@@ -399,15 +418,25 @@ export function createHubServer(options = {}) {
             tunnelManager.stop();
           } else if (body.action === "rotateToken") {
             rotateMobileToken();
+          } else if (body.action === "toggleLan") {
+            const nextLan = Boolean(body.allowLanDirect);
+            updateSettings({ allowLanDirect: nextLan });
+            syncLanBridgeServer(nextLan);
+          } else if (body.action === "emergencyLock") {
+            updateSettings({ tunnelAutoStart: false, allowLanDirect: false });
+            tunnelManager.stop();
+            syncLanBridgeServer(false);
+            rotateMobileToken();
           }
           const tok = getMobileToken();
           const st = loadState();
+          const allowLanDirect = Boolean(st.settings?.allowLanDirect);
           sendJson(
             res,
             200,
             {
               ok: true,
-              ...tunnelManager.getInfo(serverPortRef.port, tok),
+              ...tunnelManager.getInfo(serverPortRef.port, tok, { allowLanDirect }),
               preventSleep: Boolean(st.settings?.preventSleep),
               tunnelAutoStart: Boolean(st.settings?.tunnelAutoStart),
               desktopBridgeConnected: desktopRelay.isDesktopConnected(),
@@ -586,6 +615,10 @@ export function createHubServer(options = {}) {
         return;
       }
       if (pathname === "/api/cc/sessions" && req.method === "POST") {
+        if (!localTrusted && !loadState().settings?.allowRemoteAiCli) {
+          sendJson(res, 403, { ok: false, error: "出于安全保护，默认禁止手机外网新建本机终端会话（如需使用请在电脑端开启授权）" }, corsOrigin);
+          return;
+        }
         const body = await readJsonBody(req);
         const session = agentEngine.createSession(body);
         sendJson(res, 201, { ok: true, session }, corsOrigin);
@@ -593,6 +626,10 @@ export function createHubServer(options = {}) {
       }
       const ccSendMatch = pathname.match(/^\/api\/cc\/sessions\/([^/]+)\/send$/);
       if (ccSendMatch && req.method === "POST") {
+        if (!localTrusted && !loadState().settings?.allowRemoteAiCli) {
+          sendJson(res, 403, { ok: false, error: "出于安全保护，默认禁止手机外网执行本机终端命令" }, corsOrigin);
+          return;
+        }
         const sid = decodeURIComponent(ccSendMatch[1]);
         const body = await readJsonBody(req);
         const session = agentEngine.sendPrompt(sid, body.prompt || "");
@@ -601,6 +638,10 @@ export function createHubServer(options = {}) {
       }
       const ccStopMatch = pathname.match(/^\/api\/cc\/sessions\/([^/]+)\/stop$/);
       if (ccStopMatch && req.method === "POST") {
+        if (!localTrusted && !loadState().settings?.allowRemoteAiCli) {
+          sendJson(res, 403, { ok: false, error: "remote cli disabled" }, corsOrigin);
+          return;
+        }
         const sid = decodeURIComponent(ccStopMatch[1]);
         sendJson(res, 200, agentEngine.stopSession(sid), corsOrigin);
         return;
@@ -829,6 +870,10 @@ export function createHubServer(options = {}) {
       }
 
       if (req.method === "POST" && pathname === "/api/license/activate") {
+        if (!localTrusted) {
+          sendJson(res, 403, { ok: false, error: "desktop only" }, corsOrigin);
+          return;
+        }
         const body = await readJsonBody(req);
         const out = activateLicenseKey(body.key || "");
         sendJson(res, out.ok ? 200 : 400, out, corsOrigin);
@@ -844,6 +889,9 @@ export function createHubServer(options = {}) {
         const settings = updateSettings(body);
         if (body.preventSleep !== undefined) {
           syncPreventSleepState(Boolean(settings.preventSleep));
+        }
+        if (body.allowLanDirect !== undefined) {
+          syncLanBridgeServer(Boolean(settings.allowLanDirect));
         }
         sendJson(res, 200, { ok: true, settings }, corsOrigin);
         return;
@@ -964,17 +1012,50 @@ export function createHubServer(options = {}) {
     } catch (err) {
       sendJson(res, 400, { ok: false, error: err.message || "bad request" }, corsOrigin);
     }
-  });
+  };
+
+  const server = http.createServer(handleRequest);
+  let lanBridgeServer = null;
+
+  function syncLanBridgeServer(wantLan) {
+    if (process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS === "1") return;
+    if (!wantLan) {
+      if (lanBridgeServer) {
+        try { lanBridgeServer.close(); } catch {}
+        lanBridgeServer = null;
+      }
+      return;
+    }
+    const lans = getLanAddresses();
+    const lanIp = lans[0]?.ip;
+    if (!lanIp || lanBridgeServer) return;
+    try {
+      const s = http.createServer(handleRequest);
+      s.on("error", () => { lanBridgeServer = null; });
+      s.listen(serverPortRef.port, lanIp);
+      lanBridgeServer = s;
+    } catch {
+      lanBridgeServer = null;
+    }
+  }
 
   server.on("listening", () => {
     const addr = server.address();
     if (addr && typeof addr === "object" && addr.port) {
       serverPortRef.port = addr.port;
     }
+    if (process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS !== "1") {
+      const st = loadState();
+      if (st.settings?.allowLanDirect) syncLanBridgeServer(true);
+    }
   });
 
   server.on("close", () => {
     clearInterval(sseKeepAlive);
+    if (lanBridgeServer) {
+      try { lanBridgeServer.close(); } catch {}
+      lanBridgeServer = null;
+    }
     for (const c of sseClients) {
       try { c.end(); } catch {}
     }
@@ -995,10 +1076,11 @@ function isDirectEntrypoint() {
 
 if (isDirectEntrypoint()) {
   loadState();
-  const host = process.env.TABPULSE_HOST || "0.0.0.0";
+  // Security-first default: bind 127.0.0.1 loopback ONLY (zero coffee-shop Wi-Fi LAN exposure!)
+  const host = process.env.TABPULSE_HOST || "127.0.0.1";
   const port = Number(process.env.TABPULSE_PORT || 17890);
   const server = createHubServer({ port });
   server.listen(port, host, () => {
-    console.log(`TabPulse Hub v5.3.0 listening on http://${host}:${port}`);
+    console.log(`TabPulse Hub v5.5.0 listening securely on http://${host}:${port}`);
   });
 }

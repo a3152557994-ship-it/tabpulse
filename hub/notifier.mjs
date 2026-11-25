@@ -18,6 +18,30 @@ function externalEffectsDisabled() {
   return process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS === "1";
 }
 
+function isPrivateOrLocalWebhookHost(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (
+      h === "localhost" ||
+      h === "0.0.0.0" ||
+      h === "::1" ||
+      h.endsWith(".local") ||
+      h.endsWith(".internal") ||
+      /^127\./.test(h) ||
+      /^10\./.test(h) ||
+      /^192\.168\./.test(h) ||
+      /^169\.254\./.test(h) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(h)
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export function normalizeCustomerPushTarget(rawInput = "") {
   const s = String(rawInput || "").trim();
   if (!s) return { kind: "none", url: "", token: "" };
@@ -31,6 +55,9 @@ export function normalizeCustomerPushTarget(rawInput = "") {
     return { kind: "bark", url: `https://api.day.app/${s}`, token: s };
   }
   if (/^https?:\/\//i.test(s)) {
+    if (process.env.TABPULSE_ALLOW_LOCAL_WEBHOOK_TEST !== "1" && isPrivateOrLocalWebhookHost(s)) {
+      return { kind: "invalid", url: "", token: "" };
+    }
     return { kind: "url", url: s, token: "" };
   }
   return { kind: "invalid", url: "", token: "" };

@@ -106,6 +106,9 @@ internal static class PushTargetHelper
             return ("", "invalid", "");
 
         var host = uri.Host.ToLowerInvariant();
+        if (host == "localhost" || host == "0.0.0.0" || host == "::1" || host.EndsWith(".local") ||
+            host.StartsWith("127.") || host.StartsWith("10.") || host.StartsWith("192.168.") || host.StartsWith("169.254."))
+            return ("", "invalid", "");
         if (host.Contains("pushplus.plus")) return (trimmed, "pushplus_url", "");
         if (host.Contains("sctapi.ftqq.com")) return (trimmed, "serverchan", "");
         if (host.Contains("api.day.app")) return (trimmed.TrimEnd('/'), "bark", "");
@@ -128,6 +131,8 @@ internal sealed class MainDashboardForm : Form
     private readonly Dictionary<string, WebView2> _workspaceWebViews = new();
     private TcpListener? _mobileListener;
     private int _mobilePort = 17890;
+    private bool _boundLanMode;
+    private readonly Dictionary<string, (int count, DateTime lastAt)> _failedAuthByIp = new();
     private Process? _sshTunnelProc;
     private string _publicTunnelUrl = "";
     private string _tunnelStatus = "stopped";
@@ -141,7 +146,7 @@ internal sealed class MainDashboardForm : Form
         Directory.CreateDirectory(Path.Combine(_appRoot, "profiles"));
         _stateFile = Path.Combine(_appRoot, "state.json");
 
-        Text = _isZh ? "消息总管 — 多平台消息看护与多开防串号工作台 (v5.4.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v5.4.0)";
+        Text = _isZh ? "消息总管 — 多平台消息看护与多开防串号工作台 (v5.5.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v5.5.0)";
         Width = 1240;
         Height = 820;
         StartPosition = FormStartPosition.CenterScreen;
@@ -258,11 +263,11 @@ internal sealed class MainDashboardForm : Form
         }
         var init = new JsonObject
         {
-            ["version"] = "5.4.0",
+            ["version"] = "5.5.0",
             ["mobileToken"] = Guid.NewGuid().ToString("N"),
             ["tunnelBoxId"] = "bx_" + Guid.NewGuid().ToString("N")[..20],
             ["tunnelWriteKey"] = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")[..8],
-            ["settings"] = new JsonObject { ["webhookUrl"] = "", ["lang"] = _isZh ? "zh" : "en", ["preventSleep"] = false, ["tunnelAutoStart"] = false },
+            ["settings"] = new JsonObject { ["webhookUrl"] = "", ["lang"] = _isZh ? "zh" : "en", ["preventSleep"] = false, ["tunnelAutoStart"] = false, ["allowLanDirect"] = false },
             ["watches"] = watches,
             ["quickReplies"] = new JsonArray()
         };
@@ -647,7 +652,7 @@ internal sealed class MainDashboardForm : Form
             var lic = string.IsNullOrEmpty(licKey) ? new JsonObject { ["valid"] = false, ["plan"] = "free" } : LicenseCheck.Verify(licKey);
             return new JsonObject
             {
-                ["version"] = "5.4.0",
+                ["version"] = "5.5.0",
                 ["license"] = lic,
                 ["settings"] = st["settings"]?.DeepClone() ?? new JsonObject(),
                 ["stats"] = new JsonObject { ["total"] = watches.Count, ["unreadCount"] = unreadWatches, ["unreadMessagesTotal"] = unreadTotal, ["activeCount"] = watches.Count },
@@ -690,7 +695,8 @@ internal sealed class MainDashboardForm : Form
         if (method == "POST" && path == "/api/mobile/tunnel")
         {
             var act = payload?["action"]?.GetValue<string>() ?? "start";
-            return await HandleStandaloneTunnelActionAsync(act);
+            var allowLan = payload?["allowLanDirect"]?.GetValue<bool>();
+            return await HandleStandaloneTunnelActionAsync(act, allowLan);
         }
         if (path == "/api/cc/state" || path == "/api/ai-clients/status" || path == "/api/ai-butler/state")
         {
@@ -807,6 +813,12 @@ internal sealed class MainDashboardForm : Form
                 set["preventSleep"] = ps;
                 WinPowerKeeper.ApplyPreventSleep(ps);
             }
+            if (payload?["allowLanDirect"] != null)
+            {
+                var al = payload["allowLanDirect"]!.GetValue<bool>();
+                set["allowLanDirect"] = al;
+                EnsureMobileTcpListener(al);
+            }
             st["settings"] = set;
             SaveState(st);
             return new JsonObject { ["ok"] = true, ["settings"] = set.DeepClone() };
@@ -913,39 +925,47 @@ internal sealed class MainDashboardForm : Form
         return "127.0.0.1";
     }
 
+    private void EnsureMobileTcpListener(bool allowLan)
+    {
+        if (_mobileListener != null && _boundLanMode == allowLan) return;
+        try { _mobileListener?.Stop(); } catch { }
+        _mobileListener = null;
+        _boundLanMode = allowLan;
+
+        var bindAddr = allowLan ? IPAddress.Any : IPAddress.Loopback;
+        foreach (var p in new[] { 17890, 17891, 17892 })
+        {
+            try
+            {
+                var l = new TcpListener(bindAddr, p);
+                l.Start();
+                _mobilePort = p;
+                _mobileListener = l;
+                _ = Task.Run(async () =>
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                            var client = await l.AcceptTcpClientAsync();
+                            _ = Task.Run(() => HandleMobileTcpClientAsync(client));
+                        }
+                        catch { break; }
+                    }
+                });
+                break;
+            }
+            catch { }
+        }
+    }
+
     private void StartStandaloneMobileGateway()
     {
         var st = LoadState();
         var ps = st["settings"]?["preventSleep"]?.GetValue<bool>() ?? false;
+        var allowLan = st["settings"]?["allowLanDirect"]?.GetValue<bool>() ?? false;
         WinPowerKeeper.ApplyPreventSleep(ps);
-
-        if (_mobileListener == null)
-        {
-            foreach (var p in new[] { 17890, 17891, 17892 })
-            {
-                try
-                {
-                    var l = new TcpListener(IPAddress.Any, p);
-                    l.Start();
-                    _mobilePort = p;
-                    _mobileListener = l;
-                    _ = Task.Run(async () =>
-                    {
-                        while (true)
-                        {
-                            try
-                            {
-                                var client = await l.AcceptTcpClientAsync();
-                                _ = Task.Run(() => HandleMobileTcpClientAsync(client));
-                            }
-                            catch { break; }
-                        }
-                    });
-                    break;
-                }
-                catch { }
-            }
-        }
+        EnsureMobileTcpListener(allowLan);
 
         if (st["settings"]?["tunnelAutoStart"]?.GetValue<bool>() == true)
         {
@@ -960,7 +980,9 @@ internal sealed class MainDashboardForm : Form
         var tok = st["mobileToken"]?.GetValue<string>() ?? "";
         var boxId = st["tunnelBoxId"]?.GetValue<string>() ?? "";
         var ps = st["settings"]?["preventSleep"]?.GetValue<bool>() ?? false;
-        var lanUrl = $"http://{GetLanIPv4()}:{_mobilePort}/m?t={tok}";
+        var allowLan = st["settings"]?["allowLanDirect"]?.GetValue<bool>() ?? false;
+        var detectedIp = GetLanIPv4();
+        var lanUrl = allowLan ? $"http://{detectedIp}:{_mobilePort}/m?t={tok}" : $"http://127.0.0.1:{_mobilePort}/m?t={tok}";
         var permUrl = (!string.IsNullOrEmpty(_publicTunnelUrl) && !string.IsNullOrEmpty(boxId))
             ? $"{EdgeGatewayOrigin}/go/{boxId}?t={tok}"
             : "";
@@ -975,12 +997,14 @@ internal sealed class MainDashboardForm : Form
             ["permanentMobileUrl"] = permUrl,
             ["tunnelMobileUrl"] = tunUrl,
             ["lanUrl"] = lanUrl,
+            ["allowLanDirect"] = allowLan,
+            ["detectedLanIp"] = detectedIp,
             ["primaryUrl"] = primary,
             ["preventSleep"] = ps
         };
     }
 
-    private async Task<JsonObject> HandleStandaloneTunnelActionAsync(string action)
+    private async Task<JsonObject> HandleStandaloneTunnelActionAsync(string action, bool? allowLanParam = null)
     {
         var st = LoadState();
         var set = st["settings"]?.AsObject() ?? new JsonObject();
@@ -988,6 +1012,30 @@ internal sealed class MainDashboardForm : Form
         {
             st["mobileToken"] = Guid.NewGuid().ToString("N");
             SaveState(st);
+            return GetStandaloneMobilePairingInfo();
+        }
+        if (action == "toggleLan")
+        {
+            var nextLan = allowLanParam ?? !(set["allowLanDirect"]?.GetValue<bool>() ?? false);
+            set["allowLanDirect"] = nextLan;
+            st["settings"] = set;
+            SaveState(st);
+            EnsureMobileTcpListener(nextLan);
+            return GetStandaloneMobilePairingInfo();
+        }
+        if (action == "emergencyLock")
+        {
+            _wantedTunnel = false;
+            set["tunnelAutoStart"] = false;
+            set["allowLanDirect"] = false;
+            st["settings"] = set;
+            st["mobileToken"] = Guid.NewGuid().ToString("N");
+            SaveState(st);
+            try { _sshTunnelProc?.Kill(); } catch { }
+            _sshTunnelProc = null;
+            _publicTunnelUrl = "";
+            _tunnelStatus = "stopped";
+            EnsureMobileTcpListener(false);
             return GetStandaloneMobilePairingInfo();
         }
         if (action == "stop")
@@ -1165,7 +1213,7 @@ internal sealed class MainDashboardForm : Form
 
             if (pathname == "/api/health")
             {
-                await SendJsonObjAsync(new JsonObject { ["ok"] = true, ["version"] = "5.4.0", ["standalone"] = true });
+                await SendJsonObjAsync(new JsonObject { ["ok"] = true, ["version"] = "5.5.0", ["standalone"] = true });
                 return;
             }
             if (pathname == "/sw.js")
@@ -1173,6 +1221,24 @@ internal sealed class MainDashboardForm : Form
                 var sw = Path.Combine(AppContext.BaseDirectory, "resources", "sw.js");
                 if (File.Exists(sw)) await SendRawAsync(200, "application/javascript; charset=utf-8", File.ReadAllBytes(sw), "Service-Worker-Allowed: /\r\n");
                 return;
+            }
+
+            if (pathname.StartsWith("/api/mobile/") || pathname == "/api/settings" || pathname == "/api/license/activate")
+            {
+                await SendJsonObjAsync(new JsonObject { ["ok"] = false, ["error"] = "desktop only" }, 403);
+                return;
+            }
+
+            var clientIp = headers.TryGetValue("X-Forwarded-For", out var xff)
+                ? xff.Split(',')[0].Trim()
+                : (client.Client.RemoteEndPoint?.ToString() ?? "unknown");
+            lock (_failedAuthByIp)
+            {
+                if (_failedAuthByIp.TryGetValue(clientIp, out var rec) && rec.count >= 8 && (DateTime.UtcNow - rec.lastAt).TotalMinutes < 10)
+                {
+                    _ = SendJsonObjAsync(new JsonObject { ["ok"] = false, ["error"] = "Too many invalid attempts. Locked for 10m." }, 429);
+                    return;
+                }
             }
 
             var st = LoadState();
@@ -1196,10 +1262,19 @@ internal sealed class MainDashboardForm : Form
             var candidateTok = !string.IsNullOrEmpty(queryTok) ? queryTok : (!string.IsNullOrEmpty(hdrTok) ? hdrTok : cookieTok);
             if (!string.IsNullOrEmpty(expectedTok) && candidateTok != expectedTok)
             {
-                await SendRawAsync(401, "text/html; charset=utf-8", Encoding.UTF8.GetBytes("<!doctype html><meta charset='utf-8'/><body style='background:#0f172a;color:#fff;display:grid;place-items:center;min-height:100vh'><h2>🔒 请用手机扫描电脑端《消息总管》二维码进入</h2></body>"));
+                if (!string.IsNullOrEmpty(candidateTok))
+                {
+                    lock (_failedAuthByIp)
+                    {
+                        var prev = _failedAuthByIp.TryGetValue(clientIp, out var r) ? r.count : 0;
+                        _failedAuthByIp[clientIp] = (prev + 1, DateTime.UtcNow);
+                    }
+                }
+                await SendRawAsync(401, "text/html; charset=utf-8", Encoding.UTF8.GetBytes("<!doctype html><meta charset='utf-8'/><meta name='referrer' content='no-referrer'/><body style='background:#0f172a;color:#fff;display:grid;place-items:center;min-height:100vh'><h2>🔒 请用手机扫描电脑端《消息总管》二维码进入</h2></body>"));
                 return;
             }
-            var extraCookie = !string.IsNullOrEmpty(queryTok) ? $"Set-Cookie: tp_mob_tok={expectedTok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000\r\n" : "";
+            lock (_failedAuthByIp) { _failedAuthByIp.Remove(clientIp); }
+            var extraCookie = "Referrer-Policy: no-referrer\r\nX-Frame-Options: DENY\r\n" + (!string.IsNullOrEmpty(queryTok) ? $"Set-Cookie: tp_mob_tok={expectedTok}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000\r\n" : "");
 
             if (pathname == "/" || pathname == "/m")
             {

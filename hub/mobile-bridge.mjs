@@ -51,13 +51,23 @@ export function isLocalDesktopTrusted(req) {
   const isLoopback =
     remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
   if (!isLoopback) return false;
-  // Critical: cloudflared connects from 127.0.0.1 WITH cf-connecting-ip / x-forwarded-for or external Host!
-  if (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.headers["cf-ray"]) {
+  // Critical: cloudflared / ssh tunnel connects from 127.0.0.1 WITH forwarded headers or external Host!
+  if (
+    req.headers["cf-connecting-ip"] ||
+    req.headers["x-forwarded-for"] ||
+    req.headers["cf-ray"] ||
+    req.headers["x-real-ip"]
+  ) {
     return false;
   }
-  const host = String(req.headers.host || "").toLowerCase();
+  const secFetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
+  const origin = String(req.headers.origin || "");
+  if (secFetchSite === "cross-site" && !origin.startsWith("chrome-extension://")) {
+    return false;
+  }
+  const host = String(req.headers.host || "").trim().toLowerCase();
   if (!host) return true;
-  return host.startsWith("127.0.0.1") || host.startsWith("localhost") || host.startsWith("[::1]");
+  return /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host);
 }
 
 function getClientIp(req) {
@@ -400,8 +410,10 @@ class CloudflaredManager {
     return { ok: true, status: "stopped" };
   }
 
-  getInfo(localPort, token) {
-    const lans = getLanAddresses();
+  getInfo(localPort, token, opts = {}) {
+    const allowLan = Boolean(opts.allowLanDirect);
+    const allLans = getLanAddresses();
+    const lans = allowLan ? allLans : [];
     const lanUrl = lans.length ? `http://${lans[0].ip}:${localPort}/m?t=${token}` : `http://127.0.0.1:${localPort}/m?t=${token}`;
     const rawTunnelUrl = this.publicUrl ? `${this.publicUrl}/m?t=${token}` : "";
     const permanentMobileUrl =
@@ -419,6 +431,8 @@ class CloudflaredManager {
       permanentMobileUrl,
       tunnelMobileUrl,
       lanUrl,
+      allowLanDirect: allowLan,
+      detectedLanIp: allLans[0]?.ip || "",
       allLanIps: lans.map((x) => `http://${x.ip}:${localPort}/m?t=${token}`),
       primaryUrl,
       qrSvg,
@@ -484,7 +498,6 @@ class AgentSessionEngine {
       { id: "opus", label: "Claude Opus (Cursor Agent)", bin: findExecutable("opus") },
       { id: "codex", label: "OpenAI Codex CLI", bin: findExecutable("codex") },
       { id: "gemini", label: "Google Gemini CLI", bin: findExecutable("gemini") },
-      { id: "shell", label: "本地终端命令 (Zsh / PowerShell)", bin: process.platform === "win32" ? "powershell.exe" : "/bin/zsh" },
     ];
     return candidates.map((c) => ({ ...c, installed: Boolean(c.bin) }));
   }
@@ -561,8 +574,11 @@ class AgentSessionEngine {
   }
 
   createSession({ name, agent = "claude", cwd = "" } = {}) {
+    if (agent === "shell") {
+      throw new Error("出于系统安全保护，已禁止创建原生系统 Shell 远程终端会话");
+    }
     const agents = this.detectAvailableAgents();
-    const chosen = agents.find((a) => a.id === agent && a.installed) || agents.find((a) => a.installed) || agents[agents.length - 1];
+    const chosen = agents.find((a) => a.id === agent && a.installed) || agents.find((a) => a.installed) || agents[0];
     const resolvedCwd = cwd && fs.existsSync(cwd) ? cwd : HOME_DIR;
     const session = {
       id: `cc_${Date.now().toString(36)}_${crypto.randomBytes(2).toString("hex")}`,
@@ -700,10 +716,7 @@ class AgentSessionEngine {
     if (session.agent === "gemini" && found?.bin) {
       return { bin: found.bin, args: ["-p", prompt] };
     }
-    if (process.platform === "win32") {
-      return { bin: "powershell.exe", args: ["-NoProfile", "-Command", prompt] };
-    }
-    return { bin: "/bin/zsh", args: ["-lc", prompt] };
+    throw new Error("未检测到已安装的受信任 AI 命令行工具（Claude Code / Codex / Gemini），已拦截裸 Shell 执行");
   }
 }
 

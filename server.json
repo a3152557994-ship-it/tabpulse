@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
   "name": "io.github.a3152557994-ship-it/tabpulse",
-  "description": "Browser-independent unread inbox sentinel and real-time Reddit/HN/GitHub buyer-intent lead radar.",
+  "description": "ReplyRadar (消息总管) — 9-tool AI-to-phone notification & 1-tap approval MCP + isolated multi-account unread inbox & lead radar.",
   "status": "active",
   "repository": {
     "url": "https://github.com/a3152557994-ship-it/tabpulse",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "5.5.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "github:a3152557994-ship-it/tabpulse",
-      "version": "0.2.0",
+      "version": "5.5.0",
       "transport": {
         "type": "stdio"
       }

@@ -178,11 +178,11 @@ if security find-identity -v -p codesigning | grep -q "Apple Development: Yang H
 fi
 
 echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
-populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.4.0" "9"
+populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.5.0" "10"
 bundle_embedded_server "$DIST_DIR/消息总管.app"
 /usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/消息总管.app"
 
-populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.4.0" "9"
+populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.5.0" "10"
 bundle_embedded_server "$DIST_DIR/ReplyRadar.app"
 /usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/ReplyRadar.app"
 
@@ -196,7 +196,7 @@ if [ -f "$MAS_DIR/embedded.provisionprofile" ] && security find-identity -v | gr
   MAS_STAGE="$BIN_TMP/mas-stage"
   mkdir -p "$MAS_STAGE"
   MAS_APP="$MAS_STAGE/ReplyRadar.app"
-  populate_bundle "$MAS_APP" "ReplyRadar" "ReplyRadar" "com.yanghe.replyradar" "zh_CN" "$UNIVERSAL_MAS" "1.0.0" "2"
+  populate_bundle "$MAS_APP" "ReplyRadar" "ReplyRadar" "com.yanghe.replyradar" "zh_CN" "$UNIVERSAL_MAS" "1.0.0" "3"
   cp "$MAS_DIR/embedded.provisionprofile" "$MAS_APP/Contents/embedded.provisionprofile"
 
   ENT_FILE="$MAS_DIR/ReplyRadar-MAS.entitlements"

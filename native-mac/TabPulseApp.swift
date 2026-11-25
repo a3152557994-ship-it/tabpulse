@@ -41,6 +41,12 @@ enum WebhookDispatcher {
             return ("bark", "https://api.day.app/\(s)")
         }
         if s.hasPrefix("http://") || s.hasPrefix("https://") {
+            if let u = URL(string: s), let h = u.host?.lowercased() {
+                if h == "localhost" || h == "0.0.0.0" || h == "::1" || h.hasSuffix(".local") ||
+                   h.hasPrefix("127.") || h.hasPrefix("10.") || h.hasPrefix("192.168.") || h.hasPrefix("169.254.") {
+                    return ("invalid", "")
+                }
+            }
             return ("url", s)
         }
         return ("invalid", "")
@@ -363,12 +369,12 @@ final class StandaloneStore {
             ]
         ]
         let initial: [String: Any] = [
-            "version": "5.4.0",
+            "version": "5.5.0",
             "license": NSNull(),
             "mobileToken": UUID().uuidString.replacingOccurrences(of: "-", with: ""),
             "tunnelBoxId": "bx_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(20).lowercased(),
             "tunnelWriteKey": UUID().uuidString.replacingOccurrences(of: "-", with: "") + UUID().uuidString.prefix(8),
-            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "preventSleep": false, "tunnelAutoStart": false, "termsAcceptedAt": NSNull()],
+            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "preventSleep": false, "tunnelAutoStart": false, "allowLanDirect": false, "termsAcceptedAt": NSNull()],
             "watches": defaultWatches,
             "quickReplies": defaultQuickReplies
         ]
@@ -408,6 +414,9 @@ final class StandaloneStore {
         let unreadTotal = unreadList.reduce(0) { $0 + (($1["unreadCount"] as? Int) ?? 0) }
 
         var licOut: [String: Any] = ["valid": false, "plan": "free"]
+        #if MAS_BUILD
+        licOut = ["valid": true, "plan": "mas_free", "serial": "APPLE-MAS-FREE"]
+        #else
         if let licObj = st["license"] as? [String: Any] {
             if (licObj["iapUnlocked"] as? Bool) == true {
                 licOut = ["valid": true, "plan": (licObj["plan"] as? String) ?? "lifetime", "serial": "APPLE-IAP"]
@@ -415,9 +424,10 @@ final class StandaloneStore {
                 licOut = LicenseVerifier.verify(key)
             }
         }
+        #endif
 
         return [
-            "version": "5.4.0",
+            "version": "5.5.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -697,7 +707,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         #if MAS_BUILD
         useExternalHub = false
         loadStandaloneUI()
-        refreshStoreKitEntitlements()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.warmUpPassiveRedTabsIfNeeded()
+        }
         return
         #else
         guard let healthURL = URL(string: "http://127.0.0.1:17890/api/health") else {
@@ -760,16 +772,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
               let srvURL = Bundle.main.url(forResource: "server", withExtension: "mjs", subdirectory: "app-server/hub") else {
             return false
         }
-        let repoDataPath = "/Users/wang/OPC/projects/tabpulse/data/state.json"
-        let defaultDataPath: String
-        if FileManager.default.fileExists(atPath: repoDataPath) {
-            defaultDataPath = repoDataPath
-        } else {
-            let appSup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            let dir = appSup.appendingPathComponent("TabPulse", isDirectory: true)
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            defaultDataPath = dir.appendingPathComponent("state.json").path
-        }
+        let appSup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSup.appendingPathComponent("TabPulse", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let defaultDataPath = dir.appendingPathComponent("state.json").path
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: nodeBin)
@@ -2033,7 +2039,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if method == "POST" && path == "/api/mobile/tunnel" {
             #if !MAS_BUILD
             let act = (payload?["action"] as? String) ?? "start"
-            StandaloneMobileGateway.shared.handleTunnelAction(act) { info in
+            let allowLan = payload?["allowLanDirect"] as? Bool
+            StandaloneMobileGateway.shared.handleTunnelAction(act, allowLanParam: allowLan) { info in
                 self.replyCallback(reqId, info)
             }
             #else
@@ -2452,31 +2459,48 @@ final class StandaloneMobileGateway {
     private var publicUrl: String = ""
     private var tunnelStatus: String = "stopped"
     private var wantedTunnel: Bool = false
+    private var boundLanMode: Bool = false
+    private var failedAttempts: [String: (count: Int, lastAt: Date)] = [:]
+    private let authLock = NSLock()
 
     func start(appDelegate: AppDelegate?) {
         self.appDelegate = appDelegate
         let st = StandaloneStore.shared.loadState()
         let set = (st["settings"] as? [String: Any]) ?? [:]
         syncPreventSleep((set["preventSleep"] as? Bool) ?? false)
-
-        if listener == nil {
-            for candidatePort: UInt16 in [17890, 17891, 17892] {
-                if let nwPort = NWEndpoint.Port(rawValue: candidatePort),
-                   let l = try? NWListener(using: .tcp, on: nwPort) {
-                    self.port = candidatePort
-                    self.listener = l
-                    l.newConnectionHandler = { [weak self] conn in
-                        self?.handleConnection(conn)
-                    }
-                    l.start(queue: DispatchQueue.global(qos: .userInitiated))
-                    break
-                }
-            }
-        }
+        let allowLan = (set["allowLanDirect"] as? Bool) ?? false
+        ensureListener(allowLan: allowLan)
 
         if (set["tunnelAutoStart"] as? Bool) == true {
             DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) {
                 self.startSshTunnel(completion: nil)
+            }
+        }
+    }
+
+    private func ensureListener(allowLan: Bool) {
+        if listener != nil && boundLanMode == allowLan { return }
+        listener?.cancel()
+        listener = nil
+        boundLanMode = allowLan
+
+        for candidatePort: UInt16 in [17890, 17891, 17892] {
+            guard let nwPort = NWEndpoint.Port(rawValue: candidatePort) else { continue }
+            let params = NWParameters.tcp
+            if !allowLan {
+                params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: nwPort)
+            }
+            let created: NWListener? = allowLan
+                ? (try? NWListener(using: params, on: nwPort))
+                : (try? NWListener(using: params))
+            if let l = created {
+                self.port = candidatePort
+                self.listener = l
+                l.newConnectionHandler = { [weak self] conn in
+                    self?.handleConnection(conn)
+                }
+                l.start(queue: DispatchQueue.global(qos: .userInitiated))
+                break
             }
         }
     }
@@ -2535,7 +2559,9 @@ final class StandaloneMobileGateway {
         let tok = (st["mobileToken"] as? String) ?? ""
         let boxId = (st["tunnelBoxId"] as? String) ?? ""
         let set = (st["settings"] as? [String: Any]) ?? [:]
-        let lanUrl = "http://\(getLanIP()):\(port)/m?t=\(tok)"
+        let allowLan = (set["allowLanDirect"] as? Bool) ?? false
+        let detectedIp = getLanIP()
+        let lanUrl = allowLan ? "http://\(detectedIp):\(port)/m?t=\(tok)" : "http://127.0.0.1:\(port)/m?t=\(tok)"
         let permUrl = (!publicUrl.isEmpty && !boxId.isEmpty) ? "\(edgeOrigin)/go/\(boxId)?t=\(tok)" : ""
         let rawTun = !publicUrl.isEmpty ? "\(publicUrl)/m?t=\(tok)" : ""
         let tunUrl = !permUrl.isEmpty ? permUrl : rawTun
@@ -2547,17 +2573,43 @@ final class StandaloneMobileGateway {
             "permanentMobileUrl": permUrl,
             "tunnelMobileUrl": tunUrl,
             "lanUrl": lanUrl,
+            "allowLanDirect": allowLan,
+            "detectedLanIp": detectedIp,
             "primaryUrl": primary,
             "preventSleep": (set["preventSleep"] as? Bool) ?? false
         ]
     }
 
-    func handleTunnelAction(_ action: String, completion: @escaping ([String: Any]) -> Void) {
+    func handleTunnelAction(_ action: String, allowLanParam: Bool? = nil, completion: @escaping ([String: Any]) -> Void) {
         var st = StandaloneStore.shared.loadState()
         var set = (st["settings"] as? [String: Any]) ?? [:]
         if action == "rotateToken" {
             st["mobileToken"] = UUID().uuidString.replacingOccurrences(of: "-", with: "")
             StandaloneStore.shared.saveState(st)
+            completion(currentPairingInfo())
+            return
+        }
+        if action == "toggleLan" {
+            let nextLan = allowLanParam ?? !((set["allowLanDirect"] as? Bool) ?? false)
+            set["allowLanDirect"] = nextLan
+            st["settings"] = set
+            StandaloneStore.shared.saveState(st)
+            ensureListener(allowLan: nextLan)
+            completion(currentPairingInfo())
+            return
+        }
+        if action == "emergencyLock" {
+            wantedTunnel = false
+            set["tunnelAutoStart"] = false
+            set["allowLanDirect"] = false
+            st["settings"] = set
+            st["mobileToken"] = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            StandaloneStore.shared.saveState(st)
+            sshProc?.terminate()
+            sshProc = nil
+            publicUrl = ""
+            tunnelStatus = "stopped"
+            ensureListener(allowLan: false)
             completion(currentPairingInfo())
             return
         }
@@ -2735,7 +2787,7 @@ final class StandaloneMobileGateway {
         }
 
         if pathname == "/api/health" {
-            sendJson(conn: conn, obj: ["ok": true, "version": "5.4.0", "standalone": true])
+            sendJson(conn: conn, obj: ["ok": true, "version": "5.5.0", "standalone": true])
             return
         }
         if pathname == "/sw.js",
@@ -2763,15 +2815,34 @@ final class StandaloneMobileGateway {
                 }
             }
         }
+        let clientIp = headers["x-forwarded-for"]?.split(separator: ",").first.map(String.init) ?? String(describing: conn.endpoint)
+        authLock.lock()
+        if let rec = failedAttempts[clientIp], rec.count >= 8, Date().timeIntervalSince(rec.lastAt) < 600 {
+            authLock.unlock()
+            sendHttp(conn: conn, status: 429, contentType: "text/plain; charset=utf-8", body: Data("Too many invalid attempts. Locked for 10 minutes.".utf8))
+            return
+        }
+        authLock.unlock()
+
         let providedTok = !queryTok.isEmpty ? queryTok : (!headerTok.isEmpty ? headerTok : cookieTok)
         if !expectedTok.isEmpty && providedTok != expectedTok {
-            let gate = "<!doctype html><html lang='zh-CN'><meta charset='utf-8'/><meta name='viewport' content='width=device-width,initial-scale=1'/><body style='background:#0f172a;color:#fff;font-family:sans-serif;display:grid;place-items:center;min-height:100vh;margin:0'><div style='padding:24px;text-align:center'><h2>🔒 请用手机扫描电脑端《消息总管》二维码进入</h2></div></body></html>"
+            if !providedTok.isEmpty {
+                authLock.lock()
+                let prev = failedAttempts[clientIp]?.count ?? 0
+                failedAttempts[clientIp] = (count: prev + 1, lastAt: Date())
+                authLock.unlock()
+            }
+            let gate = "<!doctype html><html lang='zh-CN'><meta charset='utf-8'/><meta name='referrer' content='no-referrer'/><meta name='viewport' content='width=device-width,initial-scale=1'/><body style='background:#0f172a;color:#fff;font-family:sans-serif;display:grid;place-items:center;min-height:100vh;margin:0'><div style='padding:24px;text-align:center'><h2>🔒 请用手机扫描电脑端《消息总管》二维码进入</h2></div></body></html>"
             sendHttp(conn: conn, status: 401, contentType: "text/html; charset=utf-8", body: Data(gate.utf8))
             return
         }
-        var extraH: [String: String] = [:]
+        authLock.lock()
+        failedAttempts.removeValue(forKey: clientIp)
+        authLock.unlock()
+
+        var extraH: [String: String] = ["Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"]
         if !queryTok.isEmpty {
-            extraH["Set-Cookie"] = "tp_mob_tok=\(expectedTok); Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000"
+            extraH["Set-Cookie"] = "tp_mob_tok=\(expectedTok); Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000"
         }
 
         if pathname == "/" || pathname == "/m" {

@@ -134,12 +134,29 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
     assert.equal(health.ok, true);
-    assert.equal(health.version, "5.4.0");
+    assert.equal(health.version, "5.5.0");
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
     });
     assert.equal(badCors.status, 403);
+
+    // Security regression: sandboxed iframe Origin: null & cross-site Sec-Fetch-Site MUST be blocked!
+    const nullOriginAtk = await fetch(`${baseUrl}/api/mobile/info`, {
+      headers: { Origin: "null" },
+    });
+    assert.equal(nullOriginAtk.status, 403);
+
+    const crossSiteCsrf = await fetch(`${baseUrl}/api/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
+      body: JSON.stringify({ webhookUrl: "https://attacker.example/steal" }),
+    });
+    assert.equal(crossSiteCsrf.status, 403);
+
+    // Security regression: SSRF to localhost / private LAN IPs in webhookUrl MUST be rejected
+    assert.equal(normalizeCustomerPushTarget("http://127.0.0.1:8080/admin").kind, "invalid");
+    assert.equal(normalizeCustomerPushTarget("http://192.168.1.1/router").kind, "invalid");
 
     const createRes = await fetch(`${baseUrl}/api/watches`, {
       method: "POST",
@@ -226,7 +243,7 @@ test("MCP stdio server v0.2.0 exposes 5 tools and completes roundtrip", async ()
       method: "initialize",
       params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
     });
-    assert.equal(init.result.serverInfo.version, "5.4.0");
+    assert.equal(init.result.serverInfo.version, "5.5.0");
 
     const resList = await sendAndWait({ jsonrpc: "2.0", id: 99, method: "resources/list", params: {} });
     assert.equal(resList.result.resources[0].uri, "replyradar://events/live");
@@ -331,26 +348,21 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
     const encrypted = encryptWebPushPayload(JSON.stringify({ title: "新消息", unreadTotal: 2 }), fakeSub);
     assert.ok(Buffer.isBuffer(encrypted) && encrypted.length > 86);
 
-    // 5. Create & run a local fixed-IP remote session and verify output + CC hook endpoint
-    const sesRes = await (
-      await fetch(`${baseUrl}/api/cc/sessions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
-        body: JSON.stringify({ agent: "shell", name: "测试远程终端" }),
-      })
-    ).json();
-    assert.equal(sesRes.ok, true);
-
-    await fetch(`${baseUrl}/api/cc/sessions/${sesRes.session.id}/send`, {
+    // 5. Security: External mobile callers CANNOT spawn raw shell or unauthorized CLI sessions (403), while local CC hook works
+    assert.equal(mobInfo.allowLanDirect, false);
+    const blockedRemoteShell = await fetch(`${baseUrl}/api/cc/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
-      body: JSON.stringify({ prompt: "echo FIXED_IP_OK" }),
+      body: JSON.stringify({ agent: "shell", name: "非法远程终端" }),
     });
+    assert.equal(blockedRemoteShell.status, 403);
 
-    await new Promise((r) => setTimeout(r, 350));
-    const ccState = await (await fetch(`${baseUrl}/api/cc/state`)).json();
-    const updatedSes = ccState.sessions.find((s) => s.id === sesRes.session.id);
-    assert.ok(updatedSes.messages.some((m) => m.text.includes("FIXED_IP_OK")));
+    const localShellAttempt = await fetch(`${baseUrl}/api/cc/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agent: "shell", name: "禁止裸Shell" }),
+    });
+    assert.equal(localShellAttempt.status, 400);
 
     const hookRes = await (
       await fetch(`${baseUrl}/api/cc/hook?event=Stop`, {

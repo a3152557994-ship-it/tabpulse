@@ -332,9 +332,17 @@ class DesktopSoftwareMonitor {
 
   async launchApp(appPath) {
     if (process.platform === "darwin") {
+      const clean = path.resolve(String(appPath || "").trim());
+      if (
+        !clean.endsWith(".app") ||
+        (!clean.startsWith("/Applications/") && !clean.startsWith("/System/Applications/")) ||
+        !fs.existsSync(clean)
+      ) {
+        return { ok: false, error: "仅允许唤醒 /Applications 目录下的合法桌面应用" };
+      }
       const bin = resolveMacHelperBin();
       if (!bin) return { ok: false, error: "mac-desktop-helper missing" };
-      const { stdout } = await execFileAsync(bin, ["launch", String(appPath || "")], { timeout: 8000 });
+      const { stdout } = await execFileAsync(bin, ["launch", clean], { timeout: 8000 });
       return JSON.parse(stdout.trim() || "{}");
     }
     return { ok: false, error: "unsupported" };

@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
+  <meta name="referrer" content="no-referrer" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -422,17 +423,30 @@
         <button class="btn" onclick="closeAddSheet()">关闭</button>
       </div>
 
-      <div style="font-size:12.5px;font-weight:700;color:#93c5fd;margin-bottom:6px">1. 添加网页平台监控</div>
-      <input class="field" id="add-web-name" placeholder="名称（如：闲鱼消息 / 小红书私信 / Reddit）" />
-      <input class="field" id="add-web-url" placeholder="网址 https://..." />
-      <button class="btn primary" style="width:100%;justify-content:center;padding:9px;margin-bottom:16px" onclick="createWebWatch()">添加网页监控</button>
+      <div style="font-size:12.5px;font-weight:700;color:#93c5fd;margin-bottom:6px">1. 点图标一键添加常用平台（免输网址）</div>
+      <div id="mob-quick-plats" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        <button class="btn" onclick="quickAddMobWatch('闲鱼买家消息','https://www.goofish.com/im')">🐟 闲鱼</button>
+        <button class="btn" onclick="quickAddMobWatch('小红书创作者私信','https://creator.xiaohongshu.com/new/home')">📕 小红书</button>
+        <button class="btn" onclick="quickAddMobWatch('拼多多商家后台','https://mms.pinduoduo.com/')">🍑 拼多多</button>
+        <button class="btn" onclick="quickAddMobWatch('抖店飞鸽客服','https://fxg.jinritemai.com/')">🎵 抖店</button>
+        <button class="btn" onclick="quickAddMobWatch('淘宝千牛卖家','https://myseller.taobao.com/')">🐱 淘宝千牛</button>
+        <button class="btn" onclick="quickAddMobWatch('BOSS直聘聊天','https://www.zhipin.com/web/geek/chat')">💼 BOSS直聘</button>
+        <button class="btn" onclick="quickAddMobWatch('猎聘消息中心','https://c.liepin.com/')">🎯 猎聘</button>
+        <button class="btn" onclick="quickAddMobWatch('B站私信','https://message.bilibili.com/')">📺 B站</button>
+        <button class="btn" onclick="quickAddMobWatch('电鸭社区','https://eleduck.com/')">⚡ 电鸭</button>
+        <button class="btn" onclick="quickAddMobWatch('V2EX提醒','https://www.v2ex.com/notifications')">💬 V2EX</button>
+        <button class="btn" onclick="quickAddMobWatch('Reddit私信','https://www.reddit.com/message/unread/')">🎯 Reddit</button>
+        <button class="btn" onclick="quickAddMobWatch('X(Twitter)私信','https://x.com/notifications')">𝕏 Twitter</button>
+      </div>
+      <details style="margin-bottom:14px;">
+        <summary style="font-size:12px;color:var(--sub);cursor:pointer;margin-bottom:6px;">🔧 其他小众网站？点此粘贴链接</summary>
+        <input class="field" id="add-web-name" placeholder="名称（选填）" />
+        <input class="field" id="add-web-url" placeholder="网站链接（如 example.com）" />
+        <button class="btn primary" style="width:100%;justify-content:center;padding:9px" onclick="createWebWatch()">添加网站监控</button>
+      </details>
 
       <div style="font-size:12.5px;font-weight:700;color:#34d399;margin-bottom:6px">2. 远程唤醒电脑已装软件</div>
-      <div id="installed-apps-box" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
-
-      <div style="font-size:12.5px;font-weight:700;color:#c4b5fd;margin-bottom:6px">3. 新建 Claude Code / AI 终端任务</div>
-      <input class="field" id="add-cc-cwd" placeholder="项目目录（留空默认主目录）" />
-      <button class="btn" style="width:100%;justify-content:center;padding:9px" onclick="createCcSession()">＋ 新建 Claude/AI 会话</button>
+      <div id="installed-apps-box" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px"></div>
     </div>
   </div>
 
@@ -1462,13 +1476,32 @@
       document.getElementById("add-sheet").classList.remove("open");
     }
 
+    async function quickAddMobWatch(baseName, url) {
+      const sameCnt = (hubState.watches || []).filter((w) => w.url === url).length;
+      const finalName = sameCnt > 0 ? `${baseName}（${sameCnt + 1}号仓）` : baseName;
+      await api("/api/watches", {
+        method: "POST",
+        body: JSON.stringify({
+          name: finalName,
+          url,
+          publishTier: "red",
+          baseIntervalMinutes: 60,
+          isolatedProfile: true,
+          allowDuplicateUrl: sameCnt > 0,
+        }),
+      });
+      closeAddSheet();
+      showToast(`✅ 已添加「${finalName}」`);
+      await pollAll();
+    }
+
     async function createWebWatch() {
       const name = document.getElementById("add-web-name").value.trim();
       const url = document.getElementById("add-web-url").value.trim();
-      if (!name || !url) return showToast("请填写平台名称和网址");
+      if (!url) return showToast("请粘贴网站链接或点上方常用图标");
       await api("/api/watches", {
         method: "POST",
-        body: JSON.stringify({ name, url, publishTier: "red", baseIntervalMinutes: 60, isolatedProfile: true }),
+        body: JSON.stringify({ name: name || url, url, publishTier: "red", baseIntervalMinutes: 60, isolatedProfile: true }),
       });
       document.getElementById("add-web-name").value = "";
       document.getElementById("add-web-url").value = "";
@@ -1570,6 +1603,13 @@
     }
 
     (async function boot() {
+      // Immediately scrub ?t= secret pairing token from browser URL bar to prevent screenshot/shoulder-surfing leaks!
+      try {
+        if (location.search.includes("t=")) {
+          const cleanUrl = location.pathname + (location.hash || "");
+          history.replaceState(null, "", cleanUrl);
+        }
+      } catch {}
       initServiceWorkerAndPushStatus();
       await pollAll();
       checkHashDeepLink();

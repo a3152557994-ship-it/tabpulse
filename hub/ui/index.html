@@ -757,10 +757,9 @@
         <header class="pane-header">
           <div class="pane-title-wrap">
             <h2 class="pane-title" id="hdr-desk-title">电脑桌面软件看护</h2>
-            <span style="font-size:12px;color:var(--muted);" id="hdr-desk-sub">程序坞红点与通知纯文字同步 · 零注入不伤号</span>
+            <span style="font-size:12px;color:var(--muted);" id="hdr-desk-sub">免复制链接 · 微信/千牛/飞书与日常浏览器已开页面自动识别</span>
           </div>
           <div class="pane-actions">
-            <button class="sm" onclick="openBrowserExtensionFolder()" title="免重新登录：打开配套 Chrome/Edge 扩展目录">🧩 接入日常浏览器</button>
             <button class="sm" onclick="refreshDesktopMonitorView()">↻ 刷新状态</button>
             <button class="primary sm" onclick="openMobileModal()">📲 手机随身收消息</button>
           </div>
@@ -931,56 +930,50 @@
     </div>
   </div>
 
-  <!-- MODAL: ADD WATCH -->
+  <!-- MODAL: ADD WATCH (ZERO-URL FOOLPROOF ICON DIRECTORY) -->
   <div class="modal-backdrop" id="modal-add" onclick="if(event.target===this)closeModals()">
-    <div class="modal" style="max-width:520px;">
-      <h2 id="add-modal-title">添加看护平台</h2>
-      <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="add-modal-desc">
-        添加后点卡片「打开会话」在独立防串号仓登录一次即可，支持同站多开、发图片附件，零刷页不伤号。
+    <div class="modal" style="max-width:680px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px;">
+        <h2 id="add-modal-title" style="margin:0;">➕ 点图标一键添加平台（免输网址 · 自动防串号）</h2>
+        <button class="sm" onclick="closeModals()">✕ 关闭</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;" id="add-modal-desc">
+        不用找网址！直接点下方平台图标即可添加并打开登录；<strong>同一个图标再点一次，会自动开第 2 个独立防串号副店！</strong>
       </p>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border:1px solid var(--border);border-radius:9px;margin-bottom:10px;font-size:12px;color:#475569;">
-        <span>💡 日常 Chrome/Edge 已登录的招聘与消息页会自动出现在「电脑软件」，无需重复扫码。</span>
-        <button class="sm" type="button" onclick="openBrowserExtensionFolder()" style="flex-shrink:0;">🧩 浏览器插件目录</button>
+
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <input id="quick-plat-search" oninput="renderQuickPlatformGrid()" placeholder="🔍 搜平台名字（如：闲鱼、拼多多、抖店、BOSS、B站、小红书...）" style="flex:1;min-width:220px;padding:8.5px 12px;border:1.5px solid #93c5fd;border-radius:9px;font-size:13px;background:#f8fbff;" />
       </div>
-      <div class="form-row">
-        <label id="lbl-name">平台或店铺名称</label>
-        <input id="f-name" placeholder="例如：闲鱼买家咨询 / 小红书私信 / 电鸭社区" />
+
+      <div class="seg-bar" id="quick-plat-tabs" style="margin-bottom:10px;width:100%;justify-content:flex-start;">
+        <button type="button" class="seg-btn active" onclick="setQuickPlatCat('hot', this)">🔥 热门必装</button>
+        <button type="button" class="seg-btn" onclick="setQuickPlatCat('shop', this)">🛒 电商卖货</button>
+        <button type="button" class="seg-btn" onclick="setQuickPlatCat('job', this)">💼 招聘接单</button>
+        <button type="button" class="seg-btn" onclick="setQuickPlatCat('social', this)">📺 自媒体社区</button>
+        <button type="button" class="seg-btn" onclick="setQuickPlatCat('mail', this)">✉️ 邮箱与AI</button>
+        <button type="button" class="seg-btn" onclick="setQuickPlatCat('all', this)">全部 (38)</button>
       </div>
-      <div class="form-row">
-        <label id="lbl-url">消息页网址</label>
-        <input id="f-url" placeholder="https://..." />
-      </div>
-      <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div>
-          <label id="lbl-cat">所属分组</label>
-          <select id="f-cat">
-            <option value="主力阵地" id="opt-cat-2">主力阵地（店铺与自媒体）</option>
-            <option value="接单外包" id="opt-cat-1">接单外包（客户询盘）</option>
-            <option value="开发者商店" id="opt-cat-3">开发者商店（审核后台）</option>
-            <option value="长尾蹲守" id="opt-cat-4">长尾蹲守（其他网站）</option>
-          </select>
+
+      <div id="quick-plat-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:8px;max-height:310px;overflow-y:auto;padding:2px;"></div>
+
+      <details style="margin-top:12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:8px 12px;">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;user-select:none;">🔧 没在上面列表里？点此粘贴任意小众网站链接添加</summary>
+        <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1.3fr auto;gap:8px;align-items:end;">
+          <div>
+            <label style="display:block;font-size:11.5px;font-weight:700;color:#475569;margin-bottom:3px;" id="lbl-name">备注名称（可不填）</label>
+            <input id="f-name" placeholder="自动识别网站名" style="width:100%;padding:7px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:12.5px;" />
+          </div>
+          <div>
+            <label style="display:block;font-size:11.5px;font-weight:700;color:#475569;margin-bottom:3px;" id="lbl-url">网站地址</label>
+            <input id="f-url" placeholder="如：example.com 或粘贴完整网址" style="width:100%;padding:7px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:12.5px;" onkeydown="if(event.key==='Enter')submitWatch()" />
+          </div>
+          <button class="primary sm" style="height:33px;" onclick="submitWatch()" id="btn-save-add">添加</button>
         </div>
-        <div>
-          <label id="lbl-interval">低频巡检间隔（分钟）</label>
-          <input id="f-interval" type="number" value="60" min="15" />
-        </div>
-      </div>
-      <div class="form-row">
-        <label id="lbl-tier">安全看护模式</label>
-        <select id="f-tier">
-          <option value="red" id="opt-tier-red">🛡️ 零刷页常驻监听（最稳防封：适合闲鱼/小红书/社交平台）</option>
-          <option value="yellow" id="opt-tier-yellow">🟡 温和低频看护（适合外包社区/论坛）</option>
-          <option value="green" id="opt-tier-green">🟢 常规后台看护（适合应用商店与工作台）</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <label id="lbl-ctx">备注备忘（可选）</label>
-        <input id="f-ctx" placeholder="例如：主号店铺私信，报价 39 元起" />
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-        <button onclick="closeModals()" id="btn-cancel-add">取消</button>
-        <button class="primary" onclick="submitWatch()" id="btn-save-add">保存添加</button>
-      </div>
+        <input type="hidden" id="f-cat" value="主力阵地" />
+        <input type="hidden" id="f-interval" value="60" />
+        <input type="hidden" id="f-tier" value="red" />
+        <input type="hidden" id="f-ctx" value="" />
+      </details>
     </div>
   </div>
 
@@ -1117,28 +1110,31 @@
 
   <!-- MODAL: MOBILE POCKET CONSOLE & QR PAIRING -->
   <div class="modal-backdrop" id="modal-mobile" onclick="if(event.target===this)closeModals()">
-    <div class="modal" style="max-width:550px;">
-      <h2 id="mob-title">📲 手机随身收件箱（纯文字红点直连）</h2>
-      <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="mob-desc">
-        手机扫码即可打开随身收件箱并「添加到主屏幕」。来新消息手机响铃亮红点，点进对应红点即可直接看纯文字聊天并由家里电脑固定网络代发回复！
-      </p>
+    <div class="modal" style="max-width:570px;">
+      <h2 id="mob-title">📲 手机随身收件箱（加密配对 · 防窃听保护）</h2>
+      <div style="font-size:12px;color:#065f46;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:9px;padding:7px 11px;margin-bottom:10px;">
+        🛡️ <strong>防网络攻击保护已开启</strong>：默认仅监听本机回环（不在公共咖啡厅/酒店 Wi-Fi 暴露端口），配对密钥自动隐身防截屏泄露，连续输错 8 次自动封禁攻击 IP。
+      </div>
       <div style="display:grid;grid-template-columns:206px 1fr;gap:14px;align-items:center;background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;">
         <div id="mob-qr-box" style="width:198px;height:198px;background:#fff;border-radius:10px;border:1px solid var(--border);display:grid;place-items:center;">
           ⏳ 生成中...
         </div>
         <div style="min-width:0;">
-          <div style="margin-bottom:9px;">
-            <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:3px;">🏠 同 Wi-Fi 局域网直连：</div>
-            <input id="mob-lan-url" readonly onclick="this.select()" style="width:100%;padding:6.5px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:11.5px;font-family:monospace;background:#fff;" />
-          </div>
           <div style="margin-bottom:10px;">
-            <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:3px;">🔒 出门 4G/5G 永久固定书签（电脑重启/断网重连永不失效）：</div>
-            <input id="mob-tun-url" readonly onclick="this.select()" placeholder="点击下方按钮开启出门穿透与永久书签..." style="width:100%;padding:6.5px 9px;border:1px solid #bfdbfe;border-radius:7px;font-size:11.5px;font-family:monospace;background:#eff6ff;" />
+            <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:3px;">🔒 出门/全网 HTTPS 加密书签（推荐 · 重启永不失效）：</div>
+            <input id="mob-tun-url" readonly onclick="this.select()" placeholder="点击下方「开启加密穿透」生成手机专属二维码..." style="width:100%;padding:6.5px 9px;border:1px solid #bfdbfe;border-radius:7px;font-size:11.5px;font-family:monospace;background:#eff6ff;" />
+          </div>
+          <div style="margin-bottom:9px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#334155;margin-bottom:3px;cursor:pointer;">
+              <input type="checkbox" id="mob-allow-lan" onchange="toggleLanDirect(this.checked)" />
+              <span>🏠 允许自家 Wi-Fi 局域网直连（公共 Wi-Fi 勿勾）</span>
+            </label>
+            <input id="mob-lan-url" readonly onclick="this.select()" style="width:100%;padding:6px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:11px;font-family:monospace;background:#fff;color:#64748b;" />
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            <button class="sm primary" id="btn-toggle-tunnel" onclick="toggleMobileTunnel()">🌐 开启出门 4G/5G 穿透</button>
+            <button class="sm primary" id="btn-toggle-tunnel" onclick="toggleMobileTunnel()">🔒 开启加密穿透</button>
             <button class="sm" onclick="copyPrimaryMobileUrl()">📋 复制链接</button>
-            <button class="sm danger" onclick="resetMobileToken()">重置密钥</button>
+            <button class="sm danger" onclick="emergencyLockMobile()" title="立即关闭外网与局域网连接，并让旧手机二维码立刻作废">🚨 一键断连换码</button>
             <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:#047857;font-weight:700;cursor:pointer;margin-left:2px;" title="开启后阻止电脑自动睡眠断网">
               <input type="checkbox" id="mob-prevent-sleep" onchange="togglePreventSleep(this.checked)" />
               <span>☕ 防休眠</span>
@@ -1147,7 +1143,7 @@
         </div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;">
-        <span style="font-size:11.5px;color:var(--muted);">💡 锁屏防漏信：点左下角「⚙️ 软件设置」填入免费 PushPlus 微信口令或 Bark，锁屏熄屏也秒响。</span>
+        <span style="font-size:11.5px;color:var(--muted);">💡 只收提醒不远程回信？点左下角「⚙️ 设置」填免费 PushPlus 口令即可（0 端口开放最省心）。</span>
         <button onclick="closeModals()">关闭</button>
       </div>
     </div>
@@ -1285,6 +1281,16 @@
       const s = `${name} ${url}`.toLowerCase();
       if (s.includes("闲鱼") || s.includes("goofish")) return { ico: "🐟", bg: "linear-gradient(135deg,#f59e0b,#ea580c)" };
       if (s.includes("小红书") || s.includes("xiaohongshu")) return { ico: "📕", bg: "linear-gradient(135deg,#ef4444,#e11d48)" };
+      if (s.includes("拼多多") || s.includes("pinduoduo")) return { ico: "🍑", bg: "linear-gradient(135deg,#ef4444,#dc2626)" };
+      if (s.includes("抖店") || s.includes("抖音") || s.includes("jinritemai") || s.includes("douyin") || s.includes("tiktok")) return { ico: "🎵", bg: "linear-gradient(135deg,#111827,#db2777)" };
+      if (s.includes("淘宝") || s.includes("千牛") || s.includes("taobao")) return { ico: "🐱", bg: "linear-gradient(135deg,#f97316,#ea580c)" };
+      if (s.includes("boss") || s.includes("直聘") || s.includes("zhipin")) return { ico: "💼", bg: "linear-gradient(135deg,#0d9488,#0f766e)" };
+      if (s.includes("猎聘") || s.includes("liepin") || s.includes("智联") || s.includes("zhaopin")) return { ico: "🎯", bg: "linear-gradient(135deg,#2563eb,#1d4ed8)" };
+      if (s.includes("b站") || s.includes("bilibili") || s.includes("哔哩")) return { ico: "📺", bg: "linear-gradient(135deg,#ec4899,#db2777)" };
+      if (s.includes("快手") || s.includes("kuaishou")) return { ico: "⚡", bg: "linear-gradient(135deg,#f97316,#dc2626)" };
+      if (s.includes("虾皮") || s.includes("shopee")) return { ico: "🧡", bg: "linear-gradient(135deg,#ea580c,#c2410c)" };
+      if (s.includes("亚马逊") || s.includes("amazon")) return { ico: "📦", bg: "linear-gradient(135deg,#f59e0b,#b45309)" };
+      if (s.includes("微博") || s.includes("weibo")) return { ico: "👁️", bg: "linear-gradient(135deg,#ef4444,#b91c1c)" };
       if (s.includes("电鸭") || s.includes("eleduck")) return { ico: "⚡", bg: "linear-gradient(135deg,#4f46e5,#2563eb)" };
       if (s.includes("v2ex")) return { ico: "V2", bg: "linear-gradient(135deg,#334155,#0f172a)" };
       if (s.includes("知乎") || s.includes("zhihu")) return { ico: "知", bg: "linear-gradient(135deg,#2563eb,#1d4ed8)" };
@@ -1293,9 +1299,11 @@
       if (s.includes("apple") || s.includes("app store") || s.includes("appstore")) return { ico: "", bg: "linear-gradient(135deg,#0284c7,#2563eb)" };
       if (s.includes("makerworld") || s.includes("拓竹")) return { ico: "🧩", bg: "linear-gradient(135deg,#059669,#047857)" };
       if (s.includes("reddit")) return { ico: "🎯", bg: "linear-gradient(135deg,#ea580c,#dc2626)" };
-      if (s.includes("upwork")) return { ico: "💼", bg: "linear-gradient(135deg,#16a34a,#15803d)" };
+      if (s.includes("upwork") || s.includes("fiverr")) return { ico: "💼", bg: "linear-gradient(135deg,#16a34a,#15803d)" };
       if (s.includes("product hunt") || s.includes("producthunt")) return { ico: "🚀", bg: "linear-gradient(135deg,#ea580c,#db2777)" };
-      if (s.includes("微信") || s.includes("wechat")) return { ico: "💬", bg: "linear-gradient(135deg,#10b981,#059669)" };
+      if (s.includes("微信") || s.includes("wechat") || s.includes("视频号") || s.includes("公众号")) return { ico: "💬", bg: "linear-gradient(135deg,#10b981,#059669)" };
+      if (s.includes("邮箱") || s.includes("gmail") || s.includes("mail.")) return { ico: "✉️", bg: "linear-gradient(135deg,#0284c7,#1d4ed8)" };
+      if (s.includes("claude") || s.includes("chatgpt") || s.includes("gemini")) return { ico: "🤖", bg: "linear-gradient(135deg,#7c3aed,#4f46e5)" };
       const ch = String(name || "信").trim()[0] || "信";
       return { ico: ch.toUpperCase(), bg: "linear-gradient(135deg,#2563eb,#4f46e5)" };
     }
@@ -1409,6 +1417,7 @@
     }
 
     function isProUnlocked() {
+      if (window.__TABPULSE_MAS_MODE) return true;
       return Boolean(appState.license && appState.license.valid);
     }
 
@@ -1429,9 +1438,14 @@
       }
 
       const upgEl = document.getElementById("btn-upgrade");
-      upgEl.textContent = lic.valid
-        ? (en ? "💎 Pro" : "💎 已激活")
-        : (en ? "💎 Upgrade" : "💎 解锁专业版");
+      if (window.__TABPULSE_MAS_MODE) {
+        upgEl.style.display = "none";
+      } else {
+        upgEl.style.display = "inline-block";
+        upgEl.textContent = lic.valid
+          ? (en ? "💎 Pro" : "💎 已激活")
+          : (en ? "💎 Upgrade" : "💎 解锁专业版");
+      }
 
       renderSidebarQuickChannels();
       renderCatFilterBar();
@@ -2047,20 +2061,37 @@
         return;
       }
       lastMobileInfo = info;
-      const qrTarget = info.primaryUrl || info.permanentMobileUrl || info.tunnelMobileUrl || info.lanUrl || "";
+      const allowLan = Boolean(info.allowLanDirect);
+      const qrTarget = info.tunnelMobileUrl || (allowLan ? info.lanUrl : "") || info.primaryUrl || "";
       document.getElementById("mob-qr-box").innerHTML = info.qrSvg || clientRenderQrSvg(qrTarget, 194);
-      document.getElementById("mob-lan-url").value = info.lanUrl || "";
+      const lanChk = document.getElementById("mob-allow-lan");
+      if (lanChk) lanChk.checked = allowLan;
+      document.getElementById("mob-lan-url").value = allowLan
+        ? (info.lanUrl || "")
+        : "🔒 已关闭局域网端口暴露（防公共Wi-Fi攻击 · 勾选上方可对自家Wi-Fi开启）";
       document.getElementById("mob-tun-url").value = info.permanentMobileUrl || info.tunnelMobileUrl || "";
       const mobSleepChk = document.getElementById("mob-prevent-sleep");
       if (mobSleepChk) mobSleepChk.checked = Boolean(info.preventSleep ?? appState.settings?.preventSleep);
       const tunBtn = document.getElementById("btn-toggle-tunnel");
       if (info.status === "running" && info.tunnelMobileUrl) {
-        tunBtn.textContent = "🟢 永久书签穿透已开（点此关闭）";
+        tunBtn.textContent = "🟢 加密书签已开（点此关闭）";
         tunBtn.classList.remove("primary");
       } else {
-        tunBtn.textContent = "🌐 开启出门 4G/5G 穿透";
+        tunBtn.textContent = "🔒 开启加密穿透";
         tunBtn.classList.add("primary");
       }
+    }
+
+    async function toggleLanDirect(enabled) {
+      const info = await apiCall("POST", "/api/mobile/tunnel", { action: "toggleLan", allowLanDirect: Boolean(enabled) });
+      applyMobilePairingUi(info);
+      showToast(enabled ? "🏠 已允许自家 Wi-Fi 局域网直连（离开家去公共场所请及时关掉）" : "🛡️ 已关闭局域网暴露，仅保留安全加密通道");
+    }
+
+    async function emergencyLockMobile() {
+      const info = await apiCall("POST", "/api/mobile/tunnel", { action: "emergencyLock" });
+      applyMobilePairingUi(info);
+      showToast("🚨 已一键断开所有手机外部连接，旧二维码已彻底作废！");
     }
 
     async function loadMobilePairingInfo() {
@@ -2478,39 +2509,176 @@
       showToast("✅ 已复制破冰回复话术");
     }
 
-    function openAddModal() {
+    const QUICK_PLATFORM_CATALOG = [
+      // 热门 & 电商卖货
+      { g: "shop", hot: true, zh: "闲鱼买家消息", en: "Goofish (Xianyu) DMs", url: "https://www.goofish.com/im", cat: "主力阵地", tier: "red", kw: "xianyu 闲鱼 卖货 二手" },
+      { g: "shop", hot: true, zh: "小红书创作者私信", en: "Xiaohongshu Creator", url: "https://creator.xiaohongshu.com/new/home", cat: "主力阵地", tier: "red", kw: "xhs 小红书 笔记 创作者" },
+      { g: "shop", hot: true, zh: "小红书网页版通知", en: "Xiaohongshu Web", url: "https://www.xiaohongshu.com/notification", cat: "主力阵地", tier: "red", kw: "xhs 小红书 评论 私信" },
+      { g: "shop", hot: true, zh: "抖店飞鸽客服", en: "Douyin Shop Feige", url: "https://fxg.jinritemai.com/", cat: "主力阵地", tier: "red", kw: "抖店 飞鸽 抖音小店 客服" },
+      { g: "shop", hot: true, zh: "拼多多商家后台", en: "Pinduoduo Merchant", url: "https://mms.pinduoduo.com/", cat: "主力阵地", tier: "red", kw: "pdd 拼多多 多多客服 商家" },
+      { g: "shop", hot: true, zh: "淘宝千牛卖家中心", en: "Taobao Seller Center", url: "https://myseller.taobao.com/", cat: "主力阵地", tier: "red", kw: "淘宝 天猫 千牛 旺旺" },
+      { g: "shop", hot: false, zh: "抖音创作者私信", en: "Douyin Creator Chat", url: "https://creator.douyin.com/creator-micro/data/following/chat", cat: "主力阵地", tier: "red", kw: "抖音 创作者 私信" },
+      { g: "shop", hot: true, zh: "微信视频号助手", en: "WeChat Channels", url: "https://channels.weixin.qq.com/", cat: "主力阵地", tier: "red", kw: "微信 视频号 小店 私信" },
+      { g: "shop", hot: true, zh: "微信公众号后台", en: "WeChat Official Account", url: "https://mp.weixin.qq.com/", cat: "主力阵地", tier: "red", kw: "微信 公众号 留言 后台" },
+      { g: "shop", hot: false, zh: "快手创作者服务", en: "Kuaishou Creator", url: "https://cp.kuaishou.com/", cat: "主力阵地", tier: "red", kw: "快手 小店 私信" },
+      { g: "shop", hot: false, zh: "微店卖家版网页", en: "Weidian Seller", url: "https://d.weidian.com/", cat: "主力阵地", tier: "red", kw: "微店 卖家 客服" },
+      { g: "shop", hot: false, zh: "虾皮 Shopee 卖家", en: "Shopee Seller Center", url: "https://seller.shopee.cn/", cat: "主力阵地", tier: "red", kw: "shopee 虾皮 跨境 聊聊" },
+      { g: "shop", hot: false, zh: "亚马逊卖家中心", en: "Amazon Seller Central", url: "https://sellercentral.amazon.com/", cat: "主力阵地", tier: "red", kw: "amazon 亚马逊 跨境 买家消息" },
+      { g: "shop", hot: false, zh: "TikTok Shop 卖家", en: "TikTok Shop Seller", url: "https://seller.tiktokglobalshop.com/", cat: "主力阵地", tier: "red", kw: "tiktok 跨境 小店" },
+      // 招聘找活与外包接单
+      { g: "job", hot: true, zh: "BOSS直聘聊天", en: "BOSS Zhipin Chat", url: "https://www.zhipin.com/web/geek/chat", cat: "接单外包", tier: "red", kw: "boss 直聘 招聘 找工作 兼职" },
+      { g: "job", hot: true, zh: "猎聘消息中心", en: "Liepin Messages", url: "https://c.liepin.com/", cat: "接单外包", tier: "red", kw: "猎聘 猎头 招聘" },
+      { g: "job", hot: false, zh: "智联招聘消息", en: "Zhaopin Inbox", url: "https://i.zhaopin.com/", cat: "接单外包", tier: "yellow", kw: "智联 招聘 简历" },
+      { g: "job", hot: true, zh: "电鸭远程社区", en: "Eleduck Remote Jobs", url: "https://eleduck.com/", cat: "接单外包", tier: "yellow", kw: "电鸭 远程 兼职 外包 独立开发" },
+      { g: "job", hot: true, zh: "V2EX 未读提醒", en: "V2EX Notifications", url: "https://www.v2ex.com/notifications", cat: "接单外包", tier: "yellow", kw: "v2ex 程序员 外包 回复" },
+      { g: "job", hot: false, zh: "58同城消息", en: "58.com Messages", url: "https://my.58.com/", cat: "接单外包", tier: "yellow", kw: "58同城 本地 服务" },
+      { g: "job", hot: true, zh: "Upwork 客户消息", en: "Upwork Messages", url: "https://www.upwork.com/ab/messages/rooms/", cat: "接单外包", tier: "red", kw: "upwork 海外 外包 自由职业" },
+      { g: "job", hot: false, zh: "Fiverr 买家私信", en: "Fiverr Inbox", url: "https://www.fiverr.com/inbox", cat: "接单外包", tier: "red", kw: "fiverr 出海 接单" },
+      { g: "job", hot: true, zh: "Reddit 买家私信", en: "Reddit Unread Inbox", url: "https://www.reddit.com/message/unread/", cat: "接单外包", tier: "red", kw: "reddit 海外 社区 私信" },
+      { g: "job", hot: false, zh: "Hacker News", en: "Hacker News", url: "https://news.ycombinator.com/", cat: "接单外包", tier: "green", kw: "hn hackernews 出海" },
+      // 自媒体与开发者社区
+      { g: "social", hot: true, zh: "B站创作中心私信", en: "Bilibili Messages", url: "https://message.bilibili.com/", cat: "主力阵地", tier: "red", kw: "b站 bilibili 哔哩哔哩 up主 私信" },
+      { g: "social", hot: true, zh: "知乎私信与商单", en: "Zhihu Notifications", url: "https://www.zhihu.com/notifications", cat: "长尾蹲守", tier: "red", kw: "知乎 盐选 私信 评论" },
+      { g: "social", hot: false, zh: "微博消息箱", en: "Weibo Messages", url: "https://weibo.com/messages", cat: "长尾蹲守", tier: "red", kw: "微博 新浪 私信" },
+      { g: "social", hot: false, zh: "豆瓣提醒与私信", en: "Douban Notifications", url: "https://www.douban.com/notification/", cat: "长尾蹲守", tier: "yellow", kw: "豆瓣 小组 豆邮" },
+      { g: "social", hot: true, zh: "X (Twitter) 私信", en: "X (Twitter) Notifications", url: "https://x.com/notifications", cat: "主力阵地", tier: "red", kw: "twitter x 推特 私信 出海" },
+      { g: "social", hot: true, zh: "GitHub 项目通知", en: "GitHub Notifications", url: "https://github.com/notifications", cat: "开发者商店", tier: "green", kw: "github 开源 issue pr" },
+      { g: "social", hot: false, zh: "Product Hunt", en: "Product Hunt", url: "https://www.producthunt.com/my/notifications", cat: "开发者商店", tier: "yellow", kw: "producthunt 新品 发布" },
+      { g: "social", hot: false, zh: "拓竹 MakerWorld", en: "MakerWorld Studio", url: "https://makerworld.com.cn/", cat: "开发者商店", tier: "yellow", kw: "拓竹 3d打印 makerworld" },
+      { g: "social", hot: false, zh: "Apple 开发者后台", en: "App Store Connect", url: "https://appstoreconnect.apple.com/apps", cat: "开发者商店", tier: "green", kw: "apple 苹果 上架 审核" },
+      // 常用邮箱与网页 AI
+      { g: "mail", hot: false, zh: "QQ邮箱网页版", en: "QQ Mail", url: "https://mail.qq.com/", cat: "长尾蹲守", tier: "green", kw: "qq邮箱 邮件 腾讯" },
+      { g: "mail", hot: false, zh: "网易163邮箱", en: "NetEase 163 Mail", url: "https://mail.163.com/", cat: "长尾蹲守", tier: "green", kw: "163 126 网易 邮箱" },
+      { g: "mail", hot: false, zh: "Gmail 谷歌邮箱", en: "Gmail Inbox", url: "https://mail.google.com/", cat: "长尾蹲守", tier: "green", kw: "gmail google 邮箱" },
+      { g: "mail", hot: false, zh: "Claude 网页版", en: "Claude AI", url: "https://claude.ai/", cat: "开发者商店", tier: "red", kw: "claude anthropic ai" },
+      { g: "mail", hot: false, zh: "ChatGPT 网页版", en: "ChatGPT", url: "https://chatgpt.com/", cat: "开发者商店", tier: "red", kw: "chatgpt openai gpt" },
+    ];
+
+    let quickPlatActiveCat = "hot";
+
+    function setQuickPlatCat(cat, btnEl) {
+      quickPlatActiveCat = cat;
+      document.querySelectorAll("#quick-plat-tabs .seg-btn").forEach((b) => b.classList.remove("active"));
+      if (btnEl) btnEl.classList.add("active");
+      renderQuickPlatformGrid();
+    }
+
+    function renderQuickPlatformGrid() {
       const en = currentLang === "en";
+      const grid = document.getElementById("quick-plat-grid");
+      if (!grid) return;
+      const q = (document.getElementById("quick-plat-search")?.value || "").trim().toLowerCase();
+      const existingWatches = appState.watches || [];
+
+      const filtered = QUICK_PLATFORM_CATALOG.filter((p) => {
+        if (q) {
+          return `${p.zh} ${p.en} ${p.kw} ${p.url}`.toLowerCase().includes(q);
+        }
+        if (quickPlatActiveCat === "hot") return p.hot;
+        if (quickPlatActiveCat === "all") return true;
+        return p.g === quickPlatActiveCat;
+      });
+
+      if (!filtered.length) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--muted);font-size:12.5px;">未搜到该名字，可展开下方「🔧 粘贴任意小众网站链接」直接添加</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map((p, idx) => {
+        const b = getBrandStyle(p.zh, p.url);
+        const countAdded = existingWatches.filter((w) => w.url === p.url).length;
+        const label = en ? p.en : p.zh;
+        const subTag = countAdded > 0
+          ? (en ? `Added (${countAdded}) · Click for #${countAdded + 1}` : `已加${countAdded}个 · 再点开${countAdded + 1}号仓`)
+          : (en ? "+ 1-Click Add" : "＋ 点此一键添加");
+        return `
+          <button type="button" onclick="quickPickPlatform('${escapeAttr(p.url)}')" style="display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;border:1px solid ${countAdded > 0 ? '#93c5fd' : 'var(--border)'};background:${countAdded > 0 ? '#eff6ff' : '#fff'};text-align:left;width:100%;cursor:pointer;">
+            <span style="width:32px;height:32px;border-radius:8px;background:${b.bg};color:#fff;display:grid;place-items:center;font-size:15px;font-weight:800;flex-shrink:0;">${escapeHtml(b.ico)}</span>
+            <span style="min-width:0;flex:1;">
+              <div style="font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(label)}</div>
+              <div style="font-size:10.5px;color:${countAdded > 0 ? '#1d4ed8' : 'var(--muted)'};margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(subTag)}</div>
+            </span>
+          </button>
+        `;
+      }).join("");
+    }
+
+    async function quickPickPlatform(targetUrl) {
+      const en = currentLang === "en";
+      const item = QUICK_PLATFORM_CATALOG.find((x) => x.url === targetUrl);
+      if (!item) return;
       if (!isProUnlocked() && (appState.watches || []).length >= 2) {
-        const priceZh = window.__TABPULSE_MAS_MODE ? "¥28" : "¥39";
+        closeModals();
         openPaywallModal(
           en
-            ? "Free tier watches up to 2 platforms. Unlock Pro ($14.99 Lifetime) for unlimited platforms!"
-            : `免费版支持同时看护 2 个平台。升级专业版（${priceZh} 永久买断）即可解锁无限个平台！`
+            ? "Free tier watches up to 2 accounts. Unlock Pro ($14.99 Lifetime) for unlimited accounts!"
+            : "免费版支持同时看护 2 个账号。升级专业版（¥39 永久买断）即可解锁无限平台与同站无限多开！"
         );
         return;
       }
+      const sameCount = (appState.watches || []).filter((w) => w.url === item.url).length;
+      const baseName = en ? item.en : item.zh;
+      const finalName = sameCount === 0
+        ? baseName
+        : (en ? `${baseName} (#${sameCount + 1})` : `${baseName}（${sameCount + 1}号独立仓）`);
+
+      closeModals();
+      const res = await apiCall("POST", "/api/watches", {
+        name: finalName,
+        url: item.url,
+        category: item.cat,
+        baseIntervalMinutes: 60,
+        publishTier: item.tier,
+        isolatedProfile: true,
+        allowDuplicateUrl: sameCount > 0,
+        contextSummary: sameCount > 0 ? "同平台独立防串号多开仓" : "零刷页静默看护",
+      });
+      await refreshState();
+      showToast(en ? `✅ Added ${finalName}! Opening sign-in...` : `✅ 已一键添加「${finalName}」，正在打开登录页...`);
+      if (res && res.watch) {
+        openSiteLogin(res.watch.url, res.watch.name, res.watch.id, res.watch.profileUuid || "", true);
+      }
+    }
+
+    function openAddModal() {
+      const en = currentLang === "en";
+      if (!isProUnlocked() && (appState.watches || []).length >= 2) {
+        openPaywallModal(
+          en
+            ? "Free tier watches up to 2 platforms. Unlock Pro ($14.99 Lifetime) for unlimited platforms!"
+            : "免费版支持同时看护 2 个平台。升级专业版（¥39 永久买断）即可解锁无限个平台！"
+        );
+        return;
+      }
+      const sInp = document.getElementById("quick-plat-search");
+      if (sInp) sInp.value = "";
+      renderQuickPlatformGrid();
       document.getElementById("modal-add").classList.add("open");
+      setTimeout(() => sInp?.focus(), 60);
     }
 
     async function submitWatch() {
       const en = currentLang === "en";
       const name = document.getElementById("f-name").value.trim();
       const url = document.getElementById("f-url").value.trim();
-      if (!url) { showToast(en ? "Please enter a URL" : "请填写消息页网址"); return; }
-      await apiCall("POST", "/api/watches", {
+      if (!url) { showToast(en ? "Please paste a website link" : "请先粘贴网站链接，或直接点击上方平台图标"); return; }
+      const res = await apiCall("POST", "/api/watches", {
         name: name || cleanHostname(url),
         url,
-        category: document.getElementById("f-cat").value,
-        baseIntervalMinutes: Number(document.getElementById("f-interval").value) || 60,
-        publishTier: document.getElementById("f-tier").value,
-        contextSummary: document.getElementById("f-ctx").value.trim(),
+        category: document.getElementById("f-cat")?.value || "主力阵地",
+        baseIntervalMinutes: 60,
+        publishTier: "red",
+        isolatedProfile: true,
+        contextSummary: "独立防串号静默看护",
       });
       document.getElementById("f-name").value = "";
       document.getElementById("f-url").value = "";
-      document.getElementById("f-ctx").value = "";
       closeModals();
       await refreshState();
-      showToast(en ? "Added! Click 'Open Chat' once to sign in." : "✅ 添加成功！点卡片「打开会话」登录一次即可");
+      showToast(en ? "Added! Opening chat..." : "✅ 添加成功！正在为您打开登录...");
+      if (res && res.watch) {
+        openSiteLogin(res.watch.url, res.watch.name, res.watch.id, res.watch.profileUuid || "", true);
+      }
     }
 
     function openPaywallModal(reasonText) {

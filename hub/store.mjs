@@ -79,7 +79,7 @@ const DEFAULT_QUICK_REPLIES = DEFAULT_QUICK_REPLIES_RAW.map(normalizeQuickReply)
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "5.4.0",
+    version: "5.5.0",
     extensionHeartbeatAt: null,
     license: null,
     mobileToken: crypto.randomBytes(24).toString("base64url"),
@@ -93,6 +93,8 @@ function makeDefaultState(now = new Date()) {
       lang: "zh",
       preventSleep: false,
       tunnelAutoStart: false,
+      allowLanDirect: false,
+      allowRemoteAiCli: false,
     },
     quickReplies: DEFAULT_QUICK_REPLIES,
     watches: createDefaultWatches(now),
@@ -248,6 +250,10 @@ export function updateSettings(patch = {}, nowDate = new Date()) {
       patch.preventSleep !== undefined ? Boolean(patch.preventSleep) : Boolean(current.preventSleep),
     tunnelAutoStart:
       patch.tunnelAutoStart !== undefined ? Boolean(patch.tunnelAutoStart) : Boolean(current.tunnelAutoStart),
+    allowLanDirect:
+      patch.allowLanDirect !== undefined ? Boolean(patch.allowLanDirect) : Boolean(current.allowLanDirect),
+    allowRemoteAiCli:
+      patch.allowRemoteAiCli !== undefined ? Boolean(patch.allowRemoteAiCli) : Boolean(current.allowRemoteAiCli),
   };
   saveState(state);
   return state.settings;
