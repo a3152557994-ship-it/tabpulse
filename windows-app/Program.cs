@@ -1,6 +1,10 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Net;
 using System.Net.Http;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -12,6 +16,24 @@ using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Signers;
 
 namespace TabPulseWin;
+
+internal static class WinPowerKeeper
+{
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern uint SetThreadExecutionState(uint esFlags);
+
+    private const uint ES_CONTINUOUS = 0x80000000;
+    private const uint ES_SYSTEM_REQUIRED = 0x00000001;
+
+    public static void ApplyPreventSleep(bool enable)
+    {
+        try
+        {
+            SetThreadExecutionState(enable ? (ES_CONTINUOUS | ES_SYSTEM_REQUIRED) : ES_CONTINUOUS);
+        }
+        catch { }
+    }
+}
 
 internal static class LicenseCheck
 {
@@ -103,6 +125,14 @@ internal sealed class MainDashboardForm : Form
     private readonly string _appRoot;
     private readonly string _stateFile;
     private readonly Dictionary<string, Form> _workspaceForms = new();
+    private readonly Dictionary<string, WebView2> _workspaceWebViews = new();
+    private TcpListener? _mobileListener;
+    private int _mobilePort = 17890;
+    private Process? _sshTunnelProc;
+    private string _publicTunnelUrl = "";
+    private string _tunnelStatus = "stopped";
+    private bool _wantedTunnel;
+    private const string EdgeGatewayOrigin = "https://replyradar-edge.a3152557994.workers.dev";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(6) };
 
     public MainDashboardForm()
@@ -111,7 +141,7 @@ internal sealed class MainDashboardForm : Form
         Directory.CreateDirectory(Path.Combine(_appRoot, "profiles"));
         _stateFile = Path.Combine(_appRoot, "state.json");
 
-        Text = _isZh ? "消息总管 — 多平台消息看护与多开防串号工作台 (v5.3.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v5.3.0)";
+        Text = _isZh ? "消息总管 — 多平台消息看护与多开防串号工作台 (v5.4.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v5.4.0)";
         Width = 1240;
         Height = 820;
         StartPosition = FormStartPosition.CenterScreen;
@@ -178,6 +208,7 @@ internal sealed class MainDashboardForm : Form
         }
         else
         {
+            StartStandaloneMobileGateway();
             var uiFile = Path.Combine(AppContext.BaseDirectory, "resources", "index.html");
             _dashboard.CoreWebView2.Navigate(new Uri(uiFile).AbsoluteUri);
         }
@@ -190,7 +221,27 @@ internal sealed class MainDashboardForm : Form
             try
             {
                 var parsed = JsonNode.Parse(File.ReadAllText(_stateFile))?.AsObject();
-                if (parsed?["watches"] is JsonArray) return parsed;
+                if (parsed?["watches"] is JsonArray)
+                {
+                    var dirty = false;
+                    if (string.IsNullOrEmpty(parsed["mobileToken"]?.GetValue<string>()))
+                    {
+                        parsed["mobileToken"] = Guid.NewGuid().ToString("N");
+                        dirty = true;
+                    }
+                    if (!(parsed["tunnelBoxId"]?.GetValue<string>() ?? "").StartsWith("bx_"))
+                    {
+                        parsed["tunnelBoxId"] = "bx_" + Guid.NewGuid().ToString("N")[..20];
+                        dirty = true;
+                    }
+                    if (string.IsNullOrEmpty(parsed["tunnelWriteKey"]?.GetValue<string>()))
+                    {
+                        parsed["tunnelWriteKey"] = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")[..8];
+                        dirty = true;
+                    }
+                    if (dirty) SaveState(parsed);
+                    return parsed;
+                }
             }
             catch { }
         }
@@ -207,8 +258,11 @@ internal sealed class MainDashboardForm : Form
         }
         var init = new JsonObject
         {
-            ["version"] = "5.3.0",
-            ["settings"] = new JsonObject { ["webhookUrl"] = "", ["lang"] = _isZh ? "zh" : "en" },
+            ["version"] = "5.4.0",
+            ["mobileToken"] = Guid.NewGuid().ToString("N"),
+            ["tunnelBoxId"] = "bx_" + Guid.NewGuid().ToString("N")[..20],
+            ["tunnelWriteKey"] = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")[..8],
+            ["settings"] = new JsonObject { ["webhookUrl"] = "", ["lang"] = _isZh ? "zh" : "en", ["preventSleep"] = false, ["tunnelAutoStart"] = false },
             ["watches"] = watches,
             ["quickReplies"] = new JsonArray()
         };
@@ -419,6 +473,7 @@ internal sealed class MainDashboardForm : Form
             }
         };
         _workspaceForms[watchId] = form;
+        _workspaceWebViews[watchId] = wv;
         form.Show();
 
         var env = await CoreWebView2Environment.CreateAsync(null, profileDir);
@@ -592,7 +647,7 @@ internal sealed class MainDashboardForm : Form
             var lic = string.IsNullOrEmpty(licKey) ? new JsonObject { ["valid"] = false, ["plan"] = "free" } : LicenseCheck.Verify(licKey);
             return new JsonObject
             {
-                ["version"] = "5.3.0",
+                ["version"] = "5.4.0",
                 ["license"] = lic,
                 ["settings"] = st["settings"]?.DeepClone() ?? new JsonObject(),
                 ["stats"] = new JsonObject { ["total"] = watches.Count, ["unreadCount"] = unreadWatches, ["unreadMessagesTotal"] = unreadTotal, ["activeCount"] = watches.Count },
@@ -630,13 +685,12 @@ internal sealed class MainDashboardForm : Form
         }
         if (path == "/api/mobile/info")
         {
-            return new JsonObject
-            {
-                ["ok"] = false,
-                ["standaloneHint"] = _isZh
-                    ? "当前为轻量单机模式：点左下角「⚙️ 软件设置」粘贴免费 PushPlus 微信口令或 Bark 码，无需配网即可锁屏秒收手机通知；如需完整手机网页代发，安装 Node.js 后重开软件自动激活。"
-                    : "Standalone mode: Paste a webhook URL in Settings for instant phone alerts, or install Node.js to enable the interactive mobile web inbox."
-            };
+            return GetStandaloneMobilePairingInfo();
+        }
+        if (method == "POST" && path == "/api/mobile/tunnel")
+        {
+            var act = payload?["action"]?.GetValue<string>() ?? "start";
+            return await HandleStandaloneTunnelActionAsync(act);
         }
         if (path == "/api/cc/state" || path == "/api/ai-clients/status" || path == "/api/ai-butler/state")
         {
@@ -674,7 +728,38 @@ internal sealed class MainDashboardForm : Form
             try
             {
                 if (!Http.DefaultRequestHeaders.UserAgent.Any())
-                    Http.DefaultRequestHeaders.UserAgent.ParseAdd("ReplyRadar-Win/5.3");
+                    Http.DefaultRequestHeaders.UserAgent.ParseAdd("ReplyRadar-Win/5.4");
+                var ed = await Http.GetStringAsync("https://svc.eleduck.com/api/v1/posts?page=1");
+                var posts = JsonNode.Parse(ed)?["posts"]?.AsArray();
+                if (posts != null)
+                {
+                    var qLower = q.ToLowerInvariant();
+                    var hasZh = Regex.IsMatch(q, @"[\u4e00-\u9fa5]");
+                    foreach (var p in posts)
+                    {
+                        var title = p?["full_title"]?.GetValue<string>() ?? p?["title"]?.GetValue<string>() ?? "";
+                        var sum = p?["summary"]?.GetValue<string>() ?? "";
+                        if (string.IsNullOrWhiteSpace(title) || title.Contains("社区规则")) continue;
+                        var hay = $"{title} {sum}".ToLowerInvariant();
+                        if (!hay.Contains(qLower) && !(hasZh && (hay.Contains("远程") || hay.Contains("外包") || hay.Contains("招")))) continue;
+                        leads.Add(new JsonObject
+                        {
+                            ["source"] = "电鸭社区 · 远程/外包",
+                            ["title"] = title,
+                            ["snippet"] = sum.Length > 140 ? sum[..140] : sum,
+                            ["url"] = $"https://eleduck.com/posts/{p?["id"]}",
+                            ["publishedAt"] = p?["published_at"]?.GetValue<string>() ?? DateTime.UtcNow.ToString("O"),
+                            ["intentScore"] = 92
+                        });
+                        if (leads.Count >= 6) break;
+                    }
+                }
+            }
+            catch { }
+            try
+            {
+                if (!Http.DefaultRequestHeaders.UserAgent.Any())
+                    Http.DefaultRequestHeaders.UserAgent.ParseAdd("ReplyRadar-Win/5.4");
                 var hn = await Http.GetStringAsync($"https://hn.algolia.com/api/v1/search_by_date?query={Uri.EscapeDataString(q + " hiring freelance")}&tags=(story,comment)&hitsPerPage=8");
                 var hits = JsonNode.Parse(hn)?["hits"]?.AsArray();
                 if (hits != null)
@@ -716,6 +801,12 @@ internal sealed class MainDashboardForm : Form
             if (payload?["aiButlerEnabled"] != null) set["aiButlerEnabled"] = payload["aiButlerEnabled"]!.GetValue<bool>();
             if (payload?["aiButlerProvider"] != null) set["aiButlerProvider"] = payload["aiButlerProvider"]!.GetValue<string>();
             if (payload?["aiButlerPersona"] != null) set["aiButlerPersona"] = payload["aiButlerPersona"]!.GetValue<string>();
+            if (payload?["preventSleep"] != null)
+            {
+                var ps = payload["preventSleep"]!.GetValue<bool>();
+                set["preventSleep"] = ps;
+                WinPowerKeeper.ApplyPreventSleep(ps);
+            }
             st["settings"] = set;
             SaveState(st);
             return new JsonObject { ["ok"] = true, ["settings"] = set.DeepClone() };
@@ -799,6 +890,337 @@ internal sealed class MainDashboardForm : Form
             return new JsonObject { ["ok"] = true };
         }
         return new JsonObject { ["ok"] = true };
+    }
+
+    private static string GetLanIPv4()
+    {
+        try
+        {
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up || ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                foreach (var ua in ni.GetIPProperties().UnicastAddresses)
+                {
+                    if (ua.Address.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        var ip = ua.Address.ToString();
+                        if (ip.StartsWith("192.168.") || ip.StartsWith("10.") || ip.StartsWith("172.")) return ip;
+                    }
+                }
+            }
+        }
+        catch { }
+        return "127.0.0.1";
+    }
+
+    private void StartStandaloneMobileGateway()
+    {
+        var st = LoadState();
+        var ps = st["settings"]?["preventSleep"]?.GetValue<bool>() ?? false;
+        WinPowerKeeper.ApplyPreventSleep(ps);
+
+        if (_mobileListener == null)
+        {
+            foreach (var p in new[] { 17890, 17891, 17892 })
+            {
+                try
+                {
+                    var l = new TcpListener(IPAddress.Any, p);
+                    l.Start();
+                    _mobilePort = p;
+                    _mobileListener = l;
+                    _ = Task.Run(async () =>
+                    {
+                        while (true)
+                        {
+                            try
+                            {
+                                var client = await l.AcceptTcpClientAsync();
+                                _ = Task.Run(() => HandleMobileTcpClientAsync(client));
+                            }
+                            catch { break; }
+                        }
+                    });
+                    break;
+                }
+                catch { }
+            }
+        }
+
+        if (st["settings"]?["tunnelAutoStart"]?.GetValue<bool>() == true)
+        {
+            _wantedTunnel = true;
+            _ = StartSshTunnelAsync();
+        }
+    }
+
+    private JsonObject GetStandaloneMobilePairingInfo()
+    {
+        var st = LoadState();
+        var tok = st["mobileToken"]?.GetValue<string>() ?? "";
+        var boxId = st["tunnelBoxId"]?.GetValue<string>() ?? "";
+        var ps = st["settings"]?["preventSleep"]?.GetValue<bool>() ?? false;
+        var lanUrl = $"http://{GetLanIPv4()}:{_mobilePort}/m?t={tok}";
+        var permUrl = (!string.IsNullOrEmpty(_publicTunnelUrl) && !string.IsNullOrEmpty(boxId))
+            ? $"{EdgeGatewayOrigin}/go/{boxId}?t={tok}"
+            : "";
+        var rawTun = !string.IsNullOrEmpty(_publicTunnelUrl) ? $"{_publicTunnelUrl}/m?t={tok}" : "";
+        var tunUrl = !string.IsNullOrEmpty(permUrl) ? permUrl : rawTun;
+        var primary = !string.IsNullOrEmpty(tunUrl) ? tunUrl : lanUrl;
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["status"] = _tunnelStatus,
+            ["publicUrl"] = _publicTunnelUrl,
+            ["permanentMobileUrl"] = permUrl,
+            ["tunnelMobileUrl"] = tunUrl,
+            ["lanUrl"] = lanUrl,
+            ["primaryUrl"] = primary,
+            ["preventSleep"] = ps
+        };
+    }
+
+    private async Task<JsonObject> HandleStandaloneTunnelActionAsync(string action)
+    {
+        var st = LoadState();
+        var set = st["settings"]?.AsObject() ?? new JsonObject();
+        if (action == "rotateToken")
+        {
+            st["mobileToken"] = Guid.NewGuid().ToString("N");
+            SaveState(st);
+            return GetStandaloneMobilePairingInfo();
+        }
+        if (action == "stop")
+        {
+            _wantedTunnel = false;
+            set["tunnelAutoStart"] = false;
+            st["settings"] = set;
+            SaveState(st);
+            try { _sshTunnelProc?.Kill(); } catch { }
+            _sshTunnelProc = null;
+            _publicTunnelUrl = "";
+            _tunnelStatus = "stopped";
+            return GetStandaloneMobilePairingInfo();
+        }
+        _wantedTunnel = true;
+        set["tunnelAutoStart"] = true;
+        set["preventSleep"] = true;
+        st["settings"] = set;
+        SaveState(st);
+        WinPowerKeeper.ApplyPreventSleep(true);
+        await StartSshTunnelAsync();
+        return GetStandaloneMobilePairingInfo();
+    }
+
+    private async Task SyncEdgeBookmarkWinAsync()
+    {
+        try
+        {
+            var st = LoadState();
+            var boxId = st["tunnelBoxId"]?.GetValue<string>() ?? "";
+            var writeKey = st["tunnelWriteKey"]?.GetValue<string>() ?? "";
+            if (string.IsNullOrEmpty(_publicTunnelUrl) || string.IsNullOrEmpty(boxId)) return;
+            var payload = new JsonObject
+            {
+                ["boxId"] = boxId,
+                ["writeKey"] = writeKey,
+                ["targetOrigin"] = _publicTunnelUrl
+            };
+            using var content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
+            await Http.PostAsync($"{EdgeGatewayOrigin}/api/tunnel/sync", content);
+        }
+        catch { }
+    }
+
+    private async Task StartSshTunnelAsync()
+    {
+        if (_sshTunnelProc is { HasExited: false } && !string.IsNullOrEmpty(_publicTunnelUrl)) return;
+        try { _sshTunnelProc?.Kill(); } catch { }
+        _publicTunnelUrl = "";
+        _tunnelStatus = "starting";
+
+        var sshExe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "OpenSSH", "ssh.exe");
+        if (!File.Exists(sshExe)) sshExe = "ssh.exe";
+
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = sshExe,
+                Arguments = $"-T -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ServerAliveInterval=30 -o ExitOnForwardFailure=yes -R 80:127.0.0.1:{_mobilePort} nokey@localhost.run",
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            void OnLine(string? line)
+            {
+                if (string.IsNullOrEmpty(line)) return;
+                var m = Regex.Match(line, @"https://[a-zA-Z0-9.-]+\.lhr\.life");
+                if (m.Success && _publicTunnelUrl != m.Value)
+                {
+                    _publicTunnelUrl = m.Value;
+                    _tunnelStatus = "running";
+                    _ = SyncEdgeBookmarkWinAsync();
+                    tcs.TrySetResult(true);
+                }
+            }
+            proc.OutputDataReceived += (_, e) => OnLine(e.Data);
+            proc.ErrorDataReceived += (_, e) => OnLine(e.Data);
+            proc.Exited += (_, _) =>
+            {
+                if (_sshTunnelProc == proc)
+                {
+                    _sshTunnelProc = null;
+                    _publicTunnelUrl = "";
+                    _tunnelStatus = "stopped";
+                    if (_wantedTunnel)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(6000);
+                            if (_wantedTunnel) await StartSshTunnelAsync();
+                        });
+                    }
+                }
+                tcs.TrySetResult(false);
+            };
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+            _sshTunnelProc = proc;
+            await Task.WhenAny(tcs.Task, Task.Delay(6200));
+        }
+        catch
+        {
+            _tunnelStatus = "error";
+        }
+    }
+
+    private async Task HandleMobileTcpClientAsync(TcpClient client)
+    {
+        using (client)
+        {
+            client.ReceiveTimeout = 5000;
+            client.SendTimeout = 5000;
+            using var stream = client.GetStream();
+            var buf = new byte[65536];
+            var mem = new MemoryStream();
+            int headerEnd = -1;
+            int contentLen = 0;
+
+            while (true)
+            {
+                var n = await stream.ReadAsync(buf);
+                if (n <= 0) break;
+                mem.Write(buf, 0, n);
+                var arr = mem.ToArray();
+                if (headerEnd < 0)
+                {
+                    var s = Encoding.UTF8.GetString(arr);
+                    var idx = s.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                    if (idx >= 0)
+                    {
+                        headerEnd = Encoding.UTF8.GetByteCount(s[..(idx + 4)]);
+                        foreach (var hl in s[..idx].Split("\r\n"))
+                        {
+                            if (hl.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                                int.TryParse(hl[15..].Trim(), out contentLen);
+                        }
+                    }
+                }
+                if (headerEnd >= 0 && mem.Length - headerEnd >= contentLen) break;
+            }
+            if (headerEnd < 0) return;
+
+            var allBytes = mem.ToArray();
+            var headerText = Encoding.UTF8.GetString(allBytes, 0, headerEnd - 4);
+            var bodyText = contentLen > 0 ? Encoding.UTF8.GetString(allBytes, headerEnd, Math.Min(contentLen, allBytes.Length - headerEnd)) : "";
+            var lines = headerText.Split("\r\n");
+            var reqParts = lines[0].Split(' ');
+            if (reqParts.Length < 2) return;
+            var method = reqParts[0];
+            var uri = new Uri("http://127.0.0.1" + reqParts[1]);
+            var pathname = uri.AbsolutePath;
+
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var l in lines.Skip(1))
+            {
+                var c = l.IndexOf(':');
+                if (c > 0) headers[l[..c].Trim()] = l[(c + 1)..].Trim();
+            }
+
+            async Task SendRawAsync(int code, string ct, byte[] data, string extra = "")
+            {
+                var head = $"HTTP/1.1 {code} OK\r\nContent-Type: {ct}\r\nContent-Length: {data.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n{extra}\r\n";
+                var hb = Encoding.UTF8.GetBytes(head);
+                await stream.WriteAsync(hb);
+                await stream.WriteAsync(data);
+            }
+
+            Task SendJsonObjAsync(JsonObject obj, int code = 200, string extra = "") =>
+                SendRawAsync(code, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(obj.ToJsonString()), extra);
+
+            if (pathname == "/api/health")
+            {
+                await SendJsonObjAsync(new JsonObject { ["ok"] = true, ["version"] = "5.4.0", ["standalone"] = true });
+                return;
+            }
+            if (pathname == "/sw.js")
+            {
+                var sw = Path.Combine(AppContext.BaseDirectory, "resources", "sw.js");
+                if (File.Exists(sw)) await SendRawAsync(200, "application/javascript; charset=utf-8", File.ReadAllBytes(sw), "Service-Worker-Allowed: /\r\n");
+                return;
+            }
+
+            var st = LoadState();
+            var expectedTok = st["mobileToken"]?.GetValue<string>() ?? "";
+            var queryTok = "";
+            foreach (var qp in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var kv = qp.Split('=', 2);
+                if (kv.Length == 2 && kv[0] == "t") queryTok = Uri.UnescapeDataString(kv[1]);
+            }
+            var cookieTok = "";
+            if (headers.TryGetValue("Cookie", out var ck))
+            {
+                foreach (var seg in ck.Split(';'))
+                {
+                    var kv = seg.Trim().Split('=', 2);
+                    if (kv.Length == 2 && kv[0] == "tp_mob_tok") cookieTok = Uri.UnescapeDataString(kv[1]);
+                }
+            }
+            headers.TryGetValue("X-TabPulse-Token", out var hdrTok);
+            var candidateTok = !string.IsNullOrEmpty(queryTok) ? queryTok : (!string.IsNullOrEmpty(hdrTok) ? hdrTok : cookieTok);
+            if (!string.IsNullOrEmpty(expectedTok) && candidateTok != expectedTok)
+            {
+                await SendRawAsync(401, "text/html; charset=utf-8", Encoding.UTF8.GetBytes("<!doctype html><meta charset='utf-8'/><body style='background:#0f172a;color:#fff;display:grid;place-items:center;min-height:100vh'><h2>🔒 请用手机扫描电脑端《消息总管》二维码进入</h2></body>"));
+                return;
+            }
+            var extraCookie = !string.IsNullOrEmpty(queryTok) ? $"Set-Cookie: tp_mob_tok={expectedTok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000\r\n" : "";
+
+            if (pathname == "/" || pathname == "/m")
+            {
+                var mf = Path.Combine(AppContext.BaseDirectory, "resources", "mobile.html");
+                if (File.Exists(mf)) await SendRawAsync(200, "text/html; charset=utf-8", File.ReadAllBytes(mf), extraCookie);
+                return;
+            }
+            if (pathname == "/api/events-stream")
+            {
+                await SendRawAsync(200, "text/event-stream; charset=utf-8", Encoding.UTF8.GetBytes("data: {\"kind\":\"connected\"}\n\n"), extraCookie);
+                return;
+            }
+            if (pathname == "/api/cc/state" || pathname == "/api/ai-inbox/state" || pathname == "/api/ai-butler/state")
+            {
+                await SendJsonObjAsync(new JsonObject { ["ok"] = true, ["sessions"] = new JsonArray(), ["hookEvents"] = new JsonArray(), ["channels"] = new JsonArray(), ["suggestions"] = new JsonObject() }, 200, extraCookie);
+                return;
+            }
+            var bodyObj = !string.IsNullOrWhiteSpace(bodyText) ? JsonNode.Parse(bodyText)?.AsObject() : null;
+            var apiOut = await HandleApiAsync(method, pathname, bodyObj);
+            await SendJsonObjAsync(apiOut, 200, extraCookie);
+        }
     }
 }
 

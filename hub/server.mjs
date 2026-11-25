@@ -23,6 +23,7 @@ import {
   getDueWatches,
   getMobileToken,
   getPublicSummary,
+  getTunnelBoxCredentials,
   getVapidPublicKey,
   loadState,
   recordProbeReport,
@@ -183,6 +184,54 @@ export function createHubServer(options = {}) {
   };
   desktopMonitor.startBackgroundWatcher();
 
+  // Configure Permanent Edge Bookmark Box + Anti-Sleep Caffeinate Keeper
+  tunnelManager.configureBoxCredentials(getTunnelBoxCredentials());
+  let caffeinateProc = null;
+  function syncPreventSleepState(wantPreventSleep) {
+    if (process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS === "1" || process.platform !== "darwin") return;
+    if (wantPreventSleep && !caffeinateProc) {
+      if (fs.existsSync("/usr/bin/caffeinate")) {
+        import("node:child_process").then(({ spawn }) => {
+          if (caffeinateProc) return;
+          caffeinateProc = spawn("/usr/bin/caffeinate", ["-di", "-w", String(process.pid)], { stdio: "ignore" });
+          caffeinateProc.on("exit", () => {
+            caffeinateProc = null;
+          });
+          if (caffeinateProc.unref) caffeinateProc.unref();
+        });
+      }
+    } else if (!wantPreventSleep && caffeinateProc) {
+      try {
+        caffeinateProc.kill("SIGTERM");
+      } catch {}
+      caffeinateProc = null;
+    }
+  }
+
+  tunnelManager.onTunnelReconnected = () => {
+    const st = loadState();
+    const link = currentMobileLink(serverPortRef.port);
+    if (st.settings?.webhookUrl) {
+      sendCustomerWebhook(
+        st.settings.webhookUrl,
+        "🔄 消息总管出门穿透已自动重连",
+        "家里电脑网络已恢复在线，您手机保存的固定书签可继续正常收发消息。",
+        link
+      ).catch(() => {});
+    }
+  };
+
+  if (process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS !== "1") {
+    const bootState = loadState();
+    syncPreventSleepState(Boolean(bootState.settings?.preventSleep));
+    if (bootState.settings?.tunnelAutoStart) {
+      setTimeout(() => {
+        tunnelManager.configureBoxCredentials(getTunnelBoxCredentials());
+        tunnelManager.start(serverPortRef.port).catch(() => {});
+      }, 1200).unref?.();
+    }
+  }
+
   const server = http.createServer(async (req, res) => {
     const localTrusted = isLocalDesktopTrusted(req);
     const origin = req.headers.origin;
@@ -219,7 +268,7 @@ export function createHubServer(options = {}) {
     try {
       // Public lightweight endpoints
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "5.3.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "5.4.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
         return;
       }
       if (req.method === "GET" && pathname === "/sw.js") {
@@ -321,13 +370,17 @@ export function createHubServer(options = {}) {
           return;
         }
         if (req.method === "GET" && pathname === "/api/mobile/info") {
+          tunnelManager.configureBoxCredentials(getTunnelBoxCredentials());
           const tok = getMobileToken();
+          const st = loadState();
           sendJson(
             res,
             200,
             {
               ok: true,
               ...tunnelManager.getInfo(serverPortRef.port, tok),
+              preventSleep: Boolean(st.settings?.preventSleep),
+              tunnelAutoStart: Boolean(st.settings?.tunnelAutoStart),
               desktopBridgeConnected: desktopRelay.isDesktopConnected(),
             },
             corsOrigin
@@ -336,20 +389,27 @@ export function createHubServer(options = {}) {
         }
         if (req.method === "POST" && pathname === "/api/mobile/tunnel") {
           const body = await readJsonBody(req);
+          tunnelManager.configureBoxCredentials(getTunnelBoxCredentials());
           if (body.action === "start") {
+            updateSettings({ tunnelAutoStart: true, preventSleep: true });
+            syncPreventSleepState(true);
             await tunnelManager.start(serverPortRef.port);
           } else if (body.action === "stop") {
+            updateSettings({ tunnelAutoStart: false });
             tunnelManager.stop();
           } else if (body.action === "rotateToken") {
             rotateMobileToken();
           }
           const tok = getMobileToken();
+          const st = loadState();
           sendJson(
             res,
             200,
             {
               ok: true,
               ...tunnelManager.getInfo(serverPortRef.port, tok),
+              preventSleep: Boolean(st.settings?.preventSleep),
+              tunnelAutoStart: Boolean(st.settings?.tunnelAutoStart),
               desktopBridgeConnected: desktopRelay.isDesktopConnected(),
             },
             corsOrigin
@@ -640,6 +700,36 @@ export function createHubServer(options = {}) {
         sendJson(res, 200, out, corsOrigin);
         return;
       }
+      const deskPeekMatch = pathname.match(/^\/api\/desktop\/window\/(\d+)\/peek-image$/);
+      if (deskPeekMatch && req.method === "GET") {
+        const appNameParam = reqUrl.searchParams.get("app") || "";
+        const out = await desktopMonitor.peekWindowImage(deskPeekMatch[1], appNameParam);
+        sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+
+      const tabPeekMatch = pathname.match(/^\/api\/remote\/tab\/([^/]+)\/peek-image$/);
+      if (tabPeekMatch && req.method === "GET") {
+        const wid = decodeURIComponent(tabPeekMatch[1]);
+        const watch = loadState().watches.find((w) => w.id === wid);
+        if (!watch) {
+          sendJson(res, 404, { ok: false, error: "watch not found" }, corsOrigin);
+          return;
+        }
+        const out = await desktopRelay.enqueueCommand(
+          {
+            type: "peekImage",
+            watchId: wid,
+            url: watch.url,
+            name: watch.name,
+            profileUuid: watch.profileUuid || "",
+          },
+          10000
+        );
+        sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+
       const deskActMatch = pathname.match(/^\/api\/desktop\/window\/(\d+)\/action$/);
       if (deskActMatch && req.method === "POST") {
         const body = await readJsonBody(req);
@@ -752,6 +842,9 @@ export function createHubServer(options = {}) {
         }
         const body = await readJsonBody(req);
         const settings = updateSettings(body);
+        if (body.preventSleep !== undefined) {
+          syncPreventSleepState(Boolean(settings.preventSleep));
+        }
         sendJson(res, 200, { ok: true, settings }, corsOrigin);
         return;
       }

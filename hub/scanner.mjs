@@ -98,7 +98,9 @@ export async function scanBuyerLeads(rawQuery = "Shopify", { limit = 12, hours =
       : `${query} is:issue is:open (hiring OR freelance OR paid OR bounty) in:title,body`
   );
 
-  const [redditJson, hnJson, ghJson, v2JobsJson, v2OutsourceJson] = await Promise.all([
+  const [eleduckP1, eleduckP2, redditJson, hnJson, ghJson, v2JobsJson, v2OutsourceJson] = await Promise.all([
+    fetchJsonWithTimeout("https://svc.eleduck.com/api/v1/posts?page=1"),
+    fetchJsonWithTimeout("https://svc.eleduck.com/api/v1/posts?page=2"),
     fetchJsonWithTimeout(`https://api.pullpush.io/reddit/search/submission/?q=${redditQuery}&size=10&sort=desc`),
     fetchJsonWithTimeout(`https://hn.algolia.com/api/v1/search_by_date?query=${hnQuery}&tags=(story,comment)&hitsPerPage=8`),
     fetchJsonWithTimeout(`https://api.github.com/search/issues?q=${ghQuery}&sort=created&order=desc&per_page=8`),
@@ -107,6 +109,34 @@ export async function scanBuyerLeads(rawQuery = "Shopify", { limit = 12, hours =
   ]);
 
   const leads = [];
+
+  // 0. 电鸭社区（国内最活跃远程工作、电商设计剪辑、代运营、小程序与独立开发外包池）
+  const eleduckPosts = [
+    ...(Array.isArray(eleduckP1?.posts) ? eleduckP1.posts : []),
+    ...(Array.isArray(eleduckP2?.posts) ? eleduckP2.posts : []),
+  ];
+  for (const post of eleduckPosts) {
+    const title = String(post.full_title || post.title || "").trim();
+    if (!title || /(社区规则|新人必读|防骗指南|求职|找工作|个人接单|承接.*开发)/i.test(title)) continue;
+    const summary = String(post.summary || "").replace(/\s+/g, " ").trim().slice(0, 180);
+    const tagsStr = Array.isArray(post.tags) ? post.tags.map((t) => t.name || "").join(" ") : "";
+    const hay = `${title} ${summary} ${tagsStr}`.toLowerCase();
+    const matchedQuery = qTokens.length === 0 || qTokens.some((t) => hay.includes(t));
+    const broadChineseDemand =
+      hasChinese && /(远程|外包|兼职|设计|剪辑|运营|小红书|电商|独立站|小程序|开发|合作|急招|预算)/i.test(hay);
+    if (!matchedQuery && !broadChineseDemand) continue;
+    const pubMs = post.published_at ? new Date(post.published_at).getTime() : Date.now();
+    leads.push({
+      source: "电鸭社区 · 国内远程/外包",
+      platform: "eleduck",
+      title,
+      snippet: summary || "点击查看甲方需求详情与联系电量",
+      url: `https://eleduck.com/posts/${post.id}`,
+      publishedAt: new Date(pubMs).toISOString(),
+      fresh: pubMs / 1000 >= cutoffSec,
+      intentScore: computeIntentScore(title, summary, query, true),
+    });
+  }
 
   // 1. V2EX 酷工作 & 外包节点（真实中文远程/外包/招聘帖）
   const v2Combined = [

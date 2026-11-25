@@ -9,3 +9,7 @@ release/
 windows-app/bin/
 windows-app/obj/
 bin/mac-desktop-helper
+worker/node_modules/
+worker/dist/
+worker/.wrangler/
+worker/.cloudflare/

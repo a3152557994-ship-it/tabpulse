@@ -270,6 +270,25 @@ class DesktopSoftwareMonitor {
     return { ok: false, error: "unsupported platform" };
   }
 
+  async peekWindowImage(windowId, fallbackAppName = "") {
+    if (process.platform === "darwin") {
+      const bin = resolveMacHelperBin();
+      if (!bin) return { ok: false, error: "mac-desktop-helper missing" };
+      let numWid = Number(windowId) || 0;
+      if (numWid <= 0 && fallbackAppName) {
+        const opened = await this.readWindowMessages(0, fallbackAppName);
+        numWid = Number(opened.windowId) || 0;
+      }
+      if (numWid <= 0) return { ok: false, error: "未找到对应软件窗口" };
+      const { stdout } = await execFileAsync(bin, ["peek-image", String(numWid)], {
+        timeout: 8000,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      return JSON.parse(stdout.trim() || "{}");
+    }
+    return { ok: false, error: "当前系统暂不支持窗口看图" };
+  }
+
   async performWindowAction(windowId, body = {}) {
     const wid = String(Number(windowId) || 0);
     const type = body.type || "read";

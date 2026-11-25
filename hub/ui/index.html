@@ -906,7 +906,7 @@
         <div class="pane-body">
           <div class="panel-card">
             <div class="search-row" style="margin-top:0;">
-              <input id="scan-input" value="Shopify" onkeydown="if(event.key==='Enter')runLeadScan()" />
+              <input id="scan-input" value="远程 外包" onkeydown="if(event.key==='Enter')runLeadScan()" />
               <button class="primary" onclick="runLeadScan()" id="btn-scan">🔍 扫描最新商机</button>
             </div>
             <div class="chips" id="scan-chips"></div>
@@ -1002,6 +1002,7 @@
             <li>独立防串号隔离仓（同挂 2 个号）</li>
             <li>零刷页常驻安全防封保护</li>
           </ul>
+          <button class="btn" id="direct-buy-yr-cn" style="width:100%;justify-content:center;margin-top:6px;" onclick="copyInAppOrder('¥9.9 轻量年卡')">📋 复制 ¥9.9 拿码口令</button>
           <button class="btn" id="mas-buy-yearly-cn" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.yearly')"> Apple 订阅 (¥9.9/年)</button>
         </div>
         <div class="price-box featured">
@@ -1014,7 +1015,10 @@
             <li>🎁 <strong>附赠</strong>：《高成交率外包与商务回复话术库》</li>
             <li>🛡️ <strong>保障</strong>：14 天不满意无理由全额退</li>
           </ul>
-          <a class="btn primary" id="direct-buy-cn" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">获取正版买断激活码 →</a>
+          <div id="direct-buy-cn" style="display:grid;gap:6px;margin-top:6px;">
+            <a class="btn primary" style="width:100%;justify-content:center;" href="https://a3152557994-ship-it.github.io/tabpulse/#checkout-life" target="_blank">⚡ 打开收银台获取 ¥39 永久激活码 →</a>
+            <button type="button" class="sm" style="width:100%;justify-content:center;" onclick="copyInAppOrder('¥39 永久买断版')">📋 一键复制闲鱼自动发卡词 / QQ号 (3152557994)</button>
+          </div>
           <button class="btn primary" id="mas-buy-life-cn" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.lifetime')"> Apple 一键永久买断 (¥28)</button>
         </div>
       </div>
@@ -1087,6 +1091,13 @@
         <input id="s-webhook" placeholder="直接粘贴 32 位 PushPlus Token / SCT... / Bark Key / https://..." />
       </div>
       <div id="push-test-msg" style="font-size:12px;min-height:18px;margin-top:4px;color:var(--muted);"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin:8px 0;gap:8px;flex-wrap:wrap;">
+        <div style="font-size:12.5px;color:#166534;">☕ <strong>防止电脑息屏/睡眠断联</strong>（出门随身看护建议开启）</div>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#15803d;cursor:pointer;">
+          <input type="checkbox" id="s-prevent-sleep" onchange="togglePreventSleep(this.checked)" />
+          <span>开启防休眠保活</span>
+        </label>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;margin:10px 0;gap:8px;flex-wrap:wrap;">
         <div style="font-size:12.5px;color:#475569;">界面语言与软件版本</div>
         <div style="display:flex;gap:8px;">
@@ -1121,13 +1132,17 @@
             <input id="mob-lan-url" readonly onclick="this.select()" style="width:100%;padding:6.5px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:11.5px;font-family:monospace;background:#fff;" />
           </div>
           <div style="margin-bottom:10px;">
-            <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:3px;">🌐 出门 4G/5G 免翻墙加密直连：</div>
-            <input id="mob-tun-url" readonly onclick="this.select()" placeholder="点击下方按钮开启出门穿透..." style="width:100%;padding:6.5px 9px;border:1px solid #bfdbfe;border-radius:7px;font-size:11.5px;font-family:monospace;background:#eff6ff;" />
+            <div style="font-size:12px;font-weight:700;color:#1d4ed8;margin-bottom:3px;">🔒 出门 4G/5G 永久固定书签（电脑重启/断网重连永不失效）：</div>
+            <input id="mob-tun-url" readonly onclick="this.select()" placeholder="点击下方按钮开启出门穿透与永久书签..." style="width:100%;padding:6.5px 9px;border:1px solid #bfdbfe;border-radius:7px;font-size:11.5px;font-family:monospace;background:#eff6ff;" />
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
             <button class="sm primary" id="btn-toggle-tunnel" onclick="toggleMobileTunnel()">🌐 开启出门 4G/5G 穿透</button>
             <button class="sm" onclick="copyPrimaryMobileUrl()">📋 复制链接</button>
             <button class="sm danger" onclick="resetMobileToken()">重置密钥</button>
+            <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:#047857;font-weight:700;cursor:pointer;margin-left:2px;" title="开启后阻止电脑自动睡眠断网">
+              <input type="checkbox" id="mob-prevent-sleep" onchange="togglePreventSleep(this.checked)" />
+              <span>☕ 防休眠</span>
+            </label>
           </div>
         </div>
       </div>
@@ -1364,7 +1379,7 @@
 
       const chipData = en
         ? [["Shopify", "Shopify Dev"], ["Python scraper", "Python Automation"], ["iOS Swift", "iOS / macOS"], ["Next.js SaaS", "Next.js MVP"], ["UI Figma", "UI / Landing Page"], ["SEO content", "SEO Growth"]]
-        : [["Shopify", "独立站开发"], ["Python scraper", "爬虫与自动化"], ["iOS Swift", "苹果应用开发"], ["Next.js SaaS", "网站与AI开发"], ["UI Figma", "界面与海报设计"], ["SEO content", "出海搜索推广"]];
+        : [["远程 外包", "🔥 国内远程外包(电鸭/V2)"], ["设计 剪辑", "🎨 电商美工剪辑"], ["小红书 运营", "📕 小红书代运营"], ["小程序 开发", "📱 小程序/App定制"], ["Shopify", "🛍️ 跨境独立站"], ["Python 自动化", "🤖 脚本自动化"]];
       document.getElementById("scan-chips").innerHTML = chipData
         .map(([q, label]) => `<span class="chip" onclick="quickScan('${q}')">${label}</span>`)
         .join("");
@@ -1937,6 +1952,94 @@
       await loadMobilePairingInfo();
     }
 
+    function clientRenderQrSvg(text, pixelSize = 194) {
+      try {
+        const CAP_L = [0, 17, 32, 53, 78, 106, 134, 154, 192, 230, 271];
+        const BLK_L = [null,[19,7,1,19,0,0],[34,10,1,34,0,0],[55,15,1,55,0,0],[80,20,1,80,0,0],[108,26,1,108,0,0],[136,18,2,68,0,0],[156,20,2,78,0,0],[194,24,2,97,0,0],[232,30,2,116,0,0],[274,18,2,68,2,69]];
+        const ALN = [[],[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50]];
+        const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+        for (let x = 1, i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+        for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+        const mul = (a, b) => (a === 0 || b === 0 ? 0 : EXP[LOG[a] + LOG[b]]);
+        const rsRem = (data, deg) => {
+          let poly = [1];
+          for (let i = 0; i < deg; i++) {
+            const nx = new Array(poly.length + 1).fill(0);
+            for (let j = 0; j < poly.length; j++) { nx[j] ^= poly[j]; nx[j + 1] ^= mul(poly[j], EXP[i]); }
+            poly = nx;
+          }
+          const rem = new Uint8Array(deg);
+          for (const byte of data) {
+            const f = byte ^ rem[0]; rem.copyWithin(0, 1); rem[deg - 1] = 0;
+            if (f !== 0) for (let j = 0; j < deg; j++) rem[j] ^= mul(poly[j + 1], f);
+          }
+          return rem;
+        };
+        const bytes = new TextEncoder().encode(String(text || ""));
+        let ver = 1; while (ver <= 10 && bytes.length > CAP_L[ver]) ver++;
+        if (ver > 10) return "";
+        const [totCw, ecLen, g1B, g1Cw, g2B, g2Cw] = BLK_L[ver];
+        const bits = [];
+        const push = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >> i) & 1); };
+        push(4, 4); push(bytes.length, ver <= 9 ? 8 : 16);
+        for (const b of bytes) push(b, 8);
+        for (let i = 0; i < 4 && bits.length < totCw * 8; i++) bits.push(0);
+        while (bits.length % 8 !== 0) bits.push(0);
+        const dcw = new Uint8Array(totCw);
+        for (let i = 0; i < bits.length / 8; i++) { let v = 0; for (let b = 0; b < 8; b++) v = (v << 1) | bits[i * 8 + b]; dcw[i] = v; }
+        for (let i = bits.length / 8, p = 0; i < totCw; i++, p ^= 1) dcw[i] = p ? 0x11 : 0xec;
+        const dBlks = [], eBlks = []; let off = 0;
+        for (let b = 0; b < g1B; b++) { const s = dcw.slice(off, off + g1Cw); off += g1Cw; dBlks.push(s); eBlks.push(rsRem(s, ecLen)); }
+        for (let b = 0; b < g2B; b++) { const s = dcw.slice(off, off + g2Cw); off += g2Cw; dBlks.push(s); eBlks.push(rsRem(s, ecLen)); }
+        const inter = [];
+        for (let i = 0; i < Math.max(g1Cw, g2Cw); i++) for (const blk of dBlks) if (i < blk.length) inter.push(blk[i]);
+        for (let i = 0; i < ecLen; i++) for (const blk of eBlks) inter.push(blk[i]);
+        const sz = ver * 4 + 17;
+        const mod = Array.from({ length: sz }, () => new Uint8Array(sz));
+        const fn = Array.from({ length: sz }, () => new Uint8Array(sz));
+        const setF = (r, c, d) => { if (r >= 0 && r < sz && c >= 0 && c < sz) { mod[r][c] = d ? 1 : 0; fn[r][c] = 1; } };
+        const finder = (r0, c0) => {
+          for (let dr = -1; dr <= 7; dr++) for (let dc = -1; dc <= 7; dc++)
+            setF(r0 + dr, c0 + dc, dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6 && (dr === 0 || dr === 6 || dc === 0 || dc === 6 || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4)));
+        };
+        finder(0, 0); finder(0, sz - 7); finder(sz - 7, 0);
+        for (let i = 8; i < sz - 8; i++) { setF(6, i, i % 2 === 0); setF(i, 6, i % 2 === 0); }
+        for (const ar of ALN[ver]) for (const ac of ALN[ver]) {
+          if ((ar === 6 && ac === 6) || (ar === 6 && ac === sz - 7) || (ar === sz - 7 && ac === 6)) continue;
+          for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) setF(ar + dr, ac + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1);
+        }
+        for (let i = 0; i <= 8; i++) if (i !== 6) { fn[8][i] = 1; fn[i][8] = 1; }
+        for (let i = 0; i < 8; i++) { fn[8][sz - 1 - i] = 1; fn[sz - 1 - i][8] = 1; }
+        setF(sz - 8, 8, true);
+        const allB = []; for (const cw of inter) for (let b = 7; b >= 0; b--) allB.push((cw >> b) & 1);
+        let bi = 0, up = true;
+        for (let rt = sz - 1; rt >= 1; rt -= 2) {
+          if (rt === 6) rt = 5;
+          for (let v = 0; v < sz; v++) {
+            const r = up ? sz - 1 - v : v;
+            for (let j = 0; j < 2; j++) {
+              const c = rt - j;
+              if (!fn[r][c]) mod[r][c] = (bi < allB.length ? allB[bi++] === 1 : false) !== ((r + c) % 2 === 0) ? 1 : 0;
+            }
+          }
+          up = !up;
+        }
+        let rem = (0b01 << 3) << 10;
+        for (let i = 14; i >= 10; i--) if ((rem >> i) & 1) rem ^= 0b10100110111 << (i - 10);
+        const fmt = (((0b01 << 3) << 10) | rem) ^ 0b101010000010010;
+        for (let i = 0; i <= 5; i++) mod[8][i] = (fmt >> (14 - i)) & 1;
+        mod[8][7] = (fmt >> 8) & 1; mod[8][8] = (fmt >> 7) & 1; mod[7][8] = (fmt >> 6) & 1;
+        for (let i = 9; i < 15; i++) mod[14 - i][8] = (fmt >> (14 - i)) & 1;
+        for (let i = 0; i < 8; i++) mod[8][sz - 1 - i] = (fmt >> i) & 1;
+        for (let i = 8; i < 15; i++) mod[sz - 15 + i][8] = (fmt >> i) & 1;
+        let d = "";
+        for (let r = 0; r < sz; r++) for (let c = 0; c < sz; c++) if (mod[r][c]) d += `M${c + 3},${r + 3}h1v1h-1z`;
+        return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${sz + 6} ${sz + 6}" width="${pixelSize}" height="${pixelSize}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#ffffff" rx="2"/><path d="${d}" fill="#0f172a"/></svg>`;
+      } catch {
+        return "";
+      }
+    }
+
     function applyMobilePairingUi(info) {
       if (!info || !info.ok) {
         const hint = info?.standaloneHint || "本地手机随身网关启动中（若未安装 Node.js，可直接在「⚙️ 软件设置」填入免费 PushPlus 微信口令或 Bark 接收手机提醒）";
@@ -1944,12 +2047,15 @@
         return;
       }
       lastMobileInfo = info;
-      document.getElementById("mob-qr-box").innerHTML = info.qrSvg || "";
+      const qrTarget = info.primaryUrl || info.permanentMobileUrl || info.tunnelMobileUrl || info.lanUrl || "";
+      document.getElementById("mob-qr-box").innerHTML = info.qrSvg || clientRenderQrSvg(qrTarget, 194);
       document.getElementById("mob-lan-url").value = info.lanUrl || "";
-      document.getElementById("mob-tun-url").value = info.tunnelMobileUrl || "";
+      document.getElementById("mob-tun-url").value = info.permanentMobileUrl || info.tunnelMobileUrl || "";
+      const mobSleepChk = document.getElementById("mob-prevent-sleep");
+      if (mobSleepChk) mobSleepChk.checked = Boolean(info.preventSleep ?? appState.settings?.preventSleep);
       const tunBtn = document.getElementById("btn-toggle-tunnel");
       if (info.status === "running" && info.tunnelMobileUrl) {
-        tunBtn.textContent = "🟢 出门穿透已开启（点此关闭）";
+        tunBtn.textContent = "🟢 永久书签穿透已开（点此关闭）";
         tunBtn.classList.remove("primary");
       } else {
         tunBtn.textContent = "🌐 开启出门 4G/5G 穿透";
@@ -2412,7 +2518,9 @@
       const isMas = Boolean(window.__TABPULSE_MAS_MODE);
       document.getElementById("direct-license-bar").style.display = isMas ? "none" : "block";
       document.getElementById("mas-restore-bar").style.display = isMas ? "flex" : "none";
-      document.getElementById("direct-buy-cn").style.display = isMas ? "none" : "inline-flex";
+      document.getElementById("direct-buy-cn").style.display = isMas ? "none" : "grid";
+      const yrCn = document.getElementById("direct-buy-yr-cn");
+      if (yrCn) yrCn.style.display = isMas ? "none" : "inline-flex";
       document.getElementById("direct-buy-gl").style.display = isMas ? "none" : "inline-flex";
       document.getElementById("mas-buy-yearly-cn").style.display = isMas ? "inline-flex" : "none";
       document.getElementById("mas-buy-life-cn").style.display = isMas ? "inline-flex" : "none";
@@ -2422,6 +2530,17 @@
         document.getElementById("cn-p2").innerHTML = '¥28 <span style="font-size:12.5px;font-weight:500;color:var(--muted);">/ 永久</span>';
       }
       document.getElementById("modal-paywall").classList.add("open");
+    }
+
+    async function copyInAppOrder(planName) {
+      const txt = `购买《消息总管》${planName}｜闲鱼搜「消息总管 多开防串号」拍下24h自动发码，或加QQ：3152557994 秒发收款码与TP1激活码`;
+      await navigator.clipboard.writeText("3152557994");
+      const msgEl = document.getElementById("license-msg");
+      if (msgEl) {
+        msgEl.style.color = "var(--primary)";
+        msgEl.textContent = `✅ 已复制发码客服 QQ 号「3152557994」！也可打开闲鱼搜「消息总管 多开防串号」24h自动秒发 TP1 激活码。`;
+      }
+      showToast("✅ 已复制 QQ 号 3152557994（闲鱼搜「消息总管」可24h自动发卡）");
     }
 
     function buyMasIap(productId) {
@@ -2462,9 +2581,22 @@
 
     function openSettingsModal() {
       document.getElementById("s-webhook").value = appState.settings?.webhookUrl || "";
+      const sleepChk = document.getElementById("s-prevent-sleep");
+      if (sleepChk) sleepChk.checked = Boolean(appState.settings?.preventSleep);
       const msg = document.getElementById("push-test-msg");
       if (msg) msg.textContent = "";
       document.getElementById("modal-settings").classList.add("open");
+    }
+
+    async function togglePreventSleep(enabled) {
+      const preventSleep = Boolean(enabled);
+      await apiCall("POST", "/api/settings", { preventSleep });
+      if (appState.settings) appState.settings.preventSleep = preventSleep;
+      const c1 = document.getElementById("s-prevent-sleep");
+      const c2 = document.getElementById("mob-prevent-sleep");
+      if (c1) c1.checked = preventSleep;
+      if (c2) c2.checked = preventSleep;
+      showToast(preventSleep ? "☕ 已开启防休眠常驻，电脑息屏也不会断联！" : "已恢复系统默认休眠策略");
     }
 
     function selectPushWizardPreset(preset) {

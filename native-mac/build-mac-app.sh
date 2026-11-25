@@ -48,10 +48,10 @@ BIN_TMP="$(mktemp -d)"
 
 # Direct Universal Binary
 /usr/bin/swiftc -O -target arm64-apple-macos12.0 \
-  -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications \
+  -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications -framework Network \
   "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/direct-arm64"
 /usr/bin/swiftc -O -target x86_64-apple-macos12.0 \
-  -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications \
+  -framework Cocoa -framework WebKit -framework CryptoKit -framework UserNotifications -framework Network \
   "$PROJECT_ROOT/native-mac/TabPulseApp.swift" -o "$BIN_TMP/direct-x86_64"
 UNIVERSAL_DIRECT="$BIN_TMP/DirectExec"
 /usr/bin/lipo -create "$BIN_TMP/direct-arm64" "$BIN_TMP/direct-x86_64" -output "$UNIVERSAL_DIRECT"
@@ -178,11 +178,11 @@ if security find-identity -v -p codesigning | grep -q "Apple Development: Yang H
 fi
 
 echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
-populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.3.0" "8"
+populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.4.0" "9"
 bundle_embedded_server "$DIST_DIR/消息总管.app"
 /usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/消息总管.app"
 
-populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.3.0" "8"
+populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.4.0" "9"
 bundle_embedded_server "$DIST_DIR/ReplyRadar.app"
 /usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/ReplyRadar.app"
 
@@ -235,6 +235,21 @@ echo "[6/6] Packaging CN & EN DMG installers and updating /Applications/消息�
 STAGE_CN="$(mktemp -d)"
 cp -R "$DIST_DIR/消息总管.app" "$STAGE_CN/"
 ln -s /Applications "$STAGE_CN/Applications"
+cat > "$STAGE_CN/⚡首次打不开点我一键放行.command" <<'CMD_CN'
+#!/bin/bash
+echo "正在为您一键解除 macOS 首次打开安全拦截并启动《消息总管》..."
+if [ -d "/Applications/消息总管.app" ]; then
+  xattr -cr "/Applications/消息总管.app" 2>/dev/null || true
+  open "/Applications/消息总管.app"
+else
+  DIR="$(cd "$(dirname "$0")" && pwd)"
+  cp -R "$DIR/消息总管.app" "/Applications/消息总管.app" 2>/dev/null || true
+  xattr -cr "/Applications/消息总管.app" 2>/dev/null || true
+  open "/Applications/消息总管.app"
+fi
+echo "✅ 已启动！本窗口可安全关闭。"
+CMD_CN
+chmod +x "$STAGE_CN/⚡首次打不开点我一键放行.command"
 /usr/bin/hdiutil create -volname "消息总管" -srcfolder "$STAGE_CN" -ov -format UDZO "$DIST_DIR/消息总管-macOS安装包.dmg" >/dev/null
 cp "$DIST_DIR/消息总管-macOS安装包.dmg" "$DIST_DIR/XiaoXiZongGuan-CN-macOS.dmg"
 rm -rf "$STAGE_CN"
@@ -242,6 +257,19 @@ rm -rf "$STAGE_CN"
 STAGE_EN="$(mktemp -d)"
 cp -R "$DIST_DIR/ReplyRadar.app" "$STAGE_EN/"
 ln -s /Applications "$STAGE_EN/Applications"
+cat > "$STAGE_EN/First-Launch-Helper.command" <<'CMD_EN'
+#!/bin/bash
+if [ -d "/Applications/ReplyRadar.app" ]; then
+  xattr -cr "/Applications/ReplyRadar.app" 2>/dev/null || true
+  open "/Applications/ReplyRadar.app"
+else
+  DIR="$(cd "$(dirname "$0")" && pwd)"
+  cp -R "$DIR/ReplyRadar.app" "/Applications/ReplyRadar.app" 2>/dev/null || true
+  xattr -cr "/Applications/ReplyRadar.app" 2>/dev/null || true
+  open "/Applications/ReplyRadar.app"
+fi
+CMD_EN
+chmod +x "$STAGE_EN/First-Launch-Helper.command"
 /usr/bin/hdiutil create -volname "ReplyRadar" -srcfolder "$STAGE_EN" -ov -format UDZO "$DIST_DIR/ReplyRadar-EN-macOS.dmg" >/dev/null
 rm -rf "$STAGE_EN"
 

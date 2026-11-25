@@ -388,8 +388,13 @@
         <div class="chat-nav-title" id="chat-title">平台消息</div>
         <div class="chat-nav-sub" id="chat-sub">纯文字同步 · 电脑固定网络代发</div>
       </div>
-      <button class="btn" onclick="refreshActiveChannel(true)">刷新</button>
+      <div style="display:flex;gap:5px;flex-shrink:0;">
+        <button class="btn" id="btn-peek-img" onclick="peekActiveChatImage()" title="买家发了图片？点此按需查看当前会话画面">🖼️ 看图</button>
+        <button class="btn" onclick="refreshActiveChannel(true)">刷新</button>
+      </div>
     </div>
+
+    <div id="peek-img-box" style="display:none;background:#0f172a;border-bottom:1px solid var(--border);padding:10px 12px;"></div>
 
     <!-- Clickable Conversation / Contact Threads inside this Platform/App -->
     <div class="thread-bar" id="thread-bar"></div>
@@ -945,6 +950,10 @@
             : "电脑本地 AI 终端 · 实时文字交互";
 
       document.getElementById("thread-bar").style.display = "none";
+      const peekBox = document.getElementById("peek-img-box");
+      if (peekBox) { peekBox.style.display = "none"; peekBox.innerHTML = ""; }
+      const peekBtn = document.getElementById("btn-peek-img");
+      if (peekBtn) peekBtn.style.display = ch.kind === "cc" ? "none" : "inline-flex";
       document.getElementById("msg-stream").innerHTML = `<div class="empty-state">⏳ 正在读取「${esc(ch.title)}」的最新文字消息...</div>`;
       renderButlerDraftBar(ch);
       renderChatQuickReplyChips();
@@ -989,11 +998,51 @@
 
     function closeChatPage() {
       activeChannel = null;
+      const peekBox = document.getElementById("peek-img-box");
+      if (peekBox) { peekBox.style.display = "none"; peekBox.innerHTML = ""; }
       if (location.hash.startsWith("#open=")) {
         history.replaceState(null, "", location.pathname + location.search);
       }
       document.getElementById("chat-page").classList.remove("open");
       pollAll();
+    }
+
+    async function peekActiveChatImage() {
+      if (!activeChannel) return;
+      const box = document.getElementById("peek-img-box");
+      if (!box) return;
+      box.style.display = "block";
+      box.innerHTML = `<div style="font-size:12.5px;color:#93c5fd;">⏳ 正在按需提取买家发来的聊天图片/画面...</div>`;
+      try {
+        let res = null;
+        if (activeChannel.kind === "web") {
+          res = await api(`/api/remote/tab/${encodeURIComponent(activeChannel.id)}/peek-image`);
+        } else if (activeChannel.kind === "app") {
+          const owner = activeChannel.rawOwnerName || activeChannel.appName || "";
+          res = await api(`/api/desktop/window/${activeChannel.windowId || 0}/peek-image?app=${encodeURIComponent(owner)}`);
+        }
+        if (res && res.ok && res.dataUrl) {
+          box.innerHTML = "";
+          const head = document.createElement("div");
+          head.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;color:#cbd5e1;";
+          head.innerHTML = `<span>🖼️ 当前聊天实况图（双指可放大查看细节）</span>`;
+          const closeB = document.createElement("button");
+          closeB.className = "btn";
+          closeB.style.cssText = "padding:3px 9px;font-size:11.5px;";
+          closeB.textContent = "收起图片 ✕";
+          closeB.onclick = () => { box.style.display = "none"; box.innerHTML = ""; };
+          head.appendChild(closeB);
+          const pic = document.createElement("im" + "g");
+          pic.src = res.dataUrl;
+          pic.style.cssText = "width:100%;max-height:52vh;object-fit:contain;border-radius:10px;border:1px solid #334155;background:#020617;";
+          box.appendChild(head);
+          box.appendChild(pic);
+        } else {
+          box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#fca5a5;"><span>⚠️ ${esc(res?.error || "当前窗口暂未打开或不支持看图")}</span><button class="btn" style="padding:3px 8px;font-size:11px;" onclick="document.getElementById('peek-img-box').style.display='none'">关闭</button></div>`;
+        }
+      } catch (e) {
+        box.innerHTML = `<div style="font-size:12px;color:#fca5a5;">读取图片超时，请稍后重试</div>`;
+      }
     }
 
     async function refreshActiveChannel(manualToast = false) {

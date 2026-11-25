@@ -5,6 +5,8 @@ import UserNotifications
 import WebKit
 #if MAS_BUILD
 import StoreKit
+#else
+import Network
 #endif
 
 func resolveSpintaxSwift(_ raw: String) -> String {
@@ -253,8 +255,22 @@ final class StandaloneStore {
 
     func loadState() -> [String: Any] {
         if let data = try? Data(contentsOf: stateURL),
-           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           var obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
            obj["watches"] is [[String: Any]] {
+            var dirty = false
+            if (obj["mobileToken"] as? String ?? "").count < 16 {
+                obj["mobileToken"] = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+                dirty = true
+            }
+            if !(obj["tunnelBoxId"] as? String ?? "").hasPrefix("bx_") {
+                obj["tunnelBoxId"] = "bx_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(20).lowercased()
+                dirty = true
+            }
+            if (obj["tunnelWriteKey"] as? String ?? "").count < 16 {
+                obj["tunnelWriteKey"] = UUID().uuidString.replacingOccurrences(of: "-", with: "") + UUID().uuidString.prefix(8)
+                dirty = true
+            }
+            if dirty { saveState(obj) }
             return obj
         }
         let defaultWatches: [[String: Any]] = isChineseSystem ? [
@@ -347,9 +363,12 @@ final class StandaloneStore {
             ]
         ]
         let initial: [String: Any] = [
-            "version": "5.3.0",
+            "version": "5.4.0",
             "license": NSNull(),
-            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
+            "mobileToken": UUID().uuidString.replacingOccurrences(of: "-", with: ""),
+            "tunnelBoxId": "bx_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(20).lowercased(),
+            "tunnelWriteKey": UUID().uuidString.replacingOccurrences(of: "-", with: "") + UUID().uuidString.prefix(8),
+            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "preventSleep": false, "tunnelAutoStart": false, "termsAcceptedAt": NSNull()],
             "watches": defaultWatches,
             "quickReplies": defaultQuickReplies
         ]
@@ -398,7 +417,7 @@ final class StandaloneStore {
         }
 
         return [
-            "version": "5.3.0",
+            "version": "5.4.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -435,6 +454,31 @@ final class NativeLeadScanner {
                     handler(obj)
                 }
             }.resume()
+        }
+
+        fetchJSON("https://svc.eleduck.com/api/v1/posts?page=1") { obj in
+            guard let dict = obj as? [String: Any], let posts = dict["posts"] as? [[String: Any]] else { return }
+            let qLower = q.lowercased()
+            let hasZh = q.range(of: "[\\u4e00-\\u9fa5]", options: .regularExpression) != nil
+            lock.lock()
+            for p in posts {
+                let title = ((p["full_title"] as? String) ?? (p["title"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if title.isEmpty || title.contains("社区规则") || title.contains("个人接单") { continue }
+                let summary = ((p["summary"] as? String) ?? "").replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                let hay = "\(title) \(summary)".lowercased()
+                if !hay.contains(qLower) && !(hasZh && (hay.contains("远程") || hay.contains("外包") || hay.contains("招") || hay.contains("合作"))) { continue }
+                let pid = (p["id"] as? String) ?? ""
+                let pub = (p["published_at"] as? String) ?? ISO8601DateFormatter().string(from: Date())
+                items.append([
+                    "source": "电鸭社区 · 远程/外包",
+                    "title": title,
+                    "snippet": String(summary.prefix(160)),
+                    "url": "https://eleduck.com/posts/\(pid)",
+                    "publishedAt": pub,
+                    "intentScore": 92
+                ])
+            }
+            lock.unlock()
         }
 
         fetchJSON("https://api.pullpush.io/reddit/search/submission/?q=\(enc)+hiring&size=6&sort=desc") { obj in
@@ -545,6 +589,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func applicationWillTerminate(_ notification: Notification) {
         #if !MAS_BUILD
         spawnedHubProcess?.terminate()
+        StandaloneMobileGateway.shared.stopAll()
         #endif
     }
 
@@ -679,6 +724,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     }
                 } else {
                     self?.useExternalHub = false
+                    StandaloneMobileGateway.shared.start(appDelegate: self)
                     self?.loadStandaloneUI()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                         self?.warmUpPassiveRedTabsIfNeeded()
@@ -1517,6 +1563,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             return
         }
 
+        if type == "peekImage" {
+            let delay = wasCold ? 1.8 : 0.1
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                self.captureWebViewJpegDataUrl(wv: wv) { dataUrl in
+                    if let d = dataUrl {
+                        self.postBridgeResult(taskId: taskId, watchId: watchId, payload: ["ok": true, "dataUrl": d])
+                    } else {
+                        self.postBridgeResult(taskId: taskId, watchId: watchId, payload: ["ok": false, "error": "画面生成失败"])
+                    }
+                }
+            }
+            return
+        }
+
         if type == "reply" {
             let text = (cmd["text"] as? String) ?? ""
             let autoSub = (cmd["autoSubmit"] as? Bool) ?? true
@@ -1594,6 +1654,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             payload["messages"] = dict["messages"] ?? []
             payload["authRequired"] = dict["authRequired"] ?? false
             self?.postBridgeResult(taskId: taskId, watchId: watchId, payload: payload)
+        }
+    }
+
+    func captureWebViewJpegDataUrl(wv: WKWebView, completion: @escaping (String?) -> Void) {
+        let snapCfg = WKSnapshotConfiguration()
+        snapCfg.snapshotWidth = 920
+        wv.takeSnapshot(with: snapCfg) { img, _ in
+            guard let nsImg = img,
+                  let tiff = nsImg.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.56]) else {
+                completion(nil)
+                return
+            }
+            completion("data:image/jpeg;base64,\(jpg.base64EncodedString())")
+        }
+    }
+
+    func extractDomSnapshotDict(wv: WKWebView, completion: @escaping ([String: Any]) -> Void) {
+        let domExtractorJS = """
+        (function() {
+          const vw = Math.max(1, window.innerWidth || 1000);
+          const vh = Math.max(1, window.innerHeight || 700);
+          const seen = new Set();
+          const threads = [];
+          const messages = [];
+          const isVisible = (el) => {
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            if (r.width < 12 || r.height < 10 || r.bottom < 0 || r.top > vh * 1.5) return false;
+            const st = window.getComputedStyle(el);
+            return st.display !== 'none' && st.visibility !== 'hidden' && st.opacity !== '0';
+          };
+          const authRequired = Boolean(document.querySelector('input[type="password"]')) || /(login|signin|sign-in|passport|扫码登录|请登录)/i.test(location.href + ' ' + document.title);
+          const candidates = document.querySelectorAll('li, article, p, [class*="msg" i], [class*="message" i], [class*="chat" i], [class*="item" i], [class*="comment" i], [class*="notify" i], [role="listitem"], h3, h4, div');
+          for (const el of candidates) {
+            if (!isVisible(el)) continue;
+            if (el.tagName === 'DIV' && el.children.length > 3) continue;
+            const raw = (el.innerText || '').trim().replace(/\\s+/g, ' ');
+            if (raw.length < 2 || raw.length > 900 || seen.has(raw)) continue;
+            const r = el.getBoundingClientRect();
+            if (r.top < 38) continue;
+            seen.add(raw);
+            const relX = r.left / vw;
+            const cxRatio = Math.max(0.02, Math.min(0.98, (r.left + r.width * 0.5) / vw));
+            const cyRatio = Math.max(0.02, Math.min(0.98, (r.top + r.height * 0.5) / vh));
+            if (relX < 0.28 && r.width < vw * 0.38 && raw.length <= 42 && threads.length < 16) {
+              threads.push({ label: raw, xRatio: cxRatio, yRatio: cyRatio });
+            } else {
+              const isMe = ((r.left + r.width * 0.5) / vw) > 0.62 || /mine|self|right|me|outbound/i.test(el.className || '');
+              messages.push({ text: raw, isMe });
+            }
+            if (messages.length >= 45) break;
+          }
+          if (messages.length === 0 && document.body) {
+            const lines = (document.body.innerText || '').split('\\n').map(s => s.trim()).filter(s => s.length >= 2 && s.length <= 600).slice(0, 30);
+            for (const l of lines) messages.push({ text: l, isMe: false });
+          }
+          return { threads, messages, authRequired };
+        })();
+        """
+        wv.evaluateJavaScript(domExtractorJS) { res, _ in
+            let dict = (res as? [String: Any]) ?? [:]
+            completion([
+                "ok": true,
+                "pageTitle": wv.title ?? "",
+                "currentUrl": wv.url?.absoluteString ?? "",
+                "threads": dict["threads"] ?? [],
+                "messages": dict["messages"] ?? [],
+                "authRequired": dict["authRequired"] ?? false
+            ])
         }
     }
 
@@ -1718,6 +1849,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             var set = (st["settings"] as? [String: Any]) ?? [:]
             if let wh = payload?["webhookUrl"] as? String { set["webhookUrl"] = wh }
             if let ta = payload?["termsAcceptedAt"] as? String { set["termsAcceptedAt"] = ta }
+            if let ps = payload?["preventSleep"] as? Bool {
+                set["preventSleep"] = ps
+                #if !MAS_BUILD
+                StandaloneMobileGateway.shared.syncPreventSleep(ps)
+                #endif
+            }
             st["settings"] = set
             StandaloneStore.shared.saveState(st)
             replyCallback(reqId, ["ok": true, "settings": set])
@@ -1881,12 +2018,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             return
         }
         if path == "/api/mobile/info" {
+            #if !MAS_BUILD
+            replyCallback(reqId, StandaloneMobileGateway.shared.currentPairingInfo())
+            #else
             replyCallback(reqId, [
                 "ok": false,
                 "standaloneHint": isChineseSystem
-                    ? "当前运行在轻量单机模式；在「设置」填入微信 PushPlus / Bark 推送码即可直接接收手机锁屏消息提醒！"
-                    : "Standalone mode active — configure Webhook/Bark in Settings for instant phone push alerts."
+                    ? "App Store 沙盒版在「软件设置」填入免费微信 PushPlus 口令或 Bark 码，即可锁屏秒收手机通知！"
+                    : "Configure Webhook/Bark in Settings for instant phone push alerts."
             ])
+            #endif
+            return
+        }
+        if method == "POST" && path == "/api/mobile/tunnel" {
+            #if !MAS_BUILD
+            let act = (payload?["action"] as? String) ?? "start"
+            StandaloneMobileGateway.shared.handleTunnelAction(act) { info in
+                self.replyCallback(reqId, info)
+            }
+            #else
+            replyCallback(reqId, ["ok": false])
+            #endif
             return
         }
         if path == "/api/cc/state" || path == "/api/ai-clients/status" || path == "/api/ai-butler/state" {
@@ -2286,6 +2438,455 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
     }
 }
+
+#if !MAS_BUILD
+// MARK: - Zero-Node Native Mobile Gateway (NWListener + SSH Tunnel + Edge Permanent Bookmark + Caffeinate)
+final class StandaloneMobileGateway {
+    static let shared = StandaloneMobileGateway()
+    private let edgeOrigin = "https://replyradar-edge.a3152557994.workers.dev"
+    private var listener: NWListener?
+    private weak var appDelegate: AppDelegate?
+    private var port: UInt16 = 17890
+    private var sshProc: Process?
+    private var caffeinateProc: Process?
+    private var publicUrl: String = ""
+    private var tunnelStatus: String = "stopped"
+    private var wantedTunnel: Bool = false
+
+    func start(appDelegate: AppDelegate?) {
+        self.appDelegate = appDelegate
+        let st = StandaloneStore.shared.loadState()
+        let set = (st["settings"] as? [String: Any]) ?? [:]
+        syncPreventSleep((set["preventSleep"] as? Bool) ?? false)
+
+        if listener == nil {
+            for candidatePort: UInt16 in [17890, 17891, 17892] {
+                if let nwPort = NWEndpoint.Port(rawValue: candidatePort),
+                   let l = try? NWListener(using: .tcp, on: nwPort) {
+                    self.port = candidatePort
+                    self.listener = l
+                    l.newConnectionHandler = { [weak self] conn in
+                        self?.handleConnection(conn)
+                    }
+                    l.start(queue: DispatchQueue.global(qos: .userInitiated))
+                    break
+                }
+            }
+        }
+
+        if (set["tunnelAutoStart"] as? Bool) == true {
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) {
+                self.startSshTunnel(completion: nil)
+            }
+        }
+    }
+
+    func stopAll() {
+        wantedTunnel = false
+        sshProc?.terminate()
+        sshProc = nil
+        caffeinateProc?.terminate()
+        caffeinateProc = nil
+        listener?.cancel()
+        listener = nil
+    }
+
+    func syncPreventSleep(_ enabled: Bool) {
+        if enabled && caffeinateProc == nil {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
+            p.arguments = ["-di", "-w", "\(ProcessInfo.processInfo.processIdentifier)"]
+            try? p.run()
+            caffeinateProc = p
+        } else if !enabled, let p = caffeinateProc {
+            p.terminate()
+            caffeinateProc = nil
+        }
+    }
+
+    private func getLanIP() -> String {
+        var address = "127.0.0.1"
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        if getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr {
+            var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
+            while let cur = ptr {
+                let interface = cur.pointee
+                if interface.ifa_addr.pointee.sa_family == UInt8(AF_INET) {
+                    let name = String(cString: interface.ifa_name)
+                    if name != "lo0" {
+                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                        getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len), &hostname, socklen_t(hostname.count), nil, socklen_t(0), NI_NUMERICHOST)
+                        let ip = String(cString: hostname)
+                        if ip.hasPrefix("192.168.") || ip.hasPrefix("10.") || ip.hasPrefix("172.") {
+                            address = ip
+                            if ip.hasPrefix("192.168.") { break }
+                        }
+                    }
+                }
+                ptr = interface.ifa_next
+            }
+            freeifaddrs(ifaddr)
+        }
+        return address
+    }
+
+    func currentPairingInfo() -> [String: Any] {
+        let st = StandaloneStore.shared.loadState()
+        let tok = (st["mobileToken"] as? String) ?? ""
+        let boxId = (st["tunnelBoxId"] as? String) ?? ""
+        let set = (st["settings"] as? [String: Any]) ?? [:]
+        let lanUrl = "http://\(getLanIP()):\(port)/m?t=\(tok)"
+        let permUrl = (!publicUrl.isEmpty && !boxId.isEmpty) ? "\(edgeOrigin)/go/\(boxId)?t=\(tok)" : ""
+        let rawTun = !publicUrl.isEmpty ? "\(publicUrl)/m?t=\(tok)" : ""
+        let tunUrl = !permUrl.isEmpty ? permUrl : rawTun
+        let primary = !tunUrl.isEmpty ? tunUrl : lanUrl
+        return [
+            "ok": true,
+            "status": tunnelStatus,
+            "publicUrl": publicUrl,
+            "permanentMobileUrl": permUrl,
+            "tunnelMobileUrl": tunUrl,
+            "lanUrl": lanUrl,
+            "primaryUrl": primary,
+            "preventSleep": (set["preventSleep"] as? Bool) ?? false
+        ]
+    }
+
+    func handleTunnelAction(_ action: String, completion: @escaping ([String: Any]) -> Void) {
+        var st = StandaloneStore.shared.loadState()
+        var set = (st["settings"] as? [String: Any]) ?? [:]
+        if action == "rotateToken" {
+            st["mobileToken"] = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            StandaloneStore.shared.saveState(st)
+            completion(currentPairingInfo())
+            return
+        }
+        if action == "stop" {
+            wantedTunnel = false
+            set["tunnelAutoStart"] = false
+            st["settings"] = set
+            StandaloneStore.shared.saveState(st)
+            sshProc?.terminate()
+            sshProc = nil
+            publicUrl = ""
+            tunnelStatus = "stopped"
+            completion(currentPairingInfo())
+            return
+        }
+        wantedTunnel = true
+        set["tunnelAutoStart"] = true
+        set["preventSleep"] = true
+        st["settings"] = set
+        StandaloneStore.shared.saveState(st)
+        syncPreventSleep(true)
+        startSshTunnel {
+            completion(self.currentPairingInfo())
+        }
+    }
+
+    private func syncEdgePermanentBookmark() {
+        let st = StandaloneStore.shared.loadState()
+        guard !publicUrl.isEmpty,
+              let boxId = st["tunnelBoxId"] as? String,
+              let writeKey = st["tunnelWriteKey"] as? String,
+              let u = URL(string: "\(edgeOrigin)/api/tunnel/sync") else { return }
+        var req = URLRequest(url: u, timeoutInterval: 8.0)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "boxId": boxId,
+            "writeKey": writeKey,
+            "targetOrigin": publicUrl
+        ])
+        URLSession.shared.dataTask(with: req).resume()
+    }
+
+    private func startSshTunnel(completion: (() -> Void)?) {
+        if sshProc != nil && tunnelStatus == "running" && !publicUrl.isEmpty {
+            completion?()
+            return
+        }
+        sshProc?.terminate()
+        sshProc = nil
+        publicUrl = ""
+        tunnelStatus = "starting"
+
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        p.arguments = ["-T", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ServerAliveInterval=30", "-o", "ExitOnForwardFailure=yes", "-R", "80:127.0.0.1:\(port)", "nokey@localhost.run"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+
+        var settled = false
+        let settleOnce = {
+            if !settled {
+                settled = true
+                completion?()
+            }
+        }
+
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] fh in
+            let data = fh.availableData
+            if data.isEmpty { return }
+            guard let self = self, let txt = String(data: data, encoding: .utf8) else { return }
+            if let r = txt.range(of: "https://[a-zA-Z0-9.-]+\\.lhr\\.life", options: .regularExpression) {
+                let found = String(txt[r])
+                if self.publicUrl != found {
+                    self.publicUrl = found
+                    self.tunnelStatus = "running"
+                    self.syncEdgePermanentBookmark()
+                    settleOnce()
+                }
+            }
+        }
+        p.terminationHandler = { [weak self] proc in
+            pipe.fileHandleForReading.readabilityHandler = nil
+            guard let self = self else { return }
+            if self.sshProc === proc {
+                self.sshProc = nil
+                self.publicUrl = ""
+                self.tunnelStatus = "stopped"
+                if self.wantedTunnel {
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 6.0) {
+                        if self.wantedTunnel { self.startSshTunnel(completion: nil) }
+                    }
+                }
+            }
+            settleOnce()
+        }
+        do {
+            try p.run()
+            sshProc = p
+        } catch {
+            tunnelStatus = "error"
+            settleOnce()
+            return
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 6.2) {
+            settleOnce()
+        }
+    }
+
+    private func handleConnection(_ conn: NWConnection) {
+        conn.start(queue: DispatchQueue.global(qos: .userInitiated))
+        var buffer = Data()
+        func readLoop() {
+            conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, err in
+                if let d = data, !d.isEmpty { buffer.append(d) }
+                if let sepRange = buffer.range(of: Data("\r\n\r\n".utf8)) {
+                    let headerData = buffer.subdata(in: 0..<sepRange.lowerBound)
+                    let headerStr = String(data: headerData, encoding: .utf8) ?? ""
+                    var contentLen = 0
+                    for line in headerStr.split(separator: "\r\n") {
+                        if line.lowercased().hasPrefix("content-length:") {
+                            contentLen = Int(line.dropFirst(15).trimmingCharacters(in: .whitespaces)) ?? 0
+                        }
+                    }
+                    let bodyStart = sepRange.upperBound
+                    if buffer.count - bodyStart >= contentLen {
+                        let bodyData = buffer.subdata(in: bodyStart..<(bodyStart + contentLen))
+                        self?.dispatchHttpRequest(conn: conn, headerStr: headerStr, bodyData: bodyData)
+                        return
+                    }
+                }
+                if isComplete || err != nil {
+                    conn.cancel()
+                    return
+                }
+                readLoop()
+            }
+        }
+        readLoop()
+    }
+
+    private func sendHttp(conn: NWConnection, status: Int, contentType: String, body: Data, extraHeaders: [String: String] = [:]) {
+        let statusText = status == 200 ? "OK" : status == 201 ? "Created" : status == 401 ? "Unauthorized" : status == 404 ? "Not Found" : "OK"
+        var head = "HTTP/1.1 \(status) \(statusText)\r\nContent-Type: \(contentType)\r\nContent-Length: \(body.count)\r\nCache-Control: no-store\r\nConnection: close\r\n"
+        for (k, v) in extraHeaders { head += "\(k): \(v)\r\n" }
+        head += "\r\n"
+        var out = Data(head.utf8)
+        out.append(body)
+        conn.send(content: out, completion: .contentProcessed { _ in conn.cancel() })
+    }
+
+    private func sendJson(conn: NWConnection, status: Int = 200, obj: [String: Any], extraHeaders: [String: String] = [:]) {
+        let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data("{\"ok\":false}".utf8)
+        sendHttp(conn: conn, status: status, contentType: "application/json; charset=utf-8", body: data, extraHeaders: extraHeaders)
+    }
+
+    private func dispatchHttpRequest(conn: NWConnection, headerStr: String, bodyData: Data) {
+        let lines = headerStr.split(separator: "\r\n", omittingEmptySubsequences: false)
+        guard let first = lines.first else { conn.cancel(); return }
+        let parts = first.split(separator: " ")
+        guard parts.count >= 2 else { conn.cancel(); return }
+        let method = String(parts[0])
+        let rawTarget = String(parts[1])
+        let comps = URLComponents(string: "http://127.0.0.1\(rawTarget)")
+        let pathname = comps?.path ?? "/"
+
+        var headers: [String: String] = [:]
+        for l in lines.dropFirst() {
+            if let idx = l.firstIndex(of: ":") {
+                let k = l[..<idx].trimmingCharacters(in: .whitespaces).lowercased()
+                let v = l[l.index(after: idx)...].trimmingCharacters(in: .whitespaces)
+                headers[k] = v
+            }
+        }
+
+        if pathname == "/api/health" {
+            sendJson(conn: conn, obj: ["ok": true, "version": "5.4.0", "standalone": true])
+            return
+        }
+        if pathname == "/sw.js",
+           let u = Bundle.main.url(forResource: "sw", withExtension: "js", subdirectory: "app-server/hub/ui"),
+           let d = try? Data(contentsOf: u) {
+            sendHttp(conn: conn, status: 200, contentType: "application/javascript; charset=utf-8", body: d, extraHeaders: ["Service-Worker-Allowed": "/"])
+            return
+        }
+        if pathname == "/mobile-icon.svg" {
+            let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><rect width=\"512\" height=\"512\" rx=\"112\" fill=\"#2563eb\"/><circle cx=\"356\" cy=\"156\" r=\"56\" fill=\"#ef4444\"/></svg>"
+            sendHttp(conn: conn, status: 200, contentType: "image/svg+xml; charset=utf-8", body: Data(svg.utf8))
+            return
+        }
+
+        let st = StandaloneStore.shared.loadState()
+        let expectedTok = (st["mobileToken"] as? String) ?? ""
+        let queryTok = comps?.queryItems?.first(where: { $0.name == "t" })?.value ?? ""
+        let headerTok = headers["x-tabpulse-token"] ?? ""
+        var cookieTok = ""
+        if let ck = headers["cookie"] {
+            for seg in ck.split(separator: ";") {
+                let kv = seg.trimmingCharacters(in: .whitespaces).split(separator: "=", maxSplits: 1)
+                if kv.count == 2 && kv[0] == "tp_mob_tok" {
+                    cookieTok = String(kv[1]).removingPercentEncoding ?? String(kv[1])
+                }
+            }
+        }
+        let providedTok = !queryTok.isEmpty ? queryTok : (!headerTok.isEmpty ? headerTok : cookieTok)
+        if !expectedTok.isEmpty && providedTok != expectedTok {
+            let gate = "<!doctype html><html lang='zh-CN'><meta charset='utf-8'/><meta name='viewport' content='width=device-width,initial-scale=1'/><body style='background:#0f172a;color:#fff;font-family:sans-serif;display:grid;place-items:center;min-height:100vh;margin:0'><div style='padding:24px;text-align:center'><h2>🔒 请用手机扫描电脑端《消息总管》二维码进入</h2></div></body></html>"
+            sendHttp(conn: conn, status: 401, contentType: "text/html; charset=utf-8", body: Data(gate.utf8))
+            return
+        }
+        var extraH: [String: String] = [:]
+        if !queryTok.isEmpty {
+            extraH["Set-Cookie"] = "tp_mob_tok=\(expectedTok); Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000"
+        }
+
+        if pathname == "/" || pathname == "/m" {
+            if let u = Bundle.main.url(forResource: "mobile", withExtension: "html", subdirectory: "app-server/hub/ui"),
+               let d = try? Data(contentsOf: u) {
+                sendHttp(conn: conn, status: 200, contentType: "text/html; charset=utf-8", body: d, extraHeaders: extraH)
+                return
+            }
+        }
+        if pathname == "/api/events-stream" {
+            let sse = "data: {\"kind\":\"connected\"}\n\n"
+            sendHttp(conn: conn, status: 200, contentType: "text/event-stream; charset=utf-8", body: Data(sse.utf8), extraHeaders: extraH)
+            return
+        }
+        if pathname == "/api/state" {
+            var sum = StandaloneStore.shared.publicSummary()
+            if var sObj = sum["settings"] as? [String: Any] {
+                sObj["webhookUrl"] = ""
+                sum["settings"] = sObj
+            }
+            sendJson(conn: conn, obj: sum, extraHeaders: extraH)
+            return
+        }
+        if pathname == "/api/cc/state" || pathname == "/api/ai-inbox/state" || pathname == "/api/ai-butler/state" {
+            sendJson(conn: conn, obj: ["ok": true, "sessions": [], "hookEvents": [], "agents": [], "channels": [], "suggestions": [:], "events": []], extraHeaders: extraH)
+            return
+        }
+        if pathname == "/api/desktop/state" {
+            if let helperURL = Bundle.main.url(forResource: "mac-desktop-helper", withExtension: nil, subdirectory: "app-server/bin") {
+                let p = Process()
+                p.executableURL = helperURL
+                p.arguments = ["list"]
+                let pipe = Pipe()
+                p.standardOutput = pipe
+                p.standardError = FileHandle.nullDevice
+                try? p.run()
+                let out = pipe.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                if let obj = (try? JSONSerialization.jsonObject(with: out)) as? [String: Any] {
+                    sendJson(conn: conn, obj: obj, extraHeaders: extraH)
+                    return
+                }
+            }
+            sendJson(conn: conn, obj: ["ok": true, "windows": [], "badges": [], "recentAlerts": []], extraHeaders: extraH)
+            return
+        }
+        let bodyJson = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any]
+
+        if method == "POST" && pathname.hasSuffix("/resolve") {
+            let rawId = (pathname.replacingOccurrences(of: "/api/watches/", with: "").replacingOccurrences(of: "/resolve", with: "")).removingPercentEncoding ?? ""
+            var cur = StandaloneStore.shared.loadState()
+            var watches = (cur["watches"] as? [[String: Any]]) ?? []
+            if let idx = watches.firstIndex(where: { ($0["id"] as? String) == rawId }) {
+                watches[idx]["status"] = "idle"
+                watches[idx]["unreadCount"] = 0
+                cur["watches"] = watches
+                StandaloneStore.shared.saveState(cur)
+            }
+            sendJson(conn: conn, obj: ["ok": true])
+            return
+        }
+
+        if pathname.hasPrefix("/api/remote/tab/"), let del = appDelegate {
+            let tail = String(pathname.dropFirst("/api/remote/tab/".count))
+            let segs = tail.split(separator: "/", maxSplits: 1).map(String.init)
+            if segs.count == 2 {
+                let wid = segs[0].removingPercentEncoding ?? segs[0]
+                let op = segs[1]
+                let watches = (StandaloneStore.shared.loadState()["watches"] as? [[String: Any]]) ?? []
+                guard let w = watches.first(where: { ($0["id"] as? String) == wid }),
+                      let uStr = w["url"] as? String,
+                      let nm = w["name"] as? String else {
+                    sendJson(conn: conn, status: 404, obj: ["ok": false, "error": "watch not found"])
+                    return
+                }
+                let pUuid = (w["profileUuid"] as? String) ?? ""
+                DispatchQueue.main.async {
+                    let wasCold = del.liveTabs[wid] == nil
+                    guard let wv = del.getOrCreateLiveWebView(watchId: wid, urlStr: uStr, name: nm, profileUuidStr: pUuid, isolated: true) else {
+                        self.sendJson(conn: conn, obj: ["ok": false, "error": "invalid url"])
+                        return
+                    }
+                    if op == "snapshot" {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + (wasCold ? 1.8 : 0.1)) {
+                            del.extractDomSnapshotDict(wv: wv) { snap in
+                                self.sendJson(conn: conn, obj: snap)
+                            }
+                        }
+                    } else if op == "peek-image" {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + (wasCold ? 1.8 : 0.1)) {
+                            del.captureWebViewJpegDataUrl(wv: wv) { dUrl in
+                                if let d = dUrl {
+                                    self.sendJson(conn: conn, obj: ["ok": true, "dataUrl": d])
+                                } else {
+                                    self.sendJson(conn: conn, obj: ["ok": false, "error": "画面提取失败"])
+                                }
+                            }
+                        }
+                    } else if op == "action" && method == "POST" {
+                        let txt = (bodyJson?["text"] as? String) ?? ""
+                        del.injectTextIntoWebView(wv, text: txt, autoSubmit: true) { ok in
+                            self.sendJson(conn: conn, obj: ["ok": ok, "injected": ok])
+                        }
+                    } else {
+                        self.sendJson(conn: conn, obj: ["ok": true])
+                    }
+                }
+                return
+            }
+        }
+
+        sendJson(conn: conn, obj: ["ok": true])
+    }
+}
+#endif
 
 // MARK: - CLI Self-Test & Entrypoint
 let args = CommandLine.arguments

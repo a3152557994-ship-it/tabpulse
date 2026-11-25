@@ -545,6 +545,50 @@ case "open-app-messages":
         jsonOut(["ok": false, "error": "暂未找到「\(appQuery)」主窗口，请在电脑上登录该软件后重试"])
     }
 
+case "peek-image":
+    let wid = args.count > 2 ? (Int(args[2]) ?? 0) : 0
+    guard wid > 0,
+          let info = findWindowInfo(wid),
+          let cgImg = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(wid), [.boundsIgnoreFraming, .bestResolution]) else {
+        jsonOut(["ok": false, "error": "无法读取当前窗口画面，请确认已开启屏幕录制权限或窗口未被关闭"])
+        exit(0)
+    }
+    let owner = (info[kCGWindowOwnerName as String] as? String) ?? ""
+    let srcW = CGFloat(cgImg.width)
+    let srcH = CGFloat(cgImg.height)
+    let maxW: CGFloat = 920
+    let scale = srcW > maxW ? (maxW / srcW) : 1.0
+    let dstW = max(1, Int(srcW * scale))
+    let dstH = max(1, Int(srcH * scale))
+
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: dstW,
+        pixelsHigh: dstH,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    )
+    if let bitmap = rep {
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+        NSImage(cgImage: cgImg, size: NSSize(width: srcW, height: srcH)).draw(in: NSRect(x: 0, y: 0, width: dstW, height: dstH))
+        NSGraphicsContext.restoreGraphicsState()
+        if let jpg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.56]) {
+            jsonOut([
+                "ok": true,
+                "appName": owner,
+                "dataUrl": "data:image/jpeg;base64,\(jpg.base64EncodedString())"
+            ])
+            exit(0)
+        }
+    }
+    jsonOut(["ok": false, "error": "图片编码失败"])
+
 default:
     jsonOut(["ok": false, "error": "unknown command"])
 }

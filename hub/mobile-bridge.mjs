@@ -134,13 +134,66 @@ export function getLanAddresses() {
   return list;
 }
 
-// MARK: - Cloudflared Quick Tunnel Manager (4G/5G Zero-VPN Encrypted HTTPS)
+// MARK: - Cloudflared Quick Tunnel Manager + Permanent Edge Bookmark Sync (4G/5G Zero-VPN Encrypted HTTPS)
+const EDGE_GATEWAY_ORIGIN = process.env.TABPULSE_EDGE_ORIGIN || "https://replyradar-edge.a3152557994.workers.dev";
+
 class CloudflaredManager {
   constructor() {
     this.proc = null;
     this.publicUrl = "";
+    this.permanentBaseUrl = "";
     this.status = "stopped"; // stopped | starting | running | error
     this.lastError = "";
+    this.wantedRunning = false;
+    this.lastPort = 17890;
+    this.boxCreds = null; // { boxId, writeKey }
+    this.reconnectTimer = null;
+    this.syncTimer = null;
+    this.onTunnelReconnected = null;
+  }
+
+  configureBoxCredentials(creds) {
+    if (creds && creds.boxId && creds.writeKey) {
+      this.boxCreds = creds;
+      this.permanentBaseUrl = `${EDGE_GATEWAY_ORIGIN}/go/${creds.boxId}`;
+    }
+  }
+
+  async syncPermanentGateway() {
+    if (!this.publicUrl || !this.boxCreds?.boxId || !this.boxCreds?.writeKey) return null;
+    if (process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS === "1") return null;
+    try {
+      const res = await fetch(`${EDGE_GATEWAY_ORIGIN}/api/tunnel/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          boxId: this.boxCreds.boxId,
+          writeKey: this.boxCreds.writeKey,
+          targetOrigin: this.publicUrl,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (data?.ok && data.permanentUrl) {
+        this.permanentBaseUrl = data.permanentUrl;
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  scheduleAutoReconnect() {
+    if (!this.wantedRunning || process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS === "1") return;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(async () => {
+      if (!this.wantedRunning || (this.proc && this.status === "running")) return;
+      const prevUrl = this.publicUrl;
+      const res = await this.start(this.lastPort, { isReconnect: true });
+      if (res.ok && res.publicUrl && res.publicUrl !== prevUrl && this.onTunnelReconnected) {
+        this.onTunnelReconnected(res.publicUrl);
+      }
+    }, 6500);
+    if (this.reconnectTimer.unref) this.reconnectTimer.unref();
   }
 
   async ensureBinary() {
@@ -154,14 +207,25 @@ class CloudflaredManager {
     if (fs.existsSync(binPath)) return binPath;
 
     const arch = process.arch === "arm64" ? "arm64" : "amd64";
-    const dlUrl = isWin
+    const assetName = isWin
+      ? "cloudflared-windows-amd64.exe"
+      : process.platform === "darwin"
+        ? `cloudflared-darwin-${arch}.tgz`
+        : "";
+    const edgeUrl = assetName ? `${EDGE_GATEWAY_ORIGIN}/dl/${assetName}` : "";
+    const ghUrl = isWin
       ? "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
       : process.platform === "darwin"
         ? `https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-${arch}.tgz`
         : `https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${arch}`;
 
-    const rawBuf = await downloadHttpsBuffer(dlUrl);
-    if (dlUrl.endsWith(".tgz")) {
+    let rawBuf;
+    try {
+      rawBuf = edgeUrl ? await downloadHttpsBuffer(edgeUrl) : await downloadHttpsBuffer(ghUrl);
+    } catch {
+      rawBuf = await downloadHttpsBuffer(ghUrl);
+    }
+    if (ghUrl.endsWith(".tgz")) {
       const tarBuf = zlib.gunzipSync(rawBuf);
       const extracted = extractSingleFileFromTar(tarBuf, "cloudflared");
       fs.writeFileSync(binPath, extracted, { mode: 0o755 });
@@ -171,19 +235,31 @@ class CloudflaredManager {
     return binPath;
   }
 
-  async start(localPort = 17890) {
+  async start(localPort = 17890, opts = {}) {
+    this.wantedRunning = true;
+    this.lastPort = localPort;
     if (this.proc && this.status === "running" && this.publicUrl) {
       return { ok: true, status: this.status, publicUrl: this.publicUrl };
     }
-    this.stop();
+    this.stop({ keepWanted: true });
     this.status = "starting";
     this.lastError = "";
+
+    const onConnected = () => {
+      this.syncPermanentGateway().catch(() => {});
+      clearInterval(this.syncTimer);
+      this.syncTimer = setInterval(() => this.syncPermanentGateway().catch(() => {}), 10 * 60 * 1000);
+      if (this.syncTimer.unref) this.syncTimer.unref();
+    };
 
     // Primary: Built-in system SSH HTTPS tunnel (works out-of-the-box on macOS & Windows 10/11 AND passes Clash Fake-IP TUN!)
     const sshBin = findExecutable("ssh") || (process.platform === "win32" ? "C:\\Windows\\System32\\OpenSSH\\ssh.exe" : "/usr/bin/ssh");
     if (sshBin && fs.existsSync(sshBin)) {
       const sshRes = await this.startSshTunnel(sshBin, localPort);
-      if (sshRes.ok && sshRes.publicUrl) return sshRes;
+      if (sshRes.ok && sshRes.publicUrl) {
+        onConnected();
+        return sshRes;
+      }
     }
 
     // Fallback: cloudflared HTTP/2 quick tunnel
@@ -193,6 +269,7 @@ class CloudflaredManager {
     } catch (err) {
       this.status = "error";
       this.lastError = `启动穿透失败: ${err.message}`;
+      if (opts.isReconnect) this.scheduleAutoReconnect();
       return { ok: false, status: this.status, error: this.lastError };
     }
 
@@ -211,6 +288,7 @@ class CloudflaredManager {
         if (m && !this.publicUrl) {
           this.publicUrl = m[0];
           this.status = "running";
+          onConnected();
           if (!settled) {
             settled = true;
             resolve({ ok: true, status: "running", publicUrl: this.publicUrl });
@@ -225,6 +303,7 @@ class CloudflaredManager {
           this.proc = null;
           this.status = "stopped";
           this.publicUrl = "";
+          this.scheduleAutoReconnect();
         }
         if (!settled) {
           settled = true;
@@ -268,6 +347,7 @@ class CloudflaredManager {
         if (url && (!this.publicUrl || this.publicUrl !== url)) {
           this.publicUrl = url;
           this.status = "running";
+          this.syncPermanentGateway().catch(() => {});
           if (!settled) {
             settled = true;
             resolve({ ok: true, status: "running", publicUrl: this.publicUrl });
@@ -282,6 +362,7 @@ class CloudflaredManager {
           this.proc = null;
           this.publicUrl = "";
           this.status = "stopped";
+          this.scheduleAutoReconnect();
         }
         if (!settled) {
           settled = true;
@@ -302,7 +383,12 @@ class CloudflaredManager {
     });
   }
 
-  stop() {
+  stop(opts = {}) {
+    if (!opts.keepWanted) {
+      this.wantedRunning = false;
+      clearTimeout(this.reconnectTimer);
+      clearInterval(this.syncTimer);
+    }
     if (this.proc) {
       try {
         this.proc.kill("SIGTERM");
@@ -317,7 +403,10 @@ class CloudflaredManager {
   getInfo(localPort, token) {
     const lans = getLanAddresses();
     const lanUrl = lans.length ? `http://${lans[0].ip}:${localPort}/m?t=${token}` : `http://127.0.0.1:${localPort}/m?t=${token}`;
-    const tunnelMobileUrl = this.publicUrl ? `${this.publicUrl}/m?t=${token}` : "";
+    const rawTunnelUrl = this.publicUrl ? `${this.publicUrl}/m?t=${token}` : "";
+    const permanentMobileUrl =
+      this.publicUrl && this.permanentBaseUrl ? `${this.permanentBaseUrl}?t=${token}` : "";
+    const tunnelMobileUrl = permanentMobileUrl || rawTunnelUrl;
     const primaryUrl = tunnelMobileUrl || lanUrl;
     let qrSvg = "";
     try {
@@ -326,6 +415,8 @@ class CloudflaredManager {
     return {
       status: this.status,
       publicUrl: this.publicUrl,
+      rawTunnelUrl,
+      permanentMobileUrl,
       tunnelMobileUrl,
       lanUrl,
       allLanIps: lans.map((x) => `http://${x.ip}:${localPort}/m?t=${token}`),

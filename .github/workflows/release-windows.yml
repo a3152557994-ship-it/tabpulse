@@ -9,7 +9,7 @@ on:
       tag:
         description: "Release tag to upload Windows zips to"
         required: true
-        default: "v5.3.0"
+        default: "v5.4.0"
 
 permissions:
   contents: write
@@ -42,6 +42,16 @@ jobs:
           cp extension/passive-observer.js out-cn/resources/passive-observer.js
           cp -r extension out-cn/extension
           cp presets.json out-cn/resources/presets.json
+          @"
+          @echo off
+          chcp 65001 >nul
+          dotnet --list-runtimes 2>nul | findstr /C:"Microsoft.WindowsDesktop.App 8." >nul
+          if %errorlevel% neq 0 (
+            echo [消息总管] 正在为您一键安装微软官方 .NET 8 桌面运行库（仅首次需要约20秒）...
+            winget install --id Microsoft.DotNet.DesktopRuntime.8 -e --accept-package-agreements --accept-source-agreements
+          )
+          start "" "%~dp0消息总管.exe"
+          "@ | Set-Content -Path out-cn/⚡首次打不开点我一键配环境启动.bat -Encoding UTF8
           ./out-cn/消息总管.exe --self-test
 
           dotnet publish windows-app/TabPulseWin.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:AssemblyName="ReplyRadar" -o out-en
@@ -53,6 +63,15 @@ jobs:
           cp extension/passive-observer.js out-en/resources/passive-observer.js
           cp -r extension out-en/extension
           cp presets.json out-en/resources/presets.json
+          @"
+          @echo off
+          dotnet --list-runtimes 2>nul | findstr /C:"Microsoft.WindowsDesktop.App 8." >nul
+          if %errorlevel% neq 0 (
+            echo [ReplyRadar] Installing Microsoft .NET 8 Desktop Runtime...
+            winget install --id Microsoft.DotNet.DesktopRuntime.8 -e --accept-package-agreements --accept-source-agreements
+          )
+          start "" "%~dp0ReplyRadar.exe"
+          "@ | Set-Content -Path out-en/First-Launch-Helper.bat -Encoding UTF8
           ./out-en/ReplyRadar.exe --self-test
 
           Compress-Archive -Path out-cn/* -DestinationPath XiaoXiZongGuan-CN-Windows-x64.zip -Force

@@ -1,12 +1,12 @@
 {
-  "latestVersion": "5.3.0",
-  "publishedAt": "2026-11-24",
-  "downloadUrl": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
-  "downloadUrlCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-macOS.dmg",
-  "downloadUrlEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-macOS.dmg",
-  "downloadUrlWinCn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-CN-Windows-x64.zip",
-  "downloadUrlWinEn": "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
-  "notesCn": "v5.3.0 原生双栏旗舰重制版：全新 macOS 侧边栏工作台与直聊左侧秒切栏，修复快捷话术空白与桌面杂项窗口干扰，统一全中文清爽平台卡片！",
-  "notesZh": "v5.3.0 原生双栏旗舰重制版：全新 macOS 侧边栏工作台与直聊左侧秒切栏，修复快捷话术空白与桌面杂项窗口干扰，统一全中文清爽平台卡片！",
-  "notesEn": "v5.3.0 Flagship Split-View Edition: Redesigned native macOS sidebar workspace, 1-click left-rail channel switcher inside Direct Chat, unified quick-reply schema, and smart desktop window deduplication!"
+  "latestVersion": "5.4.0",
+  "publishedAt": "2026-11-25",
+  "downloadUrl": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg",
+  "downloadUrlCn": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg",
+  "downloadUrlEn": "https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-macOS.dmg",
+  "downloadUrlWinCn": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-Windows-x64.zip",
+  "downloadUrlWinEn": "https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-Windows-x64.zip",
+  "notesCn": "v5.4.0 满血无短板旗舰版：新增出门永久固定手机书签（重启永不失效）、一键防电脑休眠常驻、手机端按需看买家聊天图片、无 Node 电脑内置原生手机随身网关、电鸭社区中文求购源及国内 CDN 秒速下载！",
+  "notesZh": "v5.4.0 满血无短板旗舰版：新增出门永久固定手机书签（重启永不失效）、一键防电脑休眠常驻、手机端按需看买家聊天图片、无 Node 电脑内置原生手机随身网关、电鸭社区中文求购源及国内 CDN 秒速下载！",
+  "notesEn": "v5.4.0 Complete Edition: Permanent mobile bookmark gateway across reboots, 1-click anti-sleep keeper, on-demand chat image preview on mobile, built-in zero-Node mobile server for macOS & Windows, and global Edge CDN downloads!"
 }

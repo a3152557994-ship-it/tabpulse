@@ -79,16 +79,20 @@ const DEFAULT_QUICK_REPLIES = DEFAULT_QUICK_REPLIES_RAW.map(normalizeQuickReply)
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "5.3.0",
+    version: "5.4.0",
     extensionHeartbeatAt: null,
     license: null,
     mobileToken: crypto.randomBytes(24).toString("base64url"),
+    tunnelBoxId: "bx_" + crypto.randomBytes(10).toString("hex"),
+    tunnelWriteKey: crypto.randomBytes(24).toString("base64url"),
     vapidKeys: generateVapidKeys(),
     pushSubscriptions: [],
     settings: {
       webhookUrl: "",
       radarKeywords: "Shopify",
       lang: "zh",
+      preventSleep: false,
+      tunnelAutoStart: false,
     },
     quickReplies: DEFAULT_QUICK_REPLIES,
     watches: createDefaultWatches(now),
@@ -121,6 +125,14 @@ export function loadState(now = new Date()) {
     let dirty = false;
     if (!parsed.mobileToken || typeof parsed.mobileToken !== "string" || parsed.mobileToken.length < 16) {
       parsed.mobileToken = crypto.randomBytes(24).toString("base64url");
+      dirty = true;
+    }
+    if (!parsed.tunnelBoxId || !/^bx_[a-zA-Z0-9]{10,36}$/.test(String(parsed.tunnelBoxId))) {
+      parsed.tunnelBoxId = "bx_" + crypto.randomBytes(10).toString("hex");
+      dirty = true;
+    }
+    if (!parsed.tunnelWriteKey || String(parsed.tunnelWriteKey).length < 16) {
+      parsed.tunnelWriteKey = crypto.randomBytes(24).toString("base64url");
       dirty = true;
     }
     if (!parsed.vapidKeys || !parsed.vapidKeys.publicKey || !parsed.vapidKeys.privateKey) {
@@ -232,6 +244,10 @@ export function updateSettings(patch = {}, nowDate = new Date()) {
       patch.aiButlerApiKey !== undefined ? String(patch.aiButlerApiKey || "").trim() : (current.aiButlerApiKey || ""),
     aiButlerModel:
       patch.aiButlerModel !== undefined ? String(patch.aiButlerModel || "").trim() : (current.aiButlerModel || "gpt-4o-mini"),
+    preventSleep:
+      patch.preventSleep !== undefined ? Boolean(patch.preventSleep) : Boolean(current.preventSleep),
+    tunnelAutoStart:
+      patch.tunnelAutoStart !== undefined ? Boolean(patch.tunnelAutoStart) : Boolean(current.tunnelAutoStart),
   };
   saveState(state);
   return state.settings;
@@ -557,6 +573,14 @@ export function getMobileToken() {
   return state.mobileToken;
 }
 
+export function getTunnelBoxCredentials() {
+  const state = loadState();
+  return {
+    boxId: state.tunnelBoxId,
+    writeKey: state.tunnelWriteKey,
+  };
+}
+
 export function rotateMobileToken() {
   const state = loadState();
   state.mobileToken = crypto.randomBytes(24).toString("base64url");
@@ -615,7 +639,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "5.3.0",
+    version: "5.4.0",
     pushSubscribersCount: (state.pushSubscriptions || []).length,
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),
