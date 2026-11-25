@@ -419,6 +419,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var quickReplyPopup: NSPopUpButton?
     var toolbarStatusLabel: NSTextField?
     var cachedExternalState: [String: Any]?
+    var didWarmUpPassiveTabs = false
     var loginWebView: WKWebView?
     var liveTabs: [String: WKWebView] = [:]
     var tabMeta: [String: (name: String, url: String, profileUuid: String)] = [:]
@@ -575,17 +576,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             DispatchQueue.main.async {
                 if let http = resp as? HTTPURLResponse, http.statusCode == 200, data != nil {
                     self?.useExternalHub = true
-                    self?.syncExternalHubState()
+                    self?.syncExternalHubState { [weak self] in
+                        self?.warmUpPassiveRedTabsIfNeeded()
+                    }
                     self?.dashboardWebView.load(URLRequest(url: URL(string: "http://127.0.0.1:17890/")!))
                 } else if self?.trySpawnBundledNodeHub() == true {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
                         self?.useExternalHub = true
-                        self?.syncExternalHubState()
+                        self?.syncExternalHubState { [weak self] in
+                            self?.warmUpPassiveRedTabsIfNeeded()
+                        }
                         self?.dashboardWebView.load(URLRequest(url: URL(string: "http://127.0.0.1:17890/")!))
                     }
                 } else {
                     self?.useExternalHub = false
                     self?.loadStandaloneUI()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        self?.warmUpPassiveRedTabsIfNeeded()
+                    }
                 }
             }
         }.resume()
@@ -1395,7 +1403,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                   let payload = message.body as? [String: Any] else { return }
             let count = (payload["unreadCount"] as? Int) ?? 0
             let snippet = (payload["snippet"] as? String) ?? ""
-            handlePassiveEvent(watchId: wid, unreadCount: count, snippet: snippet)
+            let authExp = (payload["authExpired"] as? Bool) ?? false
+            handlePassiveEvent(watchId: wid, unreadCount: count, snippet: snippet, authExpired: authExp)
             return
         }
 
@@ -1686,18 +1695,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     #endif
 
-    func handlePassiveEvent(watchId: String, unreadCount: Int, snippet: String) {
+    func warmUpPassiveRedTabsIfNeeded() {
+        guard !didWarmUpPassiveTabs else { return }
+        didWarmUpPassiveTabs = true
+        let st = activeStateSnapshot()
+        let watches = (st["watches"] as? [[String: Any]]) ?? []
+        let redTargets = watches.filter { w in
+            let tier = (w["publishTier"] as? String) ?? "yellow"
+            let status = (w["status"] as? String) ?? "idle"
+            return tier == "red" && status != "paused" && status != "auth_expired"
+        }
+        for (idx, w) in redTargets.enumerated() {
+            guard let wid = w["id"] as? String,
+                  let urlStr = w["url"] as? String,
+                  let name = w["name"] as? String else { continue }
+            let pUuid = (w["profileUuid"] as? String) ?? ""
+            let delay = 2.0 + Double(idx) * 1.8
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self = self, self.liveTabs[wid] == nil else { return }
+                _ = self.getOrCreateLiveWebView(watchId: wid, urlStr: urlStr, name: name, profileUuidStr: pUuid, isolated: true)
+            }
+        }
+    }
+
+    func handlePassiveEvent(watchId: String, unreadCount: Int, snippet: String, authExpired: Bool = false) {
+        if authExpired && activeLoginWatchId != watchId {
+            if let parkedWV = liveTabs.removeValue(forKey: watchId) {
+                parkedWV.removeFromSuperview()
+                webViewToWatchId.removeValue(forKey: ObjectIdentifier(parkedWV))
+            }
+        }
+        let resolvedName = tabMeta[watchId]?.name ?? watchId
+
         if useExternalHub, let repURL = URL(string: "http://127.0.0.1:17890/api/report") {
             var req = URLRequest(url: repURL)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            let body: [String: Any] = ["id": watchId, "unreadCount": unreadCount, "snippet": snippet, "authExpired": false]
+            let body: [String: Any] = ["id": watchId, "unreadCount": unreadCount, "snippet": snippet, "authExpired": authExpired]
             req.httpBody = try? JSONSerialization.data(withJSONObject: body)
             URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
-                self?.notifyDashboardProbeDone(id: watchId, name: watchId, unreadCount: unreadCount, authExpired: false)
+                self?.syncExternalHubState()
+                self?.notifyDashboardProbeDone(id: watchId, name: resolvedName, unreadCount: unreadCount, authExpired: authExpired)
             }.resume()
             DispatchQueue.main.async {
-                if unreadCount > 0 {
+                if unreadCount > 0 && !authExpired {
                     self.statusItem?.button?.title = isChineseSystem ? "🔴 \(unreadCount) 未读" : "🔴 \(unreadCount) Unread"
                 }
             }
@@ -1711,7 +1752,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 let siteUrl = (watches[idx]["url"] as? String) ?? ""
                 let fp = "\(unreadCount)::\(snippet)"
                 watches[idx]["lastCheckedAt"] = ISO8601DateFormatter().string(from: Date())
-                if unreadCount > 0 {
+                if authExpired {
+                    watches[idx]["status"] = "auth_expired"
+                    watches[idx]["unreadCount"] = 0
+                } else if unreadCount > 0 {
                     watches[idx]["status"] = "unread"
                     watches[idx]["unreadCount"] = unreadCount
                     watches[idx]["snippet"] = snippet
@@ -1733,7 +1777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 st["watches"] = watches
                 StandaloneStore.shared.saveState(st)
                 updateMenuBadge(from: StandaloneStore.shared.publicSummary())
-                notifyDashboardProbeDone(id: watchId, name: siteName, unreadCount: unreadCount, authExpired: false)
+                notifyDashboardProbeDone(id: watchId, name: siteName, unreadCount: unreadCount, authExpired: authExpired)
             }
         }
     }

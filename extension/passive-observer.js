@@ -22,19 +22,81 @@
     return r.width > 0 && r.height > 0;
   }
 
+  function detectAuthOrChallengeGate() {
+    const title = (document.title || "").trim();
+    const pathname = location.pathname || "";
+    const bodyText = ((document.body && document.body.innerText) || "").slice(0, 1400);
+
+    if (/(安全验证|滑动验证|人机验证|Verify you are human|Just a moment|Security Check)/i.test(title)) {
+      return true;
+    }
+    if (/\/(login|signin|sign-in|passport|sso|i\/flow\/login)/i.test(pathname)) {
+      return true;
+    }
+    if (/^(登录|请登录|Sign in|Log in|会员登录|用户登录|小红书登录)/i.test(title)) {
+      return true;
+    }
+    const pwd = document.querySelector('input[type="password"]');
+    if (pwd && isVisible(pwd)) {
+      return true;
+    }
+    // Check prominent QR/SMS login gates on Goofish / Xiaohongshu / Zhihu when not signed in
+    if (
+      bodyText.length < 900 &&
+      /(扫码登录|手机验证码登录|登录后查看|请先登录|Sign in to X|Log in to Reddit)/i.test(bodyText)
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  function extractLatestMessageSnippet(fallbackTitle) {
+    const selectors = [
+      '[class*="conv-item" i]',
+      '[class*="session-item" i]',
+      '[class*="chat-item" i]',
+      '[class*="message-item" i]',
+      '[class*="notification-item" i]',
+      '[class*="msg-content" i]',
+      '[data-testid="notification"]',
+      '[data-testid="conversation"]',
+    ];
+    for (const sel of selectors) {
+      let rows = [];
+      try {
+        rows = Array.from(document.querySelectorAll(sel));
+      } catch {
+        continue;
+      }
+      for (const r of rows.slice(0, 4)) {
+        if (!isVisible(r)) continue;
+        const txt = (r.innerText || "").replace(/\s+/g, " ").trim();
+        if (txt.length >= 4 && txt.length <= 220) {
+          return txt.slice(0, 110);
+        }
+      }
+    }
+    return fallbackTitle || "";
+  }
+
   // 1. W3C App Badging API Hook
   if (navigator && typeof navigator.setAppBadge === "function") {
     const origSet = navigator.setAppBadge.bind(navigator);
     navigator.setAppBadge = function (contents) {
       const n = typeof contents === "number" ? contents : 1;
-      postPassive({ event: "badge", unreadCount: Math.max(0, n), snippet: document.title || "" });
+      postPassive({
+        event: "badge",
+        authExpired: false,
+        unreadCount: Math.max(0, n),
+        snippet: extractLatestMessageSnippet(document.title || ""),
+      });
       return origSet(contents);
     };
   }
   if (navigator && typeof navigator.clearAppBadge === "function") {
     const origClear = navigator.clearAppBadge.bind(navigator);
     navigator.clearAppBadge = function () {
-      postPassive({ event: "badge", unreadCount: 0, snippet: "" });
+      postPassive({ event: "badge", authExpired: false, unreadCount: 0, snippet: "" });
       return origClear();
     };
   }
@@ -46,6 +108,7 @@
       const body = options && options.body ? String(options.body) : "";
       postPassive({
         event: "notification",
+        authExpired: false,
         unreadCount: 1,
         snippet: [String(title || ""), body].filter(Boolean).join(" — ").slice(0, 140),
       });
@@ -61,7 +124,7 @@
     window.Notification = WrappedNotification;
   }
 
-  // 3. Passive Title + Visible Red-Dot Badge MutationObserver (Xianyu / Xiaohongshu / V2EX / Eleduck / Reddit / X)
+  // 3. Passive Title + Visible Red-Dot Badge + Auth Gate Observer
   let debounceTimer = null;
   let lastSentKey = "";
 
@@ -85,6 +148,18 @@
 
   function inspectTitleAndBadges() {
     const title = (document.title || "").trim();
+    if (!title && (!document.body || !document.body.innerText)) return;
+
+    const authExpired = detectAuthOrChallengeGate();
+    if (authExpired) {
+      const authKey = `AUTH_EXPIRED:${location.host}`;
+      if (authKey !== lastSentKey) {
+        lastSentKey = authKey;
+        postPassive({ event: "auth", authExpired: true, unreadCount: 0, snippet: "", pageTitle: title });
+      }
+      return;
+    }
+
     let count = 0;
     const pats = [
       /^\(\s*(\d{1,4})\s*\)/,
@@ -97,7 +172,6 @@
       if (m && m[1]) count = Math.max(count, parseInt(m[1], 10) || 0);
     }
 
-    // Scan visible DOM unread badges without touching network
     for (const sel of BADGE_SELECTORS) {
       let nodes = [];
       try {
@@ -118,15 +192,16 @@
       }
     }
 
-    const key = `${count}:${title.slice(0, 40)}`;
+    const snippet = count > 0 ? extractLatestMessageSnippet(title) : "";
+    const key = `OK:${count}:${snippet.slice(0, 36)}:${title.slice(0, 28)}`;
     if (key !== lastSentKey) {
       lastSentKey = key;
-      postPassive({ event: "mutation", unreadCount: count, snippet: count > 0 ? title : "", pageTitle: title });
+      postPassive({ event: "mutation", authExpired: false, unreadCount: count, snippet, pageTitle: title });
     }
   }
 
-  window.addEventListener("DOMContentLoaded", () => {
-    setTimeout(inspectTitleAndBadges, 1200);
+  function startObserver() {
+    setTimeout(inspectTitleAndBadges, 2200);
     const obs = new MutationObserver(() => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(inspectTitleAndBadges, 2000);
@@ -134,5 +209,11 @@
     if (document.documentElement) {
       obs.observe(document.documentElement, { subtree: true, childList: true, characterData: true });
     }
-  });
+  }
+
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", startObserver, { once: true });
+  } else {
+    startObserver();
+  }
 })();

@@ -116,10 +116,34 @@ function renderPairGateHtml(errorMsg = "") {
 
 export function createHubServer(options = {}) {
   const serverPortRef = { port: Number(options.port || process.env.TABPULSE_PORT || 17890) };
+  const sseClients = new Set();
+
+  function broadcastLiveAlert(payload) {
+    const line = `data: ${JSON.stringify({ ts: Date.now(), ...payload })}\n\n`;
+    for (const clientRes of Array.from(sseClients)) {
+      try {
+        clientRes.write(line);
+      } catch {
+        sseClients.delete(clientRes);
+      }
+    }
+  }
+
+  const sseKeepAlive = setInterval(() => {
+    for (const clientRes of Array.from(sseClients)) {
+      try {
+        clientRes.write(": keepalive\n\n");
+      } catch {
+        sseClients.delete(clientRes);
+      }
+    }
+  }, 18000);
+  if (sseKeepAlive.unref) sseKeepAlive.unref();
 
   agentEngine.onTaskAlert = ({ title, summary, targetKey }) => {
     const st = loadState();
     const link = currentMobileLink(serverPortRef.port);
+    broadcastLiveAlert({ kind: "cc", title, body: summary, targetKey: targetKey || "cc:latest" });
     notifyAgentAlert({ title, summary, targetKey: targetKey || "cc:latest" }, st.settings || {}, link).catch(() => {});
   };
 
@@ -145,6 +169,7 @@ export function createHubServer(options = {}) {
     const enrichedSummary = butlerOut?.suggestion?.summary
       ? `🧠 AI助理：${butlerOut.suggestion.summary}`
       : summary;
+    broadcastLiveAlert({ kind: "app", title, body: enrichedSummary, targetKey: targetKey || "" });
     notifyAgentAlert({ title, summary: enrichedSummary, targetKey: targetKey || "" }, st.settings || {}, link).catch(
       () => {}
     );
@@ -153,6 +178,7 @@ export function createHubServer(options = {}) {
   aiInbox.onAiAlert = ({ title, summary, targetKey }) => {
     const st = loadState();
     const link = currentMobileLink(serverPortRef.port);
+    broadcastLiveAlert({ kind: "ai", title, body: summary, targetKey: targetKey || "" });
     notifyAgentAlert({ title, summary, targetKey: targetKey || "" }, st.settings || {}, link).catch(() => {});
   };
   desktopMonitor.startBackgroundWatcher();
@@ -270,6 +296,21 @@ export function createHubServer(options = {}) {
       if (req.method === "GET" && pathname === "/bonus/cold-reply-playbook") {
         const html = fs.readFileSync(PLAYBOOK_HTML_PATH, "utf-8");
         sendText(res, 200, "text/html; charset=utf-8", html, authCookieHeader);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/events-stream") {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+          ...(corsOrigin ? { "Access-Control-Allow-Origin": corsOrigin } : {}),
+          ...authCookieHeader,
+        });
+        res.write(`data: ${JSON.stringify({ kind: "connected", ts: Date.now() })}\n\n`);
+        sseClients.add(res);
+        req.on("close", () => sseClients.delete(res));
         return;
       }
 
@@ -725,6 +766,12 @@ export function createHubServer(options = {}) {
           const mobLink = currentMobileLink(serverPortRef.port);
           if (recorded.shouldAlertUnread) {
             if (!(butlerOut?.enabled && butlerOut?.ok && butlerOut?.isSpam)) {
+              broadcastLiveAlert({
+                kind: "web",
+                title: `🔴 ${recorded.item.name} (${recorded.item.unreadCount}条未读)`,
+                body: butlerOut?.suggestion?.summary || recorded.item.snippet || "收到新未读消息",
+                targetKey: `web:${recorded.item.id}`,
+              });
               alertResult = await notifyUnread(recorded.item, recorded.settings, mobLink);
             } else {
               alertResult = { skippedByAiButlerSpamFilter: true };
@@ -786,6 +833,14 @@ export function createHubServer(options = {}) {
     if (addr && typeof addr === "object" && addr.port) {
       serverPortRef.port = addr.port;
     }
+  });
+
+  server.on("close", () => {
+    clearInterval(sseKeepAlive);
+    for (const c of sseClients) {
+      try { c.end(); } catch {}
+    }
+    sseClients.clear();
   });
 
   return server;

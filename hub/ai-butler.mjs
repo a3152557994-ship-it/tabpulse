@@ -1,11 +1,9 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { aiInbox } from "./ai-inbox.mjs";
 
-const execFileAsync = promisify(execFile);
 const HOME_DIR = os.homedir();
 
 function buildAugmentedPath() {
@@ -30,15 +28,115 @@ function findBin(name) {
   return null;
 }
 
-function extractJsonObject(rawText) {
+/**
+ * Run a local CLI tool with stdin strictly closed ('ignore') so tools like `codex exec`
+ * never hang waiting on 'Reading additional input from stdin...'.
+ */
+function runCliClosedStdin(bin, args, timeoutMs = 24000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, PATH: buildAugmentedPath(), NO_COLOR: "1" },
+    });
+    const outChunks = [];
+    const errChunks = [];
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        try { child.kill("SIGTERM"); } catch {}
+        reject(new Error(`CLI timed out after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+
+    child.stdout.on("data", (c) => outChunks.push(c));
+    child.stderr.on("data", (c) => errChunks.push(c));
+    child.on("error", (err) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      }
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const stdout = Buffer.concat(outChunks).toString("utf-8");
+      const stderr = Buffer.concat(errChunks).toString("utf-8");
+      if (code !== 0 && !stdout.trim()) {
+        reject(new Error(stderr.trim() || `Exited with code ${code}`));
+      } else {
+        resolve({ stdout, stderr, code });
+      }
+    });
+  });
+}
+
+/**
+ * Extract the LAST valid triage JSON object from CLI output so echoed user prompts
+ * (e.g. from `codex exec`) never corrupt JSON.parse!
+ */
+export function extractJsonObject(rawText) {
   const str = String(rawText || "").trim();
-  const m = str.match(/\{[\s\S]*\}/);
-  if (!m) return null;
+  if (!str) return null;
+
+  // 1. Direct parse
   try {
-    return JSON.parse(m[0]);
-  } catch {
-    return null;
+    const direct = JSON.parse(str);
+    if (direct && typeof direct === "object" && "isSpam" in direct) return direct;
+  } catch {}
+
+  // 2. Scan lines from bottom to top for clean JSON object
+  const lines = str.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (line.startsWith("{") && line.endsWith("}")) {
+      try {
+        const obj = JSON.parse(line);
+        if (obj && typeof obj === "object" && ("summary" in obj || "isSpam" in obj)) {
+          if (obj.summary !== "一句话汇报重点") return obj;
+        }
+      } catch {}
+    }
   }
+
+  // 3. Balanced brace scan from end of string
+  const closeIdx = str.lastIndexOf("}");
+  if (closeIdx > 0) {
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = closeIdx; i >= 0; i--) {
+      const ch = str[i];
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (ch === "\\") {
+        esc = true;
+        continue;
+      }
+      if (ch === '"') {
+        inStr = !inStr;
+        continue;
+      }
+      if (inStr) continue;
+      if (ch === "}") depth++;
+      else if (ch === "{") {
+        depth--;
+        if (depth === 0) {
+          try {
+            const cand = JSON.parse(str.slice(i, closeIdx + 1));
+            if (cand && typeof cand === "object") return cand;
+          } catch {}
+          break;
+        }
+      }
+    }
+  }
+  return null;
 }
 
 class AiPersonalButler {
@@ -60,6 +158,9 @@ class AiPersonalButler {
         installed: Boolean(codexBin),
         bin: codexBin || "",
       },
+      ...(geminiBin
+        ? [{ id: "gemini", name: "Gemini CLI 个人助理 (本机免 Key)", installed: true, bin: geminiBin }]
+        : []),
       {
         id: "claude",
         name: "Claude Code 个人助理 (本机免 Key)",
@@ -73,6 +174,12 @@ class AiPersonalButler {
         bin: fs.existsSync(agentApiBin) ? agentApiBin : "",
       },
       {
+        id: "rule_fast",
+        name: "本地零延迟规则引擎 (离线秒回)",
+        installed: true,
+        bin: "",
+      },
+      {
         id: "webhook",
         name: "外部 AI Agent Webhook (OpenClaw / 扣子 / n8n)",
         installed: true,
@@ -84,9 +191,6 @@ class AiPersonalButler {
         installed: true,
         bin: "",
       },
-      ...(geminiBin
-        ? [{ id: "gemini", name: "Gemini CLI (本机)", installed: true, bin: geminiBin }]
-        : []),
     ];
   }
 
@@ -119,19 +223,18 @@ class AiPersonalButler {
 
   buildTriagePrompt({ platformName, snippet, contextSummary, customPersona }) {
     return [
-      "你是主人的全平台私人 AI 助理。刚刚《消息总管》监听到一条新消息，请立即判断是否为广告噪音，若是真实消息请给出 1 句精炼汇报和 2 条可直接发给对方的得体回复草稿。",
+      "你是主人的全平台私人 AI 助理。刚刚《消息总管》监听到一条新消息，请立即判断是否为系统促销/广告垃圾噪音；若是真实客户或重要通知，请给出 1 句精炼中文汇报和 2 条可直接发给对方的得体回复草稿。",
       customPersona ? `主人业务背景与口吻要求：${customPersona}` : "",
       `来源平台/软件：${platformName}`,
       contextSummary ? `此前背景备注：${contextSummary}` : "",
       `刚刚收到的新消息内容：${snippet}`,
-      '请严格只输出一段 JSON（不要输出 Markdown 代码块）：{"isSpam":false,"summary":"一句话汇报重点","suggestedReplies":["草稿1","草稿2"]}',
+      "只输出一行合法 JSON 对象（不要用 Markdown 代码块），包含布尔字段 isSpam、字符串字段 summary、字符串数组字段 suggestedReplies（2条回复草稿）。",
     ]
       .filter(Boolean)
       .join("\n");
   }
 
   async runAiTriage(event, settings = {}) {
-    // Always record into real-time AI/MCP event stream so connected AIs know immediately!
     const recorded = this.recordLiveEvent(event);
 
     if (!settings?.aiButlerEnabled) {
@@ -165,19 +268,29 @@ class AiPersonalButler {
       } else if (provider === "codex") {
         const bin = findBin("codex");
         if (bin) {
-          const { stdout } = await execFileAsync(bin, ["exec", "--skip-git-repo-check", prompt], {
-            timeout: 25000,
-            env: { ...process.env, PATH: buildAugmentedPath(), NO_COLOR: "1" },
-          });
+          const outFile = path.join(os.tmpdir(), `tp-butler-${process.pid}-${Date.now()}.txt`);
+          try {
+            const { stdout } = await runCliClosedStdin(
+              bin,
+              ["exec", "--skip-git-repo-check", "-s", "read-only", "-o", outFile, prompt],
+              24000
+            );
+            const replyTxt = fs.existsSync(outFile) ? fs.readFileSync(outFile, "utf-8") : stdout;
+            parsed = extractJsonObject(replyTxt) || extractJsonObject(stdout);
+          } finally {
+            try { fs.unlinkSync(outFile); } catch {}
+          }
+        }
+      } else if (provider === "gemini") {
+        const bin = findBin("gemini");
+        if (bin) {
+          const { stdout } = await runCliClosedStdin(bin, ["-p", prompt], 24000);
           parsed = extractJsonObject(stdout);
         }
       } else if (provider === "claude") {
         const bin = findBin("claude");
         if (bin) {
-          const { stdout } = await execFileAsync(bin, ["-p", prompt], {
-            timeout: 25000,
-            env: { ...process.env, PATH: buildAugmentedPath(), NO_COLOR: "1" },
-          });
+          const { stdout } = await runCliClosedStdin(bin, ["-p", prompt], 24000);
           parsed = extractJsonObject(stdout);
         }
       } else if (provider === "agentapi") {
@@ -185,7 +298,7 @@ class AiPersonalButler {
         const convId = String(settings.aiButlerConversationId || "").trim();
         if (convId && fs.existsSync(agentApiBin)) {
           const wakeMsg = `【消息总管实时唤醒】「${event.platformName}」刚收到新消息：${event.snippet}\n（目标通道：${event.targetKey}，如需推主人手机拍板请调 tabpulse_ask_human）`;
-          await execFileAsync(agentApiBin, ["send-message", convId, wakeMsg], { timeout: 12000 });
+          await runCliClosedStdin(agentApiBin, ["send-message", convId, wakeMsg], 12000);
           parsed = {
             isSpam: false,
             summary: `已实时唤醒 Antigravity 助理窗口处理「${event.platformName}」新消息`,
@@ -243,7 +356,6 @@ class AiPersonalButler {
 
     this.suggestionsByTarget.set(event.targetKey, suggestion);
 
-    // If AI identified it as real (non-spam), post an actionable card into AI Personal Assistant channel!
     if (!suggestion.isSpam) {
       aiInbox.pushNotification({
         agentName: "🧠 AI 个人助理",

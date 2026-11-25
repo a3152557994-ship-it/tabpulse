@@ -54,23 +54,24 @@ export function listAiClientsStatus({ homeDir = os.homedir(), localPort = 17890 
   const codexToml = path.join(codexDir, "config.toml");
   const windsurfMcp = path.join(homeDir, ".codeium", "windsurf", "mcp_config.json");
   const agyDir = path.join(homeDir, ".gemini", "antigravity");
-  const agyMcp = path.join(agyDir, "mcp_config.json");
+  const agyConfigDir = path.join(homeDir, ".gemini", "config");
+  const agyMcp = fs.existsSync(agyConfigDir)
+    ? path.join(agyConfigDir, "mcp_config.json")
+    : path.join(agyDir, "mcp_config.json");
 
   const clients = [
     {
       id: "claude-code",
       name: "Claude Code",
-      desc: "自动注入 MCP 工具 + 终端完成自动推手机 Hook + 自动提醒技能",
+      desc: "自动注入 MCP 工具 + 终端完成自动推手机 Hook",
       detected: fs.existsSync(claudeDir) || fs.existsSync(claudeJson),
-      connected:
-        checkJsonMcpConnected(claudeJson) &&
-        fs.existsSync(path.join(claudeDir, "skills", "replyradar-notify", "SKILL.md")),
+      connected: checkJsonMcpConnected(claudeJson),
       configPath: claudeJson,
     },
     {
       id: "cursor",
       name: "Cursor",
-      desc: "自动写入 ~/.cursor/mcp.json 与自动调起提醒规则 (.mdc)",
+      desc: "自动写入 ~/.cursor/mcp.json 挂载手机通知与拍板工具",
       detected: fs.existsSync(cursorDir) || fs.existsSync("/Applications/Cursor.app"),
       connected: checkJsonMcpConnected(cursorMcp),
       configPath: cursorMcp,
@@ -78,7 +79,7 @@ export function listAiClientsStatus({ homeDir = os.homedir(), localPort = 17890 
     {
       id: "codex",
       name: "OpenAI Codex CLI",
-      desc: "自动挂载 MCP 服务与 replyradar-notify 技能包",
+      desc: "自动写入 ~/.codex/config.toml 挂载 replyradar MCP 服务",
       detected: fs.existsSync(codexDir),
       connected:
         fs.existsSync(codexToml) &&
@@ -88,11 +89,9 @@ export function listAiClientsStatus({ homeDir = os.homedir(), localPort = 17890 
     {
       id: "antigravity",
       name: "Antigravity / Gemini",
-      desc: "挂载本机 MCP 服务与自动推手机拍板技能 (SKILL.md)",
-      detected: fs.existsSync(agyDir) || fs.existsSync("/Applications/Antigravity.app"),
-      connected:
-        checkJsonMcpConnected(agyMcp) &&
-        fs.existsSync(path.join(homeDir, ".gemini", "config", "skills", "replyradar-notify", "SKILL.md")),
+      desc: "自动挂载至 ~/.gemini/config/mcp_config.json 启用手机通知与拍板",
+      detected: fs.existsSync(agyDir) || fs.existsSync(agyConfigDir) || fs.existsSync("/Applications/Antigravity.app"),
+      connected: checkJsonMcpConnected(agyMcp),
       configPath: agyMcp,
     },
     {
@@ -131,9 +130,9 @@ export function listAiClientsStatus({ homeDir = os.homedir(), localPort = 17890 
   };
 }
 
-export function installAiClient(clientId, { homeDir = os.homedir(), localPort = 17890 } = {}) {
+export function installAiClient(clientId, { homeDir = os.homedir(), localPort = 17890, mcpOnly = false } = {}) {
   const { nodeBin, mcpScript, skillFile } = resolveMcpRuntimePaths();
-  const skillBody = fs.existsSync(skillFile) ? fs.readFileSync(skillFile, "utf-8") : "";
+  const skillBody = !mcpOnly && fs.existsSync(skillFile) ? fs.readFileSync(skillFile, "utf-8") : "";
   const mcpEntry = { command: nodeBin, args: [mcpScript] };
 
   const installJsonMcp = (targetJsonPath) => {
@@ -144,7 +143,7 @@ export function installAiClient(clientId, { homeDir = os.homedir(), localPort = 
   };
 
   const copySkillTo = (destSkillPath) => {
-    if (!skillBody) return;
+    if (!skillBody || mcpOnly) return;
     fs.mkdirSync(path.dirname(destSkillPath), { recursive: true });
     fs.writeFileSync(destSkillPath, skillBody, "utf-8");
   };
@@ -172,13 +171,15 @@ export function installAiClient(clientId, { homeDir = os.homedir(), localPort = 
 
   if (clientId === "cursor") {
     installJsonMcp(path.join(homeDir, ".cursor", "mcp.json"));
-    const mdcPath = path.join(homeDir, ".cursor", "rules", "replyradar-notify.mdc");
-    fs.mkdirSync(path.dirname(mdcPath), { recursive: true });
-    fs.writeFileSync(
-      mdcPath,
-      `---\ndescription: Auto-notify user's phone or ask for mobile 1-tap approval via ReplyRadar MCP\nalwaysApply: true\n---\n\n${skillBody.replace(/^---[\s\S]*?---\s*/, "")}`,
-      "utf-8"
-    );
+    if (!mcpOnly && skillBody) {
+      const mdcPath = path.join(homeDir, ".cursor", "rules", "replyradar-notify.mdc");
+      fs.mkdirSync(path.dirname(mdcPath), { recursive: true });
+      fs.writeFileSync(
+        mdcPath,
+        `---\ndescription: Auto-notify user's phone or ask for mobile 1-tap approval via ReplyRadar MCP\nalwaysApply: true\n---\n\n${skillBody.replace(/^---[\s\S]*?---\s*/, "")}`,
+        "utf-8"
+      );
+    }
     return { ok: true, clientId, installed: true };
   }
 
@@ -199,9 +200,13 @@ export function installAiClient(clientId, { homeDir = os.homedir(), localPort = 
   }
 
   if (clientId === "antigravity") {
-    installJsonMcp(path.join(homeDir, ".gemini", "antigravity", "mcp_config.json"));
+    const agyCfgDir = path.join(homeDir, ".gemini", "config");
+    const targetMcp = fs.existsSync(agyCfgDir)
+      ? path.join(agyCfgDir, "mcp_config.json")
+      : path.join(homeDir, ".gemini", "antigravity", "mcp_config.json");
+    installJsonMcp(targetMcp);
     copySkillTo(path.join(homeDir, ".gemini", "config", "skills", "replyradar-notify", "SKILL.md"));
-    return { ok: true, clientId, installed: true };
+    return { ok: true, clientId, installed: true, configPath: targetMcp };
   }
 
   if (clientId === "windsurf") {
