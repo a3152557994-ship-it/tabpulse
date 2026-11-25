@@ -571,16 +571,47 @@ export function createHubServer(options = {}) {
         return;
       }
       if (pathname === "/api/push/test" && req.method === "POST") {
+        let body = {};
+        try {
+          body = await readJsonBody(req);
+        } catch {}
         const st = loadState();
         const link = currentMobileLink(serverPortRef.port);
         const title = "🔔 消息总管手机提醒测试";
         const summary = "提醒已打通！来消息时手机直接响铃，点进对应红点就能看消息并回复。";
         const pushOut = await broadcastMobileWebPush({ title, body: summary, targetKey: "" });
+        const explicitTarget = typeof body.webhookUrl === "string" ? body.webhookUrl.trim() : "";
+        const targetToUse = explicitTarget || st.settings?.webhookUrl || "";
         let webhookOut = null;
-        if (st.settings?.webhookUrl) {
-          webhookOut = await sendCustomerWebhook(st.settings.webhookUrl, title, summary, link);
+        if (targetToUse) {
+          webhookOut = await sendCustomerWebhook(targetToUse, title, summary, link);
         }
-        sendJson(res, 200, { ok: true, webPush: pushOut, webhook: webhookOut }, corsOrigin);
+        if (explicitTarget) {
+          sendJson(
+            res,
+            200,
+            {
+              ok: Boolean(webhookOut?.ok),
+              channel: webhookOut?.channel || "",
+              error: webhookOut?.error || "",
+              webPush: pushOut,
+              webhook: webhookOut,
+            },
+            corsOrigin
+          );
+          return;
+        }
+        sendJson(
+          res,
+          200,
+          {
+            ok: true,
+            channel: webhookOut?.channel || (pushOut?.sent > 0 ? "WebPush" : ""),
+            webPush: pushOut,
+            webhook: webhookOut,
+          },
+          corsOrigin
+        );
         return;
       }
 

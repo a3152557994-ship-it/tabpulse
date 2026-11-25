@@ -230,17 +230,50 @@ internal sealed class MainDashboardForm : Form
 
         try
         {
+            static (bool ok, string channel, string error) EvalJson(HttpResponseMessage resp, string bodyStr, string ch)
+            {
+                if (!resp.IsSuccessStatusCode) return (false, ch, $"HTTP {(int)resp.StatusCode}");
+                try
+                {
+                    var node = JsonNode.Parse(bodyStr)?.AsObject();
+                    if (node != null)
+                    {
+                        if ((ch == "PushPlus" || ch == "Bark") && node["code"] != null && node["code"]!.GetValue<int>() != 200)
+                            return (false, ch, node["msg"]?.GetValue<string>() ?? node["message"]?.GetValue<string>() ?? $"{ch} error");
+                        if ((ch == "Server酱" || ch == "飞书") && node["code"] != null && node["code"]!.GetValue<int>() != 0)
+                            return (false, ch, node["message"]?.GetValue<string>() ?? node["msg"]?.GetValue<string>() ?? $"{ch} error");
+                        if (node["errcode"] != null && node["errcode"]!.GetValue<int>() != 0)
+                            return (false, ch, node["errmsg"]?.GetValue<string>() ?? $"{ch} error");
+                    }
+                }
+                catch { }
+                return (true, ch, "");
+            }
+
             if (kind == "bark" && targetUrl.Split('/').Length <= 4)
             {
                 var r = await Http.GetAsync($"{targetUrl}/{Uri.EscapeDataString(title)}/{Uri.EscapeDataString(bodyText)}?sound=minuet");
-                return (r.IsSuccessStatusCode, "Bark", r.IsSuccessStatusCode ? "" : $"HTTP {(int)r.StatusCode}");
+                var b = await r.Content.ReadAsStringAsync();
+                return EvalJson(r, b, "Bark");
             }
             if (kind == "pushplus_url" && targetUrl.Contains("token="))
             {
                 var sep = targetUrl.Contains('?') ? "&" : "?";
                 var r = await Http.GetAsync($"{targetUrl}{sep}title={Uri.EscapeDataString(title)}&content={Uri.EscapeDataString(bodyText)}");
-                return (r.IsSuccessStatusCode, "PushPlus", r.IsSuccessStatusCode ? "" : $"HTTP {(int)r.StatusCode}");
+                var b = await r.Content.ReadAsStringAsync();
+                return EvalJson(r, b, "PushPlus");
             }
+
+            var chLabel = kind switch
+            {
+                "pushplus" => "PushPlus",
+                "serverchan" => "Server酱",
+                "feishu" => "飞书",
+                "wecom" => "企业微信",
+                "dingtalk" => "钉钉",
+                "discord" => "Discord",
+                _ => "Webhook"
+            };
 
             JsonObject payload = kind switch
             {
@@ -254,7 +287,8 @@ internal sealed class MainDashboardForm : Form
 
             using var content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
             var resp = await Http.PostAsync(targetUrl, content);
-            return (resp.IsSuccessStatusCode, kind, resp.IsSuccessStatusCode ? "" : $"HTTP {(int)resp.StatusCode}");
+            var respText = await resp.Content.ReadAsStringAsync();
+            return EvalJson(resp, respText, chLabel);
         }
         catch (Exception ex)
         {
@@ -445,6 +479,7 @@ internal sealed class MainDashboardForm : Form
                 var prev = obj["unreadCount"]?.GetValue<int>() ?? 0;
                 obj["unreadCount"] = authExpired ? 0 : count;
                 obj["status"] = authExpired ? "auth_expired" : (count > 0 ? "unread" : "idle");
+                obj["snippet"] = count > 0 ? snippet : "";
                 if (!string.IsNullOrEmpty(snippet)) obj["lastSnippet"] = snippet;
                 obj["lastCheckedAt"] = DateTime.UtcNow.ToString("O");
                 if (!authExpired && count > 0 && count > prev)
@@ -464,7 +499,8 @@ internal sealed class MainDashboardForm : Form
 
     private static JsonObject ScanWindowsDesktopState()
     {
-        var badges = new JsonObject();
+        var badges = new JsonArray();
+        var seenBadgeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var windows = new JsonArray();
         var commProcs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -500,13 +536,16 @@ internal sealed class MainDashboardForm : Form
                     {
                         var unreadMatch = Regex.Match(title, @"(?:\(|\[|【)\s*(\d{1,3})\s*(?:\)|\]|条)");
                         var badge = unreadMatch.Success ? unreadMatch.Groups[1].Value : "";
-                        if (!string.IsNullOrEmpty(badge)) badges[appLabel] = badge;
+                        var cnt = int.TryParse(badge, out var n) ? n : 0;
+                        if (!string.IsNullOrEmpty(badge) && seenBadgeNames.Add(appLabel))
+                            badges.Add(new JsonObject { ["name"] = appLabel, ["badge"] = badge });
                         windows.Add(new JsonObject
                         {
                             ["windowId"] = p.Id,
                             ["appName"] = appLabel,
                             ["title"] = title,
-                            ["badge"] = badge
+                            ["badge"] = badge,
+                            ["unreadCount"] = cnt
                         });
                     }
                     else if (browserProcs.Contains(pName) && !title.Contains("消息总管") && !title.Contains("ReplyRadar"))
@@ -517,13 +556,16 @@ internal sealed class MainDashboardForm : Form
                             var clean = Regex.Replace(title, @"\s*-\s*(Google Chrome|Microsoft​?\s*Edge|Mozilla Firefox|Brave).*$", "", RegexOptions.IgnoreCase).Trim();
                             var shortLabel = $"浏览器 · {(clean.Length > 20 ? clean[..20] : clean)}";
                             var badge = unreadMatch.Success ? unreadMatch.Groups[1].Value : "";
-                            if (!string.IsNullOrEmpty(badge)) badges[shortLabel] = badge;
+                            var cnt = int.TryParse(badge, out var n) ? n : 0;
+                            if (!string.IsNullOrEmpty(badge) && seenBadgeNames.Add(shortLabel))
+                                badges.Add(new JsonObject { ["name"] = shortLabel, ["badge"] = badge });
                             windows.Add(new JsonObject
                             {
                                 ["windowId"] = p.Id,
                                 ["appName"] = shortLabel,
                                 ["title"] = title,
                                 ["badge"] = badge,
+                                ["unreadCount"] = cnt,
                                 ["snippet"] = "日常浏览器已登录窗口（免重复扫码自动看护）"
                             });
                         }
@@ -680,12 +722,17 @@ internal sealed class MainDashboardForm : Form
         }
         if (method == "POST" && path == "/api/watches")
         {
-            var id = payload?["id"]?.GetValue<string>() ?? $"acc-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}-{Random.Shared.Next(100, 999)}";
+            var rawUrl = (payload?["url"]?.GetValue<string>() ?? "").Trim();
+            if (!string.IsNullOrEmpty(rawUrl) && !rawUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !rawUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                rawUrl = "https://" + rawUrl;
+            var explicitId = payload?["id"]?.GetValue<string>();
+            var allowDup = payload?["allowDuplicateUrl"]?.GetValue<bool>() ?? false;
+            var id = !string.IsNullOrWhiteSpace(explicitId) ? explicitId! : $"acc-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}-{Random.Shared.Next(100, 999)}";
             var item = new JsonObject
             {
                 ["id"] = id,
                 ["name"] = payload?["name"]?.GetValue<string>() ?? "Account",
-                ["url"] = payload?["url"]?.GetValue<string>() ?? "",
+                ["url"] = rawUrl,
                 ["category"] = payload?["category"]?.GetValue<string>() ?? "主力阵地",
                 ["publishTier"] = payload?["publishTier"]?.GetValue<string>() ?? "red",
                 ["isolatedProfile"] = true,
@@ -693,7 +740,20 @@ internal sealed class MainDashboardForm : Form
                 ["status"] = "idle",
                 ["unreadCount"] = 0
             };
-            watches.Add(item);
+            int existingIdx = -1;
+            for (int i = 0; i < watches.Count; i++)
+            {
+                var w = watches[i]?.AsObject();
+                if (w == null) continue;
+                if ((!string.IsNullOrWhiteSpace(explicitId) && w["id"]?.GetValue<string>() == explicitId) ||
+                    (string.IsNullOrWhiteSpace(explicitId) && !allowDup && w["url"]?.GetValue<string>() == rawUrl))
+                {
+                    existingIdx = i;
+                    break;
+                }
+            }
+            if (existingIdx >= 0) watches[existingIdx] = item;
+            else watches.Add(item);
             SaveState(st);
             return new JsonObject { ["ok"] = true, ["watch"] = item.DeepClone() };
         }

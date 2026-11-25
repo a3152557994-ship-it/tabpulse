@@ -35,15 +35,46 @@ enum WebhookDispatcher {
         if s.range(of: "^[0-9a-fA-F]{32}$", options: .regularExpression) != nil {
             return ("pushplus", s)
         }
-        if s.range(of: "^[A-Za-z0-9]{20,28}$", options: .regularExpression) != nil {
+        if s.range(of: "^[A-Za-z0-9]{20,28}$", options: .regularExpression) != nil && !s.hasPrefix("TP1") {
             return ("bark", "https://api.day.app/\(s)")
         }
-        return ("url", s)
+        if s.hasPrefix("http://") || s.hasPrefix("https://") {
+            return ("url", s)
+        }
+        return ("invalid", "")
     }
 
-    static func send(webhookUrlStr: String, siteName: String, unreadCount: Int, snippet: String, siteUrl: String) {
+    private static func evaluatePushResponse(data: Data?, resp: URLResponse?, err: Error?, channel: String) -> (Bool, String, String) {
+        if let e = err { return (false, channel, e.localizedDescription) }
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if code < 200 || code >= 300 { return (false, channel, "HTTP \(code)") }
+        if let d = data, let obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] {
+            if (channel == "PushPlus" || channel == "Bark"), let c = obj["code"] as? Int, c != 200 {
+                let m = (obj["msg"] as? String) ?? (obj["message"] as? String) ?? "\(channel) 错误 (\(c))"
+                return (false, channel, m)
+            }
+            if (channel == "Server酱" || channel == "飞书"), let c = obj["code"] as? Int, c != 0 {
+                let m = (obj["message"] as? String) ?? (obj["msg"] as? String) ?? "\(channel) 错误 (\(c))"
+                return (false, channel, m)
+            }
+            if let ec = obj["errcode"] as? Int, ec != 0 {
+                let m = (obj["errmsg"] as? String) ?? "\(channel) 错误 (\(ec))"
+                return (false, channel, m)
+            }
+        }
+        return (true, channel, "")
+    }
+
+    static func send(webhookUrlStr: String, siteName: String, unreadCount: Int, snippet: String, siteUrl: String, completion: ((Bool, String, String) -> Void)? = nil) {
         let norm = normalizePushInput(webhookUrlStr)
-        guard norm.mode != "none" else { return }
+        if norm.mode == "none" {
+            completion?(false, "none", "未填写推送口令")
+            return
+        }
+        if norm.mode == "invalid" {
+            completion?(false, "invalid", "格式不正确：请粘贴 32 位 PushPlus 口令、SCT SendKey、Bark 码或 https:// 链接")
+            return
+        }
         let title = isChineseSystem
             ? "🔔【消息总管】\(siteName) 有 \(unreadCount) 条新消息"
             : "🔔 [ReplyRadar] \(unreadCount) new unread in \(siteName)"
@@ -60,19 +91,28 @@ enum WebhookDispatcher {
                 "content": cleanSnippet,
                 "template": "txt"
             ])
-            URLSession.shared.dataTask(with: req).resume()
+            URLSession.shared.dataTask(with: req) { d, r, e in
+                let res = evaluatePushResponse(data: d, resp: r, err: e, channel: "PushPlus")
+                completion?(res.0, res.1, res.2)
+            }.resume()
             return
         }
 
         let trimmed = norm.target
-        guard let url = URL(string: trimmed) else { return }
+        guard let url = URL(string: trimmed) else {
+            completion?(false, "invalid", "无效链接")
+            return
+        }
 
         // Bark GET-style push URL support (https://api.day.app/<key>)
         if trimmed.contains("api.day.app/") && trimmed.split(separator: "/").count == 3 {
             let tEnc = title.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "ReplyRadar"
             let bEnc = cleanSnippet.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""
             if let barkURL = URL(string: "\(trimmed)/\(tEnc)/\(bEnc)") {
-                URLSession.shared.dataTask(with: barkURL).resume()
+                URLSession.shared.dataTask(with: barkURL) { d, r, e in
+                    let res = evaluatePushResponse(data: d, resp: r, err: e, channel: "Bark")
+                    completion?(res.0, res.1, res.2)
+                }.resume()
                 return
             }
         }
@@ -81,17 +121,25 @@ enum WebhookDispatcher {
         req.httpMethod = "POST"
         req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
 
+        let channelName: String
         let payload: [String: Any]
         if trimmed.contains("feishu.cn") || trimmed.contains("larksuite.com") {
+            channelName = "飞书"
             payload = ["msg_type": "text", "content": ["text": fullText]]
         } else if trimmed.contains("qyapi.weixin.qq.com") {
+            channelName = "企业微信"
             payload = ["msgtype": "text", "text": ["content": fullText]]
+        } else if trimmed.contains("oapi.dingtalk.com") {
+            channelName = "钉钉"
+            payload = ["msgtype": "text", "text": ["content": "【消息总管】\(fullText)"]]
         } else if trimmed.contains("discord.com/api/webhooks") {
+            channelName = "Discord"
             payload = ["content": fullText]
         } else if trimmed.contains("sctapi.ftqq.com") {
+            channelName = "Server酱"
             payload = ["title": title, "desp": cleanSnippet]
         } else {
-            // Slack + generic JSON webhooks
+            channelName = "Webhook"
             payload = [
                 "text": fullText,
                 "title": title,
@@ -102,7 +150,10 @@ enum WebhookDispatcher {
             ]
         }
         req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
-        URLSession.shared.dataTask(with: req).resume()
+        URLSession.shared.dataTask(with: req) { d, r, e in
+            let res = evaluatePushResponse(data: d, resp: r, err: e, channel: channelName)
+            completion?(res.0, res.1, res.2)
+        }.resume()
     }
 }
 
@@ -1684,7 +1735,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if method == "POST" && path == "/api/watches" {
             var st = StandaloneStore.shared.loadState()
             var watches = (st["watches"] as? [[String: Any]]) ?? []
-            let url = (payload?["url"] as? String) ?? ""
+            var url = ((payload?["url"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !url.isEmpty && !url.lowercased().hasPrefix("http://") && !url.lowercased().hasPrefix("https://") {
+                url = "https://\(url)"
+            }
             let id = (payload?["id"] as? String) ?? "watch-\(Int(Date().timeIntervalSince1970))-\(Int.random(in: 100...999))"
             let mins = (payload?["baseIntervalMinutes"] as? Int) ?? 60
             let allowDup = (payload?["allowDuplicateUrl"] as? Bool) ?? false
@@ -1811,16 +1865,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 title: isChineseSystem ? "🔔 消息总管锁屏推送测试" : "🔔 ReplyRadar Push Test",
                 body: isChineseSystem ? "电脑本地通知与外部手机推送通道已触发！" : "Notification test triggered!"
             )
-            if !wh.isEmpty {
-                WebhookDispatcher.send(
-                    webhookUrlStr: wh,
-                    siteName: isChineseSystem ? "推送测试" : "Push Test",
-                    unreadCount: 1,
-                    snippet: isChineseSystem ? "恭喜！您的手机锁屏强提醒已成功打通，来客户消息时手机息屏也会立刻响铃！" : "Mobile lock-screen alert is live!",
-                    siteUrl: "https://a3152557994-ship-it.github.io/tabpulse/"
-                )
+            if wh.isEmpty {
+                replyCallback(reqId, ["ok": false, "error": isChineseSystem ? "请先粘贴推送口令或链接" : "Please enter push token or URL"])
+                return
             }
-            replyCallback(reqId, ["ok": !wh.isEmpty, "channel": "手机强提醒通道", "webhookConfigured": !wh.isEmpty])
+            WebhookDispatcher.send(
+                webhookUrlStr: wh,
+                siteName: isChineseSystem ? "推送测试" : "Push Test",
+                unreadCount: 1,
+                snippet: isChineseSystem ? "恭喜！您的手机锁屏强提醒已成功打通，来客户消息时手机息屏也会立刻响铃！" : "Mobile lock-screen alert is live!",
+                siteUrl: "https://a3152557994-ship-it.github.io/tabpulse/"
+            ) { ok, channel, err in
+                self.replyCallback(reqId, ["ok": ok, "channel": channel, "error": err, "webhookConfigured": true])
+            }
             return
         }
         if path == "/api/mobile/info" {
@@ -2051,7 +2108,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
     }
 
-    // MARK: - Silent Background WebKit Sentinel
+    // MARK: - Silent Background WebKit Sentinel (Bound to Per-Watch Isolated Cookie Store!)
+    func loadUrlInIsolatedProbe(watchId: String, profileUuidStr: String, url: URL) {
+        probeWebView?.stopLoading()
+        probeWebView?.navigationDelegate = nil
+        probeWebView?.removeFromSuperview()
+
+        let cfg = WKWebViewConfiguration()
+        if !watchId.isEmpty, #available(macOS 14.0, *) {
+            let targetUUID = UUID(uuidString: profileUuidStr) ?? deterministicProfileUUID(watchId)
+            cfg.websiteDataStore = WKWebsiteDataStore(forIdentifier: targetUUID)
+        } else {
+            cfg.websiteDataStore = .default()
+        }
+        cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
+
+        let nextProbe = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: cfg)
+        nextProbe.customUserAgent = SAFARI_DESKTOP_UA
+        nextProbe.navigationDelegate = self
+        probeWebView = nextProbe
+        backgroundTabsContainer.addSubview(nextProbe)
+        nextProbe.load(URLRequest(url: url))
+    }
+
     func runSilentCheckCycle(forceImmediate: Bool = false, targetId: String = "") {
         guard currentProbeTargetId == nil else { return }
         if !forceImmediate {
@@ -2075,10 +2154,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                       let urlStr = first["url"] as? String,
                       let targetURL = URL(string: urlStr) else { return }
                 let name = (first["name"] as? String) ?? id
+                let pUuid = (first["profileUuid"] as? String) ?? ""
                 DispatchQueue.main.async {
                     self?.currentProbeTargetId = id
                     self?.currentProbeTargetName = name
-                    self?.probeWebView.load(URLRequest(url: targetURL))
+                    self?.loadUrlInIsolatedProbe(watchId: id, profileUuidStr: pUuid, url: targetURL)
                 }
             }.resume()
         } else {
@@ -2088,16 +2168,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let candidate = watches.first { w in
                 let wid = (w["id"] as? String) ?? ""
                 if !targetId.isEmpty { return wid == targetId }
+                let tier = (w["publishTier"] as? String) ?? "yellow"
                 let status = (w["status"] as? String) ?? "idle"
-                if status == "paused" || (!forceImmediate && status == "auth_expired") { return false }
+                if status == "paused" || (!forceImmediate && (status == "auth_expired" || tier == "red")) { return false }
                 if forceImmediate { return true }
                 let next = (w["nextCheckAt"] as? String) ?? ""
                 return next.isEmpty || next <= nowISO
             }
             if let c = candidate, let id = c["id"] as? String, let uStr = c["url"] as? String, let u = URL(string: uStr) {
+                let pUuid = (c["profileUuid"] as? String) ?? ""
                 currentProbeTargetId = id
                 currentProbeTargetName = (c["name"] as? String) ?? id
-                probeWebView.load(URLRequest(url: u))
+                loadUrlInIsolatedProbe(watchId: id, profileUuidStr: pUuid, url: u)
             }
         }
     }

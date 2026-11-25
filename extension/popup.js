@@ -6,9 +6,9 @@ async function initPopup() {
     const res = await fetch(`${HUB_URL}/api/state`);
     const data = await res.json();
     const s = data.stats || {};
-    statusEl.textContent = `中枢在线 · 盯梢 ${s.total || 0} 站 · 未读 ${s.unreadMessagesTotal || 0} 条`;
+    statusEl.textContent = `总管在线 · 看护 ${s.total || 0} 个平台 · 未读 ${s.unreadMessagesTotal || 0} 条`;
   } catch {
-    statusEl.textContent = "中枢未启动（请先确保 launchd 或 npm start 已运行）";
+    statusEl.textContent = "未检测到《消息总管》后台（请先打开消息总管桌面端）";
     statusEl.style.color = "#dc2626";
   }
 
@@ -45,7 +45,7 @@ document.getElementById("quick-add").addEventListener("submit", async (e) => {
     });
     if (!res.ok) throw new Error(await res.text());
     msgEl.style.color = "#059669";
-    msgEl.textContent = "✅ 已加入万站回音后台监控";
+    msgEl.textContent = "✅ 已加入《消息总管》静默看护";
   } catch (err) {
     msgEl.style.color = "#dc2626";
     msgEl.textContent = "添加失败：" + err.message;

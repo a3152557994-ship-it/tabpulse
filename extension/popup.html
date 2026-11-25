@@ -26,36 +26,36 @@
   </style>
 </head>
 <body>
-  <h1>📡 万站回音 · TabPulse</h1>
-  <div class="status" id="hub-status">正在连接本地中枢...</div>
-  <button class="primary" id="open-hub">🧭 打开 hao123 总控台</button>
+  <h1>🔔 消息总管 · 浏览器助手</h1>
+  <div class="status" id="hub-status">正在连接本地消息总管...</div>
+  <button class="primary" id="open-hub">🧭 打开《消息总管》工作台</button>
 
   <div class="divider"></div>
   <form id="quick-add">
     <div class="field">
-      <label>把当前网页加入盯梢</label>
-      <input id="site-name" placeholder="平台名称" required />
+      <label>把当前已登录网页加入静默看护</label>
+      <input id="site-name" placeholder="平台名称（如：猎聘消息 / 闲鱼咨询）" required />
     </div>
     <div class="field">
       <input id="site-url" type="url" placeholder="https://..." required />
     </div>
     <div class="field" style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
       <select id="site-tier">
-        <option value="red">🔴 红灯手发</option>
-        <option value="yellow" selected>🟡 黄灯确认</option>
-        <option value="green">🟢 绿灯后台</option>
+        <option value="red" selected>🛡️ 零刷页常驻</option>
+        <option value="yellow">🟡 温和低频巡检</option>
+        <option value="green">🟢 常规后台看护</option>
       </select>
       <select id="site-cat">
-        <option value="主力阵地">主力阵地</option>
-        <option value="接单外包" selected>接单外包</option>
+        <option value="主力阵地" selected>主力阵地</option>
+        <option value="接单外包">接单外包</option>
         <option value="开发者商店">开发者商店</option>
         <option value="长尾蹲守">长尾蹲守</option>
       </select>
     </div>
     <div class="field">
-      <textarea id="site-ctx" rows="2" placeholder="备注背景（如：等甲方私信回复报价）"></textarea>
+      <textarea id="site-ctx" rows="2" placeholder="备注（可选，如：日常主号消息）"></textarea>
     </div>
-    <button type="submit">＋ 加入静默盯梢</button>
+    <button type="submit">＋ 加入静默看护</button>
     <div id="msg"></div>
   </form>
   <script src="popup.js"></script>

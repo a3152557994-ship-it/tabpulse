@@ -36,9 +36,37 @@ export function normalizeCustomerPushTarget(rawInput = "") {
   return { kind: "invalid", url: "", token: "" };
 }
 
+function inspectWebhookJsonResult(data, defaultChannel) {
+  if (!data || typeof data !== "object") return { ok: true, channel: defaultChannel };
+  // PushPlus: { code: 200, msg: "请求成功" }
+  if (defaultChannel === "PushPlus" && typeof data.code === "number" && data.code !== 200) {
+    return { ok: false, channel: defaultChannel, error: data.msg || `PushPlus 错误 (${data.code})` };
+  }
+  // Bark: { code: 200, message: "success" }
+  if (defaultChannel === "Bark" && typeof data.code === "number" && data.code !== 200) {
+    return { ok: false, channel: defaultChannel, error: data.message || `Bark 错误 (${data.code})` };
+  }
+  // Server酱 / Feishu: { code: 0, ... }
+  if ((defaultChannel === "Server酱" || defaultChannel === "飞书") && typeof data.code === "number" && data.code !== 0) {
+    return { ok: false, channel: defaultChannel, error: data.message || data.msg || `${defaultChannel} 错误 (${data.code})` };
+  }
+  // WeCom / DingTalk: { errcode: 0, errmsg: "ok" }
+  if (typeof data.errcode === "number" && data.errcode !== 0) {
+    return { ok: false, channel: defaultChannel, error: data.errmsg || `${defaultChannel} 错误 (${data.errcode})` };
+  }
+  return { ok: true, channel: defaultChannel };
+}
+
 export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = "") {
   const norm = normalizeCustomerPushTarget(webhookUrl);
-  if (norm.kind === "none" || norm.kind === "invalid") return null;
+  if (norm.kind === "none") return null;
+  if (norm.kind === "invalid") {
+    return {
+      ok: false,
+      channel: "invalid",
+      error: "格式不正确：请粘贴 32 位 PushPlus 口令、SCT 开头 SendKey、Bark 码或 https:// 开头链接",
+    };
+  }
   const url = norm.url;
   const fullText = mobileLink ? `${text}\n📱 手机点此直接看纯文字并回复：${mobileLink}` : text;
   try {
@@ -49,7 +77,9 @@ export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: tok, title, content: fullText, template: "txt" }),
       });
-      return { status: r.status, ok: r.ok, channel: "pushplus" };
+      const data = await r.json().catch(() => null);
+      if (!r.ok) return { status: r.status, ok: false, channel: "PushPlus", error: `HTTP ${r.status}` };
+      return { status: r.status, ...inspectWebhookJsonResult(data, "PushPlus") };
     }
 
     // Bark GET URL support (https://api.day.app/<key>) with ?url= jump straight into Mobile Pocket Console
@@ -58,19 +88,34 @@ export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = 
       const q = mobileLink ? `?url=${encodeURIComponent(mobileLink)}` : "";
       const barkUrl = `${base}/${encodeURIComponent(title)}/${encodeURIComponent(text)}${q}`;
       const r = await fetch(barkUrl);
-      return { status: r.status, ok: r.ok, channel: "bark" };
+      const data = await r.json().catch(() => null);
+      if (!r.ok) return { status: r.status, ok: false, channel: "Bark", error: `HTTP ${r.status}` };
+      return { status: r.status, ...inspectWebhookJsonResult(data, "Bark") };
     }
 
-    const payload =
+    const channelLabel =
       url.includes("feishu.cn") || url.includes("larksuite.com")
-        ? { msg_type: "text", content: { text: `${title}\n${fullText}` } }
+        ? "飞书"
         : url.includes("qyapi.weixin.qq.com")
-          ? { msgtype: "text", text: { content: `${title}\n${fullText}` } }
+          ? "企业微信"
           : url.includes("oapi.dingtalk.com")
-            ? { msgtype: "text", text: { content: `【消息总管】${title}\n${fullText}` } }
+            ? "钉钉"
             : url.includes("discord.com/api/webhooks")
-              ? { content: `**${title}**\n${fullText}` }
+              ? "Discord"
               : url.includes("sctapi.ftqq.com")
+                ? "Server酱"
+                : "Webhook";
+
+    const payload =
+      channelLabel === "飞书"
+        ? { msg_type: "text", content: { text: `${title}\n${fullText}` } }
+        : channelLabel === "企业微信"
+          ? { msgtype: "text", text: { content: `${title}\n${fullText}` } }
+          : channelLabel === "钉钉"
+            ? { msgtype: "text", text: { content: `【消息总管】${title}\n${fullText}` } }
+            : channelLabel === "Discord"
+              ? { content: `**${title}**\n${fullText}` }
+              : channelLabel === "Server酱"
                 ? { title, desp: fullText }
                 : { text: `${title}\n${fullText}`, title, desp: fullText, body: fullText, url: mobileLink };
 
@@ -79,7 +124,9 @@ export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    return { status: res.status, ok: res.ok };
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return { status: res.status, ok: false, channel: channelLabel, error: `HTTP ${res.status}` };
+    return { status: res.status, ...inspectWebhookJsonResult(data, channelLabel) };
   } catch (err) {
     return { ok: false, error: err.message };
   }

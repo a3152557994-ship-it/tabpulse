@@ -1,8 +1,9 @@
 const HUB_URL = "http://127.0.0.1:17890";
-const GROUP_TITLE = "📡 万站回音";
+const GROUP_TITLE = "🔔 消息总管";
 const ALARM_NAME = "tabpulse-pulse";
 
 let cycleRunning = false;
+let titleSyncTimer = null;
 
 function ensureAlarm() {
   chrome.alarms.get(ALARM_NAME, (existing) => {
@@ -26,6 +27,16 @@ ensureAlarm();
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
     runPulseCycle().catch(() => {});
+  }
+});
+
+// Zero-reload real-time listener: when any already-open tab's title updates (e.g. "(1) 消息中心"), sync within 1.5s!
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  if (changeInfo.title && tab && /^https?:\/\//i.test(tab.url || "")) {
+    clearTimeout(titleSyncTimer);
+    titleSyncTimer = setTimeout(() => {
+      syncAlreadyOpenBrowserTabs().catch(() => {});
+    }, 1500);
   }
 });
 
@@ -165,10 +176,60 @@ async function updateActionBadge() {
   }
 }
 
+async function syncAlreadyOpenBrowserTabs() {
+  const state = await fetchJson(`${HUB_URL}/api/state`).catch(() => null);
+  if (!state || !Array.isArray(state.watches) || state.watches.length === 0) return;
+
+  const openTabs = await chrome.tabs.query({});
+  for (const watch of state.watches) {
+    if (watch.status === "paused" || !watch.url) continue;
+    let watchHost = "";
+    try {
+      watchHost = new URL(watch.url).hostname.replace(/^www\./, "").toLowerCase();
+    } catch {
+      continue;
+    }
+    const matchingTab = openTabs.find((t) => {
+      if (!t.id || !/^https?:\/\//i.test(t.url || "")) return false;
+      try {
+        const th = new URL(t.url).hostname.replace(/^www\./, "").toLowerCase();
+        return th === watchHost || th.endsWith(`.${watchHost}`) || watchHost.endsWith(`.${th}`);
+      } catch {
+        return false;
+      }
+    });
+    if (!matchingTab) continue;
+
+    try {
+      const execResults = await chrome.scripting.executeScript({
+        target: { tabId: matchingTab.id },
+        files: ["probe.js"],
+      });
+      const probe = (execResults && execResults[0] && execResults[0].result) || null;
+      if (probe) {
+        await fetchJson(`${HUB_URL}/api/report`, {
+          method: "POST",
+          body: JSON.stringify({
+            id: watch.id,
+            unreadCount: probe.unreadCount || 0,
+            snippet: probe.snippet || "",
+            authExpired: Boolean(probe.authExpired),
+            pageTitle: probe.pageTitle || matchingTab.title || "",
+            url: matchingTab.url,
+          }),
+        });
+      }
+    } catch {
+      // Tab may be restricted or transitioning
+    }
+  }
+}
+
 async function runPulseCycle() {
   if (cycleRunning) return;
   cycleRunning = true;
   try {
+    await syncAlreadyOpenBrowserTabs().catch(() => {});
     const duePayload = await fetchJson(`${HUB_URL}/api/due`);
     const dueList = Array.isArray(duePayload.due) ? duePayload.due : [];
     if (dueList.length > 0) {

@@ -480,6 +480,54 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
       headers: { "cf-connecting-ip": "203.0.113.9" },
     });
     assert.equal(blockedExtOpen.status, 403);
+
+    // 12. Regression: /api/push/test rejects invalid push token honestly, and /api/watches auto-prepends https:// & deduplicates unless allowDuplicateUrl=true
+    const badPushRes = await (
+      await fetch(`${baseUrl}/api/push/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookUrl: "not_a_valid_token" }),
+      })
+    ).json();
+    assert.equal(badPushRes.ok, false);
+    assert.ok(badPushRes.error);
+
+    const w1 = await (
+      await fetch(`${baseUrl}/api/watches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "无协议测试站", url: "v2ex.com/notifications", isolatedProfile: true }),
+      })
+    ).json();
+    assert.equal(w1.ok, true);
+    assert.equal(w1.created, true);
+    assert.equal(w1.watch.url, "https://v2ex.com/notifications");
+
+    const wDup = await (
+      await fetch(`${baseUrl}/api/watches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "无协议测试站更新", url: "https://v2ex.com/notifications", isolatedProfile: true }),
+      })
+    ).json();
+    assert.equal(wDup.created, false);
+    assert.equal(wDup.watch.id, w1.watch.id);
+
+    const wClone = await (
+      await fetch(`${baseUrl}/api/watches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "V2EX 二号副店",
+          url: "https://v2ex.com/notifications",
+          isolatedProfile: true,
+          allowDuplicateUrl: true,
+        }),
+      })
+    ).json();
+    assert.equal(wClone.created, true);
+    assert.notEqual(wClone.watch.id, w1.watch.id);
+    assert.notEqual(wClone.watch.profileUuid, w1.watch.profileUuid);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

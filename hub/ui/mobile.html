@@ -713,6 +713,7 @@
           tag: "电脑软件",
           windowId: win.windowId,
           appName: win.appName,
+          rawOwnerName: win.rawOwnerName || win.appName,
           title: win.appName,
           unreadCount: unread,
           snippet: win.snippet || `点击查看 ${win.appName} 当前纯文字消息并回复`,
@@ -877,7 +878,7 @@
               ? `<span class="red-dot-badge">${ch.unreadCount > 99 ? "99+" : ch.unreadCount}</span>`
               : "";
           return `
-            <div class="channel-row ${ch.unreadCount > 0 ? "has-unread" : ""}" onclick="openChannelByKey('${esc(ch.key)}')">
+            <div class="channel-row ${ch.unreadCount > 0 ? "has-unread" : ""}" data-key="${esc(ch.key)}" onclick="openChannelByKey(this.dataset.key)">
               <div class="avatar-box">
                 <div class="avatar ${avCls}">${esc(ch.icon)}</div>
                 ${badgeHtml}
@@ -1014,7 +1015,8 @@
       }
 
       if (ch.kind === "app") {
-        const res = await api(`/api/desktop/window/${ch.windowId || 0}/messages?app=${encodeURIComponent(ch.appName || "")}`);
+        const wakeOwner = ch.rawOwnerName || ch.appName || "";
+        const res = await api(`/api/desktop/window/${ch.windowId || 0}/messages?app=${encodeURIComponent(wakeOwner)}`);
         if (res.windowId && !ch.windowId) {
           ch.windowId = res.windowId;
         }
@@ -1400,7 +1402,7 @@
             .slice(0, 18)
             .map(
               (a) =>
-                `<button class="btn" style="font-size:12px" onclick="launchDesktopApp('${esc(a.path)}','${esc(a.name)}')">💻 ${esc(a.name)}</button>`
+                `<button class="btn" style="font-size:12px" data-path="${esc(a.path)}" data-name="${esc(a.name)}" onclick="launchDesktopApp(this.dataset.path, this.dataset.name)">💻 ${esc(a.name)}</button>`
             )
             .join("")
         : `<span style="font-size:12px;color:var(--sub)">正在读取电脑已装软件...</span>`;
@@ -1415,7 +1417,10 @@
       const name = document.getElementById("add-web-name").value.trim();
       const url = document.getElementById("add-web-url").value.trim();
       if (!name || !url) return showToast("请填写平台名称和网址");
-      await api("/api/watches", { method: "POST", body: JSON.stringify({ name, url, checkIntervalMinutes: 2 }) });
+      await api("/api/watches", {
+        method: "POST",
+        body: JSON.stringify({ name, url, publishTier: "red", baseIntervalMinutes: 60, isolatedProfile: true }),
+      });
       document.getElementById("add-web-name").value = "";
       document.getElementById("add-web-url").value = "";
       closeAddSheet();

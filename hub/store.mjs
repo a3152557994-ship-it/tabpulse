@@ -302,14 +302,25 @@ export function deterministicProfileUuid(seedStr) {
 }
 
 export function upsertWatch(input, nowDate = new Date()) {
-  if (!input || !input.url) {
+  if (!input || !String(input.url || "").trim()) {
     throw new Error("url is required");
   }
+  let normalizedUrl = String(input.url).trim();
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    normalizedUrl = `https://${normalizedUrl}`;
+  }
+  let parsedHost = "site";
+  try {
+    parsedHost = new URL(normalizedUrl).hostname;
+  } catch {
+    throw new Error("invalid url");
+  }
+
   const state = loadState(nowDate);
   const nowIso = nowDate.toISOString();
-  const allowDuplicateUrl = Boolean(input.allowDuplicateUrl || input.isolatedProfile);
+  const allowDuplicateUrl = Boolean(input.allowDuplicateUrl);
   const existingIdx = state.watches.findIndex(
-    (w) => (input.id && w.id === input.id) || (!input.id && !allowDuplicateUrl && w.url === input.url)
+    (w) => (input.id && w.id === input.id) || (!input.id && !allowDuplicateUrl && w.url === normalizedUrl)
   );
 
   const category = VALID_CATEGORIES.has(input.category) ? input.category : "长尾蹲守";
@@ -322,7 +333,7 @@ export function upsertWatch(input, nowDate = new Date()) {
     const updated = {
       ...current,
       name: input.name ? String(input.name).trim() : current.name,
-      url: String(input.url).trim(),
+      url: normalizedUrl,
       category: input.category ? category : current.category,
       publishTier: input.publishTier ? publishTier : current.publishTier,
       conversationId:
@@ -337,12 +348,12 @@ export function upsertWatch(input, nowDate = new Date()) {
     return { watch: updated, created: false };
   }
 
-  const newId = input.id ? String(input.id).trim() : slugifyId(input.name, input.url);
+  const newId = input.id ? String(input.id).trim() : slugifyId(input.name, normalizedUrl);
   const isolatedProfile = input.isolatedProfile !== undefined ? Boolean(input.isolatedProfile) : true;
   const newWatch = {
     id: newId,
-    name: String(input.name || new URL(input.url).hostname).trim(),
-    url: String(input.url).trim(),
+    name: String(input.name || parsedHost).trim(),
+    url: normalizedUrl,
     category,
     publishTier,
     isolatedProfile,
