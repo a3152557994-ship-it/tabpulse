@@ -460,10 +460,18 @@
         document.getElementById("ck-title").textContent = "⚡ Unlock ReplyRadar Pro — Instant Offline Key";
         document.getElementById("ck-lbl-year").textContent = "$4.99 / yr Annual Pro";
         document.getElementById("ck-lbl-life").textContent = "🔥 $14.99 Lifetime Pro (Pay Once, Own Forever)";
-        document.getElementById("ck-way-1").innerHTML = " <strong>Option 1 (Mac App Store)</strong>: Search <code>ReplyRadar</code> on Mac App Store for 1-click Apple IAP.";
-        document.getElementById("ck-way-2").innerHTML = "💳 <strong>Option 2 (Direct Key for Mac &amp; Windows)</strong>: Copy order code below &amp; message <code>a3152557994@gmail.com</code> for instant license delivery.";
-        document.getElementById("btn-ck-xy").textContent = "📋 Copy Order Code";
-        document.getElementById("btn-ck-qq").textContent = "✉️ Send Instant Order Email";
+        document.getElementById("ck-way-1").innerHTML = "💳 <strong>Option 1 (Instant Card / Apple Pay via Creem)</strong>: Click the blue button below to complete secure checkout and receive your <code>TP1.</code> key immediately.";
+        document.getElementById("ck-way-2").innerHTML = " <strong>Option 2 (Mac App Store / Support)</strong>: Search <code>ReplyRadar</code> on Mac App Store, or email <code>a3152557994@gmail.com</code>.";
+        document.getElementById("btn-ck-xy").textContent = val === "year" ? "💳 Pay $4.99 / yr via Creem →" : "💳 Pay $14.99 Lifetime via Creem →";
+        document.getElementById("btn-ck-qq").textContent = "✉️ Email Support";
+      } else {
+        document.getElementById("ck-title").textContent = "⚡ 选择方案 · 极速获取正版离线激活码";
+        document.getElementById("ck-lbl-year").textContent = "¥9.9 / 年 轻量体验年卡";
+        document.getElementById("ck-lbl-life").textContent = "🔥 ¥39 永久买断专业版（92% 首选）";
+        document.getElementById("ck-way-1").innerHTML = "🛒 <strong>方式 1（24h 自动秒发卡密 · 平台担保）</strong>：打开<strong>闲鱼 App</strong> 搜索「<code style=\"color:#fbbf24;\">消息总管 多开防串号</code>」拍下系统自动秒发 <code>TP1.</code> 激活码！";
+        document.getElementById("ck-way-2").innerHTML = "💬 <strong>方式 2（QQ / 海外卡直付）</strong>：加客服 QQ <code style=\"color:#34d399;\">3152557994</code> 秒发收款码，或切至 English 走海外卡支付。";
+        document.getElementById("btn-ck-xy").textContent = "📋 复制闲鱼自动发卡搜索词";
+        document.getElementById("btn-ck-qq").textContent = "💬 复制客服 QQ + 下单口令";
       }
       const planLabel = en
         ? (val === "year" ? "ReplyRadar Annual ($4.99)" : "ReplyRadar Lifetime ($14.99)")
@@ -473,11 +481,18 @@
 
     async function copyCheckoutXianyu() {
       const en = siteLang === "en";
-      const text = en ? document.getElementById("ck-order-code").textContent : "消息总管 多开防串号";
+      const val = document.querySelector('input[name="tpPlan"]:checked')?.value || "life";
+      if (en) {
+        const creemUrl =
+          val === "year"
+            ? "https://www.creem.io/product/prod_7GwFeV4qIacTtjIg6t8QE"
+            : "https://www.creem.io/product/prod_WXZloyzwbIaBZ2LAlOgkX";
+        window.open(creemUrl, "_blank", "noopener");
+        return;
+      }
+      const text = "消息总管 多开防串号";
       await navigator.clipboard.writeText(text);
-      document.getElementById("ck-toast").textContent = en
-        ? "✅ Order code copied!"
-        : "✅ 已复制「消息总管 多开防串号」！打开闲鱼粘贴搜索拍下，系统24h自动秒发 TP1 激活码！";
+      document.getElementById("ck-toast").textContent = "✅ 已复制「消息总管 多开防串号」！打开闲鱼粘贴搜索拍下，系统24h自动秒发 TP1 激活码！";
     }
 
     async function copyCheckoutQq() {
