@@ -23,15 +23,49 @@ func resolveSpintaxSwift(_ raw: String) -> String {
     return result
 }
 
+let SAFARI_DESKTOP_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15"
+
 enum WebhookDispatcher {
+    static func normalizePushInput(_ raw: String) -> (mode: String, target: String) {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return ("none", "") }
+        if s.uppercased().hasPrefix("SCT") && !s.contains("/") {
+            return ("serverchan", "https://sctapi.ftqq.com/\(s).send")
+        }
+        if s.range(of: "^[0-9a-fA-F]{32}$", options: .regularExpression) != nil {
+            return ("pushplus", s)
+        }
+        if s.range(of: "^[A-Za-z0-9]{20,28}$", options: .regularExpression) != nil {
+            return ("bark", "https://api.day.app/\(s)")
+        }
+        return ("url", s)
+    }
+
     static func send(webhookUrlStr: String, siteName: String, unreadCount: Int, snippet: String, siteUrl: String) {
-        let trimmed = webhookUrlStr.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let url = URL(string: trimmed) else { return }
+        let norm = normalizePushInput(webhookUrlStr)
+        guard norm.mode != "none" else { return }
         let title = isChineseSystem
             ? "🔔【消息总管】\(siteName) 有 \(unreadCount) 条新消息"
             : "🔔 [ReplyRadar] \(unreadCount) new unread in \(siteName)"
         let cleanSnippet = snippet.isEmpty ? siteUrl : "\(snippet)\n\(siteUrl)"
         let fullText = "\(title)\n\(cleanSnippet)"
+
+        if norm.mode == "pushplus", let ppURL = URL(string: "https://www.pushplus.plus/send") {
+            var req = URLRequest(url: ppURL, timeoutInterval: 8.0)
+            req.httpMethod = "POST"
+            req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try? JSONSerialization.data(withJSONObject: [
+                "token": norm.target,
+                "title": title,
+                "content": cleanSnippet,
+                "template": "txt"
+            ])
+            URLSession.shared.dataTask(with: req).resume()
+            return
+        }
+
+        let trimmed = norm.target
+        guard let url = URL(string: trimmed) else { return }
 
         // Bark GET-style push URL support (https://api.day.app/<key>)
         if trimmed.contains("api.day.app/") && trimmed.split(separator: "/").count == 3 {
@@ -411,6 +445,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var backgroundTabsContainer: NSView!
     var probeWebView: WKWebView!
     var loginWindow: NSWindow?
+    var popOutWindows: [String: NSWindow] = [:]
+    var windowToWatchId: [ObjectIdentifier: String] = [:]
     var workspaceRootView: NSView?
     var workspaceSidebarStack: NSStackView?
     var workspaceHostView: NSView?
@@ -536,7 +572,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func setupSilentProbeWebView() {
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .default()
+        cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
         probeWebView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: cfg)
+        probeWebView.customUserAgent = SAFARI_DESKTOP_UA
         probeWebView.navigationDelegate = self
 
         backgroundTabsContainer = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
@@ -601,9 +639,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     #if !MAS_BUILD
+    func findLocalNodeBinary() -> String? {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser.path
+        var candidates = [
+            "/usr/local/bin/node",
+            "/opt/homebrew/bin/node",
+            "\(home)/.volta/bin/node",
+            "\(home)/.fnm/aliases/default/bin/node",
+            "/usr/bin/node"
+        ]
+        let nvmDir = "\(home)/.nvm/versions/node"
+        if let vers = try? fm.contentsOfDirectory(atPath: nvmDir).sorted().reversed() {
+            for v in vers {
+                candidates.insert("\(nvmDir)/\(v)/bin/node", at: 0)
+            }
+        }
+        return candidates.first(where: { fm.isExecutableFile(atPath: $0) })
+    }
+
     func trySpawnBundledNodeHub() -> Bool {
-        let nodeCandidates = ["/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"]
-        guard let nodeBin = nodeCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }),
+        guard let nodeBin = findLocalNodeBinary(),
               let srvURL = Bundle.main.url(forResource: "server", withExtension: "mjs", subdirectory: "app-server/hub") else {
             return false
         }
@@ -680,27 +736,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     @objc func popOutWorkspaceWindow() {
-        guard isDockedInMainWindow, let root = workspaceRootView else { return }
+        guard let wv = loginWebView else { return }
+        let wid = activeLoginWatchId ?? "temp-\(Int(Date().timeIntervalSince1970))"
+        let metaName = workspaceTitleLabel?.stringValue ?? (tabMeta[wid]?.name ?? "会话窗口")
+
+        activeLoginWatchId = nil
+        loginWebView = nil
         isDockedInMainWindow = false
         dashboardWebView.frame = mainWindow.contentLayoutRect
         mainWindow.contentView = dashboardWebView
         mainWindow.title = isChineseSystem ? "消息总管" : "ReplyRadar"
 
-        if loginWindow == nil {
-            let win = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 1160, height: 780),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable],
-                backing: .buffered,
-                defer: false
-            )
-            win.center()
-            win.isReleasedWhenClosed = false
-            win.delegate = self
-            loginWindow = win
+        if let existingWin = popOutWindows[wid] {
+            wv.removeFromSuperview()
+            if let host = existingWin.contentView?.subviews.first(where: { $0.identifier?.rawValue == "popHost" }) {
+                wv.frame = host.bounds
+                wv.autoresizingMask = [.width, .height]
+                host.addSubview(wv)
+            }
+            existingWin.makeKeyAndOrderFront(nil)
+            return
         }
-        root.frame = NSRect(x: 0, y: 0, width: 1160, height: 780)
-        loginWindow?.contentView = root
-        loginWindow?.makeKeyAndOrderFront(nil)
+
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1080, height: 760),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        win.minSize = NSSize(width: 720, height: 500)
+        win.center()
+        win.title = isChineseSystem ? "消息总管 · 独立多开窗 — \(metaName)" : "ReplyRadar — \(metaName)"
+        win.isReleasedWhenClosed = false
+        win.delegate = self
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 1080, height: 760))
+        container.autoresizingMask = [.width, .height]
+
+        let bar = NSView(frame: NSRect(x: 0, y: 722, width: 1080, height: 38))
+        bar.autoresizingMask = [.width, .minYMargin]
+        bar.wantsLayer = true
+        bar.layer?.backgroundColor = NSColor(calibratedRed: 0.97, green: 0.98, blue: 0.99, alpha: 1.0).cgColor
+
+        let reloadBtn = NSButton(title: isChineseSystem ? "↻ 刷新页面" : "↻ Reload", target: wv, action: #selector(WKWebView.reload(_:)))
+        reloadBtn.frame = NSRect(x: 12, y: 5, width: 92, height: 28)
+        reloadBtn.bezelStyle = .rounded
+        bar.addSubview(reloadBtn)
+
+        let tipLbl = NSTextField(labelWithString: isChineseSystem ? "🔒 独立防串号多开窗（关闭窗口后后台仍静默收消息）" : "🔒 Isolated Sandbox Window")
+        tipLbl.frame = NSRect(x: 114, y: 10, width: 460, height: 18)
+        tipLbl.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        tipLbl.textColor = NSColor(calibratedRed: 0.02, green: 0.59, blue: 0.41, alpha: 1.0)
+        bar.addSubview(tipLbl)
+
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1080, height: 722))
+        host.identifier = NSUserInterfaceItemIdentifier("popHost")
+        host.autoresizingMask = [.width, .height]
+
+        wv.removeFromSuperview()
+        wv.frame = host.bounds
+        wv.autoresizingMask = [.width, .height]
+        host.addSubview(wv)
+
+        container.addSubview(host)
+        container.addSubview(bar)
+        win.contentView = container
+
+        popOutWindows[wid] = win
+        windowToWatchId[ObjectIdentifier(win)] = wid
+        win.makeKeyAndOrderFront(nil)
     }
 
     @objc func triggerCheckMenu() {
@@ -741,10 +845,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
     }
 
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.prompt = isChineseSystem ? "选择发送" : "Choose"
+        if panel.runModal() == .OK {
+            completionHandler(panel.urls)
+        } else {
+            completionHandler(nil)
+        }
+    }
+
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard let targetURL = navigationAction.request.url else { return nil }
-        if webView == loginWebView {
-            loginWebView?.load(URLRequest(url: targetURL))
+        if webView == loginWebView || webViewToWatchId[ObjectIdentifier(webView)] != nil {
+            webView.load(URLRequest(url: targetURL))
             return nil
         }
         if targetURL.host == "127.0.0.1" || targetURL.host == "localhost" || targetURL.isFileURL {
@@ -1050,36 +1167,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
           function isVisible(el) {
             if (!el) return false;
             const r = el.getBoundingClientRect();
-            return r.width > 20 && r.height > 14;
+            if (r.width < 24 || r.height < 14) return false;
+            const st = window.getComputedStyle(el);
+            return st.display !== 'none' && st.visibility !== 'hidden';
           }
           let target = document.activeElement;
-          const isEditable = (el) => el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox','radio','button','submit','file'].includes(el.type)) || el.isContentEditable);
+          const isEditable = (el) => el && !el.disabled && !el.readOnly && (
+            el.tagName === 'TEXTAREA' ||
+            (el.tagName === 'INPUT' && !['checkbox','radio','button','submit','file','hidden','search'].includes((el.type || '').toLowerCase())) ||
+            el.isContentEditable ||
+            el.getAttribute('role') === 'textbox'
+          );
           if (!isEditable(target) || !isVisible(target)) {
-            const cands = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"], input:not([type])')).filter(isVisible);
-            // Prefer bottom-most visible chat composer
-            cands.sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top);
+            const cands = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"], input[type="text"], input:not([type])'))
+              .filter(el => isEditable(el) && isVisible(el));
+            // Prefer bottom-most main chat composer (x > 20% of viewport width if multiple)
+            cands.sort((a, b) => {
+              const ra = a.getBoundingClientRect();
+              const rb = b.getBoundingClientRect();
+              return (rb.top + (rb.left > window.innerWidth * 0.2 ? 200 : 0)) - (ra.top + (ra.left > window.innerWidth * 0.2 ? 200 : 0));
+            });
             target = cands[0] || null;
           }
-          if (!target) return { injected: false };
+          if (!target) return { injected: false, submitted: false };
           target.focus();
-          if (target.isContentEditable) {
-            document.execCommand('insertText', false, msg);
+          if (target.isContentEditable || target.getAttribute('role') === 'textbox') {
+            try {
+              const sel = window.getSelection();
+              const range = document.createRange();
+              range.selectNodeContents(target);
+              range.collapse(false);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            } catch (e) {}
+            try {
+              target.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: msg, bubbles: true, cancelable: true }));
+            } catch (e) {}
+            const okExec = document.execCommand('insertText', false, msg);
+            if (!okExec || !(target.innerText || '').includes(msg.slice(0, 6))) {
+              target.textContent = (target.textContent ? target.textContent + ' ' : '') + msg;
+            }
+            target.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: msg, bubbles: true }));
           } else {
             const proto = target.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
             const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
             const nextVal = (target.value ? target.value + ' ' : '') + msg;
             if (setter) setter.call(target, nextVal); else target.value = nextVal;
-            target.dispatchEvent(new Event('input', { bubbles: true }));
+            target.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: msg, bubbles: true }));
             target.dispatchEvent(new Event('change', { bubbles: true }));
           }
           if (wantSubmit) {
             setTimeout(() => {
-              const btns = Array.from(document.querySelectorAll('button, [role="button"], input[type="submit"]')).filter(isVisible);
+              const tr = target.getBoundingClientRect();
+              const btns = Array.from(document.querySelectorAll('button, [role="button"], input[type="submit"], [data-testid*="send" i], [class*="send" i]')).filter(isVisible);
               const sendBtn = btns.find(b => {
-                const t = ((b.innerText || b.value || b.getAttribute('aria-label') || '') + '').trim();
-                return /^(发送|Send|Submit|Reply|回复)$/i.test(t) || /send-btn|im-send/i.test(b.className || '');
+                if (b.disabled || b.getAttribute('aria-disabled') === 'true') return false;
+                const t = ((b.innerText || b.value || b.getAttribute('aria-label') || b.getAttribute('title') || '') + '').trim();
+                const cls = (b.className && typeof b.className === 'string') ? b.className : '';
+                const tid = b.getAttribute('data-testid') || '';
+                if (/^(发送|回复|Send|Submit|Reply|Post)$/i.test(t)) return true;
+                if (/send-btn|im-send|btn-send|chat-send|msg-send/i.test(cls + ' ' + tid)) {
+                  const br = b.getBoundingClientRect();
+                  return Math.abs(br.bottom - tr.bottom) < 160;
+                }
+                return false;
               });
-              if (sendBtn && !sendBtn.disabled) {
+              if (sendBtn) {
                 sendBtn.click();
               } else {
                 const evInit = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
@@ -1087,9 +1240,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 target.dispatchEvent(new KeyboardEvent('keypress', evInit));
                 target.dispatchEvent(new KeyboardEvent('keyup', evInit));
               }
-            }, 120);
+            }, 140);
           }
-          return { injected: true };
+          return { injected: true, submitted: wantSubmit };
         })();
         """
         wv.evaluateJavaScript(js) { res, _ in
@@ -1135,6 +1288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         } else {
             cfg.websiteDataStore = .default()
         }
+        cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
         cfg.userContentController.add(self, name: "tabpulsePassive")
         if let obsURL = Bundle.main.url(forResource: "passive-observer", withExtension: "js"),
            let obsJS = try? String(contentsOf: obsURL, encoding: .utf8) {
@@ -1142,6 +1296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             cfg.userContentController.addUserScript(us)
         }
         let created = WKWebView(frame: NSRect(x: 0, y: 0, width: 1180, height: 736), configuration: cfg)
+        created.customUserAgent = SAFARI_DESKTOP_UA
         created.uiDelegate = self
         created.load(URLRequest(url: u))
         if !watchId.isEmpty {
@@ -1209,10 +1364,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     func windowWillClose(_ notification: Notification) {
-        guard let closedWin = notification.object as? NSWindow, closedWin == loginWindow else { return }
-        if let wid = activeLoginWatchId, let liveWV = liveTabs[wid] {
-            activeLoginWatchId = nil
-            parkWebViewInBackground(liveWV)
+        guard let closedWin = notification.object as? NSWindow else { return }
+        if let wid = windowToWatchId.removeValue(forKey: ObjectIdentifier(closedWin)) {
+            popOutWindows.removeValue(forKey: wid)
+            if let liveWV = liveTabs[wid] {
+                parkWebViewInBackground(liveWV)
+            }
+            return
+        }
+        if closedWin == loginWindow {
+            if let wid = activeLoginWatchId, let liveWV = liveTabs[wid] {
+                activeLoginWatchId = nil
+                parkWebViewInBackground(liveWV)
+            }
         }
     }
 
@@ -1602,18 +1766,123 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             replyCallback(reqId, ["ok": true])
             return
         }
+        if path == "/api/desktop/state" {
+            #if !MAS_BUILD
+            if let helperURL = Bundle.main.url(forResource: "mac-desktop-helper", withExtension: nil, subdirectory: "app-server/bin") {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let p = Process()
+                    p.executableURL = helperURL
+                    p.arguments = ["list"]
+                    let pipe = Pipe()
+                    p.standardOutput = pipe
+                    p.standardError = FileHandle.nullDevice
+                    try? p.run()
+                    let outData = pipe.fileHandleForReading.readDataToEndOfFile()
+                    p.waitUntilExit()
+                    if let obj = (try? JSONSerialization.jsonObject(with: outData)) as? [String: Any] {
+                        self.replyCallback(reqId, obj)
+                    } else {
+                        self.replyCallback(reqId, ["ok": true, "windows": [], "badges": [], "recentAlerts": []])
+                    }
+                }
+                return
+            }
+            #endif
+            replyCallback(reqId, ["ok": true, "windows": [], "badges": [], "recentAlerts": []])
+            return
+        }
+        if path == "/api/open-extension-dir" {
+            #if !MAS_BUILD
+            if let extURL = Bundle.main.resourceURL?.appendingPathComponent("app-server/extension"),
+               FileManager.default.fileExists(atPath: extURL.path) {
+                NSWorkspace.shared.activateFileViewerSelecting([extURL])
+                replyCallback(reqId, ["ok": true, "dir": extURL.path])
+                return
+            }
+            #endif
+            replyCallback(reqId, ["ok": false, "error": "extension dir unavailable"])
+            return
+        }
+        if path == "/api/push/test" {
+            let st = StandaloneStore.shared.loadState()
+            let savedWh = ((st["settings"] as? [String: Any])?["webhookUrl"] as? String) ?? ""
+            let wh = ((payload?["webhookUrl"] as? String) ?? savedWh).trimmingCharacters(in: .whitespacesAndNewlines)
+            postLocalNotification(
+                title: isChineseSystem ? "🔔 消息总管锁屏推送测试" : "🔔 ReplyRadar Push Test",
+                body: isChineseSystem ? "电脑本地通知与外部手机推送通道已触发！" : "Notification test triggered!"
+            )
+            if !wh.isEmpty {
+                WebhookDispatcher.send(
+                    webhookUrlStr: wh,
+                    siteName: isChineseSystem ? "推送测试" : "Push Test",
+                    unreadCount: 1,
+                    snippet: isChineseSystem ? "恭喜！您的手机锁屏强提醒已成功打通，来客户消息时手机息屏也会立刻响铃！" : "Mobile lock-screen alert is live!",
+                    siteUrl: "https://a3152557994-ship-it.github.io/tabpulse/"
+                )
+            }
+            replyCallback(reqId, ["ok": !wh.isEmpty, "channel": "手机强提醒通道", "webhookConfigured": !wh.isEmpty])
+            return
+        }
+        if path == "/api/mobile/info" {
+            replyCallback(reqId, [
+                "ok": false,
+                "standaloneHint": isChineseSystem
+                    ? "当前运行在轻量单机模式；在「设置」填入微信 PushPlus / Bark 推送码即可直接接收手机锁屏消息提醒！"
+                    : "Standalone mode active — configure Webhook/Bark in Settings for instant phone push alerts."
+            ])
+            return
+        }
+        if path == "/api/cc/state" || path == "/api/ai-clients/status" || path == "/api/ai-butler/state" {
+            replyCallback(reqId, ["ok": true, "sessions": [], "agents": [], "clients": [], "events": [], "suggestions": [:]])
+            return
+        }
         replyCallback(reqId, ["ok": false, "error": "unknown route"])
+    }
+
+    @objc func openUnreadFromMenu(_ sender: NSMenuItem) {
+        guard let wid = sender.representedObject as? String,
+              let meta = tabMeta[wid] else {
+            showMainWindow()
+            return
+        }
+        openLoginSheet(urlStr: meta.url, name: meta.name, watchId: wid, profileUuidStr: meta.profileUuid, isolated: true, dockInMain: true)
     }
 
     func updateMenuBadge(from summary: [String: Any]) {
         let stats = summary["stats"] as? [String: Any]
         let unread = (stats?["unreadMessagesTotal"] as? Int) ?? 0
+        let watches = (summary["watches"] as? [[String: Any]]) ?? []
+        let unreadWatches = watches.filter { ($0["status"] as? String) == "unread" }
+        for w in watches {
+            if let wid = w["id"] as? String, let nm = w["name"] as? String, let u = w["url"] as? String {
+                let pUuid = (w["profileUuid"] as? String) ?? ""
+                tabMeta[wid] = (name: nm, url: u, profileUuid: pUuid)
+            }
+        }
         DispatchQueue.main.async {
             if isChineseSystem {
                 self.statusItem?.button?.title = unread > 0 ? "🔴 \(unread) 未读" : "🔔 消息"
             } else {
                 self.statusItem?.button?.title = unread > 0 ? "🔴 \(unread) Unread" : "🔔 Inbox"
             }
+            let menu = NSMenu()
+            if !unreadWatches.isEmpty {
+                for w in unreadWatches.prefix(8) {
+                    let wid = (w["id"] as? String) ?? ""
+                    let nm = (w["name"] as? String) ?? wid
+                    let cnt = max(1, (w["unreadCount"] as? Int) ?? 1)
+                    let item = NSMenuItem(title: "🔴 \(nm) (\(cnt))", action: #selector(self.openUnreadFromMenu(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = wid
+                    menu.addItem(item)
+                }
+                menu.addItem(NSMenuItem.separator())
+            }
+            menu.addItem(withTitle: isChineseSystem ? "打开消息总管主界面" : "Open ReplyRadar Dashboard", action: #selector(self.showMainWindow), keyEquivalent: "")
+            menu.addItem(withTitle: isChineseSystem ? "⚡ 立即检查后台消息" : "⚡ Check Inboxes Now", action: #selector(self.triggerCheckMenu), keyEquivalent: "")
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(withTitle: isChineseSystem ? "退出消息总管" : "Quit ReplyRadar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+            self.statusItem?.menu = menu
         }
     }
 

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { signLicensePayload } from "../bin/generate-license.mjs";
 import { installAiClient, listAiClientsStatus } from "../hub/ai-installer.mjs";
 import { verifyLicenseKey } from "../hub/license.mjs";
-import { notificationLog } from "../hub/notifier.mjs";
+import { normalizeCustomerPushTarget, notificationLog } from "../hub/notifier.mjs";
 import { createHubServer } from "../hub/server.mjs";
 import { encryptWebPushPayload, generateVapidKeys } from "../hub/webpush.mjs";
 import {
@@ -449,6 +449,37 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
       })
     ).json();
     assert.ok(butlerState.suggestions["web:eleduck-inbox"].suggestedReplies.length >= 1);
+
+    // 10. Verify foolproof customer push token normalization (PushPlus 32-hex, Server酱 SCT..., Bark key)
+    const ppNorm = normalizeCustomerPushTarget("a1b2c3d4e5f60718293a4b5c6d7e8f90");
+    assert.equal(ppNorm.kind, "pushplus");
+    assert.equal(ppNorm.url, "https://www.pushplus.plus/send");
+    const scNorm = normalizeCustomerPushTarget("SCT123456abcdef7890");
+    assert.equal(scNorm.kind, "serverchan");
+    assert.equal(scNorm.url, "https://sctapi.ftqq.com/SCT123456abcdef7890.send");
+    const barkNorm = normalizeCustomerPushTarget("AbCdEfGhIjKlMnOpQrStUv");
+    assert.equal(barkNorm.kind, "bark");
+    assert.equal(barkNorm.url, "https://api.day.app/AbCdEfGhIjKlMnOpQrStUv");
+
+    // 11. Verify SSE /api/events-stream delivers real-time snapshots to authenticated mobile clients & blocks desktop-only extension dir externally
+    const sseController = new AbortController();
+    const sseRes = await fetch(`${baseUrl}/api/events-stream?t=${encodeURIComponent(tok)}`, {
+      headers: { "cf-connecting-ip": "203.0.113.9" },
+      signal: sseController.signal,
+    });
+    assert.equal(sseRes.status, 200);
+    assert.ok((sseRes.headers.get("content-type") || "").includes("text/event-stream"));
+    const reader = sseRes.body.getReader();
+    const firstChunk = await reader.read();
+    const textChunk = new TextDecoder().decode(firstChunk.value);
+    assert.ok(textChunk.includes("connected"));
+    sseController.abort();
+
+    const blockedExtOpen = await fetch(`${baseUrl}/api/open-extension-dir?t=${encodeURIComponent(tok)}`, {
+      method: "POST",
+      headers: { "cf-connecting-ip": "203.0.113.9" },
+    });
+    assert.equal(blockedExtOpen.status, 403);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

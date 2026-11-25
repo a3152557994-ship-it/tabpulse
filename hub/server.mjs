@@ -546,6 +546,19 @@ export function createHubServer(options = {}) {
         return;
       }
 
+      if (pathname === "/api/open-extension-dir" && req.method === "POST") {
+        if (!localTrusted) {
+          sendJson(res, 403, { ok: false, error: "desktop only" }, corsOrigin);
+          return;
+        }
+        const extDir = path.join(PROJECT_ROOT, "extension");
+        const { execFile } = await import("node:child_process");
+        const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer.exe" : "xdg-open";
+        execFile(opener, [extDir], () => {});
+        sendJson(res, 200, { ok: true, path: extDir }, corsOrigin);
+        return;
+      }
+
       // Mobile Web Push (VAPID) routes
       if (pathname === "/api/push/vapid-public-key" && req.method === "GET") {
         sendJson(res, 200, { ok: true, publicKey: getVapidPublicKey() }, corsOrigin, authCookieHeader);
@@ -591,7 +604,8 @@ export function createHubServer(options = {}) {
       }
       const deskMsgMatch = pathname.match(/^\/api\/desktop\/window\/(\d+)\/(?:messages|capture)$/);
       if (deskMsgMatch && req.method === "GET") {
-        const out = await desktopMonitor.readWindowMessages(deskMsgMatch[1]);
+        const appNameParam = reqUrl.searchParams.get("app") || "";
+        const out = await desktopMonitor.readWindowMessages(deskMsgMatch[1], appNameParam);
         sendJson(res, 200, out, corsOrigin);
         return;
       }

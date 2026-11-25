@@ -1014,15 +1014,10 @@
       }
 
       if (ch.kind === "app") {
-        if (!ch.windowId) {
-          renderPureTextConversation({
-            threads: [],
-            messages: [],
-            fallbackSnippet: ch.snippet || "该软件窗口当前最小化，点击发送或电脑打开后即可同步文字内容。",
-          });
-          return;
+        const res = await api(`/api/desktop/window/${ch.windowId || 0}/messages?app=${encodeURIComponent(ch.appName || "")}`);
+        if (res.windowId && !ch.windowId) {
+          ch.windowId = res.windowId;
         }
-        const res = await api(`/api/desktop/window/${ch.windowId}/messages`);
         const combinedMsgs = [];
         if (Array.isArray(res.bannerHistory)) {
           for (const b of res.bannerHistory) {

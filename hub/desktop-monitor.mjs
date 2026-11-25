@@ -139,50 +139,74 @@ class DesktopSoftwareMonitor {
           if (b.bundleId) badgeByApp[b.bundleId] = parseInt(b.badge, 10) || 1;
         }
         const BROWSER_NAMES = new Set(["Google Chrome", "Safari", "Brave Browser", "Arc", "Firefox", "Microsoft Edge"]);
-        const AUX_TITLE_RE = /^(快捷键|设置|偏好设置|关于|Shortcuts|Settings|Preferences|About)$/i;
+        const BROWSER_INBOX_TITLE_RE = /(消息中心|私信|聊天|猎聘|直聘|BOSS|汇博|智联|前程无忧|拉勾|创作中心|创作者|客服|千牛|闲鱼|电鸭|Inbox|Messages|Notifications|\(\s*\d{1,3}\s*\)|\[\s*\d{1,3}\s*\]|【\s*\d{1,3}条)/i;
+        const AUX_TITLE_RE = /^(快捷键|设置|偏好设置|关于|打开|保存|Shortcuts|Settings|Preferences|About|Open|Save)$/i;
         const IM_AI_RE = /(微信|WeChat|QQ|千牛|旺旺|飞书|Lark|钉钉|DingTalk|企业微信|WeCom|Telegram|Discord|Slack|WhatsApp|信息|Messages|邮件|Mail|Claude|Cursor|Antigravity|Gemini|Windsurf)/i;
 
         const bestByApp = new Map();
         for (const w of parsed.windows || []) {
-          const appName = String(w.appName || "").trim();
-          if (!appName) continue;
+          const rawAppName = String(w.appName || "").trim();
+          if (!rawAppName) continue;
           const bw = Number(w.bounds?.w) || 0;
           const bh = Number(w.bounds?.h) || 0;
-          if (bw > 0 && bh > 0 && (bw < 300 || bh < 200)) continue;
+          if (bw > 0 && bh > 0 && (bw < 320 || bh < 220)) continue;
           const title = String(w.title || "").trim();
           if (title && AUX_TITLE_RE.test(title)) continue;
 
-          const unread =
-            badgeByApp[w.bundleId] ||
-            badgeByApp[appName] ||
-            this.appUnreadCounts.get(appName) ||
-            0;
-          const isTargetApp = IM_AI_RE.test(appName) || IM_AI_RE.test(w.bundleId || "");
-          if (!isTargetApp && unread === 0) continue;
-          if (BROWSER_NAMES.has(appName) && unread === 0) continue;
+          const isBrowser = BROWSER_NAMES.has(rawAppName);
+          const isBrowserInbox = isBrowser && Boolean(title) && BROWSER_INBOX_TITLE_RE.test(title);
+          const isTargetApp = IM_AI_RE.test(rawAppName) || IM_AI_RE.test(w.bundleId || "");
 
-          const logs = this.appMessagesLog.get(appName) || [];
+          // Parse unread count from browser window title like "(2) 消息中心"
+          let titleUnread = 0;
+          if (title) {
+            const tm =
+              title.match(/^\(\s*(\d{1,3})\s*\)/) ||
+              title.match(/^\[\s*(\d{1,3})\s*\]/) ||
+              title.match(/[【\[]\s*(\d{1,3})\s*条?(?:新消息|未读|私信)/);
+            if (tm && tm[1]) titleUnread = parseInt(tm[1], 10) || 0;
+          }
+
+          const unread = Math.max(
+            titleUnread,
+            badgeByApp[w.bundleId] || 0,
+            badgeByApp[rawAppName] || 0,
+            this.appUnreadCounts.get(rawAppName) || 0
+          );
+
+          if (isBrowser && !isBrowserInbox && unread === 0) continue;
+          if (!isBrowser && !isTargetApp && unread === 0) continue;
+
+          const displayAppName = isBrowserInbox ? `浏览器 · ${title.slice(0, 22)}` : rawAppName;
+          const dedupKey = isBrowserInbox ? `browser:${title.slice(0, 28)}` : rawAppName;
+
+          const logs = this.appMessagesLog.get(displayAppName) || this.appMessagesLog.get(rawAppName) || [];
           const lastSnippet = logs.length
             ? logs[logs.length - 1].text
             : unread > 0
               ? `收到 ${unread} 条未读红点消息，支持手机随身读字秒回`
-              : "程序坞角标与系统通知静默看护中（0 注入安全）";
+              : isBrowserInbox
+                ? `已自动识别日常浏览器已登录页（${rawAppName}），免重新扫码看护中`
+                : "程序坞角标与系统通知静默看护中（0 注入安全）";
           const area = bw * bh;
           const candidate = {
             ...w,
+            appName: displayAppName,
+            rawOwnerName: rawAppName,
+            isBrowserInbox,
             unreadCount: unread,
             snippet: lastSnippet,
-            isMessagingOrAi: isTargetApp,
+            isMessagingOrAi: isTargetApp || isBrowserInbox,
             _area: area,
           };
 
-          const existing = bestByApp.get(appName);
+          const existing = bestByApp.get(dedupKey);
           if (
             !existing ||
             candidate.unreadCount > existing.unreadCount ||
             (candidate.unreadCount === existing.unreadCount && candidate._area > existing._area)
           ) {
-            bestByApp.set(appName, candidate);
+            bestByApp.set(dedupKey, candidate);
           }
         }
 
@@ -210,15 +234,27 @@ class DesktopSoftwareMonitor {
     return { ok: false, windows: [], badges: [], recentAlerts: [], installedApps: [] };
   }
 
-  async readWindowMessages(windowId) {
+  async readWindowMessages(windowId, fallbackAppName = "") {
     if (process.platform === "darwin") {
       const bin = resolveMacHelperBin();
       if (!bin) return { ok: false, error: "mac-desktop-helper missing" };
-      const { stdout } = await execFileAsync(bin, ["read-messages", String(Number(windowId) || 0)], {
-        timeout: 8000,
-        maxBuffer: 4 * 1024 * 1024,
-      });
-      const parsed = JSON.parse(stdout.trim() || "{}");
+      const numWid = Number(windowId) || 0;
+      let parsed = {};
+      if (numWid > 0) {
+        const { stdout } = await execFileAsync(bin, ["read-messages", String(numWid)], {
+          timeout: 8000,
+          maxBuffer: 4 * 1024 * 1024,
+        });
+        parsed = JSON.parse(stdout.trim() || "{}");
+      }
+      if ((!parsed.ok || numWid === 0) && fallbackAppName) {
+        const cleanApp = String(fallbackAppName).replace(/^浏览器\s*·\s*/, "").trim();
+        const { stdout: wakeOut } = await execFileAsync(bin, ["open-app-messages", cleanApp], {
+          timeout: 9000,
+          maxBuffer: 4 * 1024 * 1024,
+        });
+        parsed = JSON.parse(wakeOut.trim() || "{}");
+      }
       if (parsed.appName) {
         this.clearAppUnread(parsed.appName);
         const bannerHist = this.appMessagesLog.get(parsed.appName) || [];

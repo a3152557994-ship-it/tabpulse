@@ -158,9 +158,10 @@ PLIST
 bundle_embedded_server() {
   local app_dir="$1"
   local srv_root="$app_dir/Contents/Resources/app-server"
-  mkdir -p "$srv_root/hub/ui" "$srv_root/mcp-server" "$srv_root/skills/replyradar-notify" "$srv_root/seed" "$srv_root/docs" "$srv_root/bin"
+  mkdir -p "$srv_root/hub/ui" "$srv_root/mcp-server" "$srv_root/skills/replyradar-notify" "$srv_root/seed" "$srv_root/docs" "$srv_root/bin" "$srv_root/extension"
   cp "$PROJECT_ROOT/hub/"*.mjs "$srv_root/hub/"
   cp "$PROJECT_ROOT/hub/ui/"* "$srv_root/hub/ui/"
+  cp "$PROJECT_ROOT/extension/"* "$srv_root/extension/"
   cp "$PROJECT_ROOT/mcp-server/index.mjs" "$srv_root/mcp-server/"
   cp "$PROJECT_ROOT/skills/replyradar-notify/SKILL.md" "$srv_root/skills/replyradar-notify/"
   cp "$PROJECT_ROOT/bin/setup-ai.mjs" "$srv_root/bin/"

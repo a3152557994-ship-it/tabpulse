@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -63,6 +64,37 @@ internal static class LicenseCheck
     }
 }
 
+internal static class PushTargetHelper
+{
+    public static (string url, string kind, string token) Normalize(string rawInput)
+    {
+        var trimmed = (rawInput ?? "").Trim();
+        if (string.IsNullOrEmpty(trimmed)) return ("", "none", "");
+
+        if (Regex.IsMatch(trimmed, "^[a-fA-F0-9]{32}$"))
+            return ("https://www.pushplus.plus/send", "pushplus", trimmed);
+
+        if (Regex.IsMatch(trimmed, "^SCT[a-zA-Z0-9]{10,64}$"))
+            return ($"https://sctapi.ftqq.com/{trimmed}.send", "serverchan", trimmed);
+
+        if (Regex.IsMatch(trimmed, "^[A-Za-z0-9]{20,28}$") && !trimmed.StartsWith("TP1"))
+            return ($"https://api.day.app/{trimmed}", "bark", trimmed);
+
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
+            return ("", "invalid", "");
+
+        var host = uri.Host.ToLowerInvariant();
+        if (host.Contains("pushplus.plus")) return (trimmed, "pushplus_url", "");
+        if (host.Contains("sctapi.ftqq.com")) return (trimmed, "serverchan", "");
+        if (host.Contains("api.day.app")) return (trimmed.TrimEnd('/'), "bark", "");
+        if (host.Contains("feishu.cn") || host.Contains("larksuite.com")) return (trimmed, "feishu", "");
+        if (host.Contains("qyapi.weixin.qq.com")) return (trimmed, "wecom", "");
+        if (host.Contains("oapi.dingtalk.com")) return (trimmed, "dingtalk", "");
+        if (host.Contains("discord.com") && trimmed.Contains("/api/webhooks/")) return (trimmed, "discord", "");
+        return (trimmed, "webhook", "");
+    }
+}
+
 internal sealed class MainDashboardForm : Form
 {
     private readonly WebView2 _dashboard = new() { Dock = DockStyle.Fill };
@@ -79,9 +111,9 @@ internal sealed class MainDashboardForm : Form
         Directory.CreateDirectory(Path.Combine(_appRoot, "profiles"));
         _stateFile = Path.Combine(_appRoot, "state.json");
 
-        Text = _isZh ? "消息总管 — 多平台未读消息提醒与多开防串号盒子 (v4.0.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v4.0.0)";
-        Width = 1200;
-        Height = 800;
+        Text = _isZh ? "消息总管 — 多平台消息看护与多开防串号工作台 (v5.3.0)" : "ReplyRadar — Multi-Account Unread Inbox & Lead Radar (v5.3.0)";
+        Width = 1240;
+        Height = 820;
         StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(_dashboard);
 
@@ -92,7 +124,7 @@ internal sealed class MainDashboardForm : Form
         _tray = new NotifyIcon
         {
             Icon = System.Drawing.SystemIcons.Information,
-            Text = _isZh ? "消息总管 · 运行中" : "ReplyRadar · Active",
+            Text = _isZh ? "消息总管 · 静默看护中" : "ReplyRadar · Active",
             ContextMenuStrip = menu,
             Visible = true
         };
@@ -110,11 +142,28 @@ internal sealed class MainDashboardForm : Form
         Shown += async (_, _) => await InitWebViewAsync();
     }
 
+    private async Task<bool> IsLocalHubAliveAsync()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(650));
+            var resp = await Http.GetAsync("http://127.0.0.1:17890/api/health", cts.Token);
+            return resp.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private async Task InitWebViewAsync()
     {
         var env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(_appRoot, "dashboard-webview"));
         await _dashboard.EnsureCoreWebView2Async(env);
-        await _dashboard.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("window.__TABPULSE_STANDALONE_MODE = true;");
+        var hubAlive = await IsLocalHubAliveAsync();
+        await _dashboard.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            hubAlive ? "window.__TABPULSE_STANDALONE_MODE = false;" : "window.__TABPULSE_STANDALONE_MODE = true;"
+        );
         _dashboard.CoreWebView2.WebMessageReceived += async (_, args) => await HandleJsMessageAsync(args.TryGetWebMessageAsString());
         _dashboard.CoreWebView2.NewWindowRequested += (_, args) =>
         {
@@ -123,8 +172,15 @@ internal sealed class MainDashboardForm : Form
                 Process.Start(new ProcessStartInfo(args.Uri) { UseShellExecute = true });
         };
 
-        var uiFile = Path.Combine(AppContext.BaseDirectory, "resources", "index.html");
-        _dashboard.CoreWebView2.Navigate(new Uri(uiFile).AbsoluteUri);
+        if (hubAlive)
+        {
+            _dashboard.CoreWebView2.Navigate("http://127.0.0.1:17890/");
+        }
+        else
+        {
+            var uiFile = Path.Combine(AppContext.BaseDirectory, "resources", "index.html");
+            _dashboard.CoreWebView2.Navigate(new Uri(uiFile).AbsoluteUri);
+        }
     }
 
     private JsonObject LoadState()
@@ -151,7 +207,7 @@ internal sealed class MainDashboardForm : Form
         }
         var init = new JsonObject
         {
-            ["version"] = "4.0.0",
+            ["version"] = "5.3.0",
             ["settings"] = new JsonObject { ["webhookUrl"] = "", ["lang"] = _isZh ? "zh" : "en" },
             ["watches"] = watches,
             ["quickReplies"] = new JsonArray()
@@ -162,40 +218,48 @@ internal sealed class MainDashboardForm : Form
 
     private void SaveState(JsonObject st) => File.WriteAllText(_stateFile, st.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
 
-    private static void SendWebhookPush(string webhookUrl, string siteName, int count, string snippet, string siteUrl, bool isZh)
+    private static async Task<(bool ok, string channel, string error)> SendWebhookPushAsync(string rawTarget, string siteName, int count, string snippet, string siteUrl, bool isZh)
     {
-        var trimmed = (webhookUrl ?? "").Trim();
-        if (string.IsNullOrEmpty(trimmed) || !Uri.TryCreate(trimmed, UriKind.Absolute, out _)) return;
+        var (targetUrl, kind, token) = PushTargetHelper.Normalize(rawTarget);
+        if (string.IsNullOrEmpty(targetUrl))
+            return (false, kind, isZh ? "口令或链接格式不正确" : "Invalid push token or URL");
+
         var title = isZh ? $"🔔【消息总管】{siteName} 有 {count} 条新消息" : $"🔔 [ReplyRadar] {count} new unread in {siteName}";
-        var bodyText = string.IsNullOrEmpty(snippet) ? siteUrl : $"{snippet}\n{siteUrl}";
+        var bodyText = string.IsNullOrEmpty(snippet) ? siteUrl : (string.IsNullOrEmpty(siteUrl) ? snippet : $"{snippet}\n{siteUrl}");
         var full = $"{title}\n{bodyText}";
 
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            if (kind == "bark" && targetUrl.Split('/').Length <= 4)
             {
-                if (trimmed.Contains("api.day.app/") && trimmed.Split('/').Length == 4)
-                {
-                    await Http.GetAsync($"{trimmed}/{Uri.EscapeDataString(title)}/{Uri.EscapeDataString(bodyText)}");
-                    return;
-                }
-                JsonObject payload;
-                if (trimmed.Contains("feishu.cn") || trimmed.Contains("larksuite.com"))
-                    payload = new JsonObject { ["msg_type"] = "text", ["content"] = new JsonObject { ["text"] = full } };
-                else if (trimmed.Contains("qyapi.weixin.qq.com"))
-                    payload = new JsonObject { ["msgtype"] = "text", ["text"] = new JsonObject { ["content"] = full } };
-                else if (trimmed.Contains("discord.com/api/webhooks"))
-                    payload = new JsonObject { ["content"] = full };
-                else if (trimmed.Contains("sctapi.ftqq.com"))
-                    payload = new JsonObject { ["title"] = title, ["desp"] = bodyText };
-                else
-                    payload = new JsonObject { ["text"] = full, ["title"] = title, ["unreadCount"] = count };
-
-                using var content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
-                await Http.PostAsync(trimmed, content);
+                var r = await Http.GetAsync($"{targetUrl}/{Uri.EscapeDataString(title)}/{Uri.EscapeDataString(bodyText)}?sound=minuet");
+                return (r.IsSuccessStatusCode, "Bark", r.IsSuccessStatusCode ? "" : $"HTTP {(int)r.StatusCode}");
             }
-            catch { }
-        });
+            if (kind == "pushplus_url" && targetUrl.Contains("token="))
+            {
+                var sep = targetUrl.Contains('?') ? "&" : "?";
+                var r = await Http.GetAsync($"{targetUrl}{sep}title={Uri.EscapeDataString(title)}&content={Uri.EscapeDataString(bodyText)}");
+                return (r.IsSuccessStatusCode, "PushPlus", r.IsSuccessStatusCode ? "" : $"HTTP {(int)r.StatusCode}");
+            }
+
+            JsonObject payload = kind switch
+            {
+                "pushplus" => new JsonObject { ["token"] = token, ["title"] = title, ["content"] = bodyText, ["template"] = "txt" },
+                "serverchan" => new JsonObject { ["title"] = title, ["desp"] = bodyText },
+                "feishu" => new JsonObject { ["msg_type"] = "text", ["content"] = new JsonObject { ["text"] = full } },
+                "wecom" or "dingtalk" => new JsonObject { ["msgtype"] = "text", ["text"] = new JsonObject { ["content"] = full } },
+                "discord" => new JsonObject { ["content"] = full },
+                _ => new JsonObject { ["text"] = full, ["title"] = title, ["unreadCount"] = count }
+            };
+
+            using var content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
+            var resp = await Http.PostAsync(targetUrl, content);
+            return (resp.IsSuccessStatusCode, kind, resp.IsSuccessStatusCode ? "" : $"HTTP {(int)resp.StatusCode}");
+        }
+        catch (Exception ex)
+        {
+            return (false, kind, ex.Message);
+        }
     }
 
     private async Task HandleJsMessageAsync(string raw)
@@ -240,16 +304,15 @@ internal sealed class MainDashboardForm : Form
             return;
         }
 
-        // Physical per-account WebView2 folder isolation (100% separate cookies per Xianyu/Xiaohongshu/Reddit account!)
         var safeFolder = string.Concat(watchId.Select(c => char.IsLetterOrDigit(c) || c == '-' ? c : '_'));
         var profileDir = Path.Combine(_appRoot, "profiles", safeFolder);
         Directory.CreateDirectory(profileDir);
 
         var form = new Form
         {
-            Text = _isZh ? $"独立防串号工作台 — {name}（关掉窗口后后台照常收听新消息）" : $"Isolated Account Workspace — {name}",
-            Width = 1120,
-            Height = 780,
+            Text = _isZh ? $"独立防串号工作台 — {name}（支持发图片附件 · 关窗后后台照常静默收听）" : $"Isolated Account Workspace — {name}",
+            Width = 1140,
+            Height = 800,
             StartPosition = FormStartPosition.CenterParent
         };
         var wv = new WebView2 { Dock = DockStyle.Fill };
@@ -265,6 +328,7 @@ internal sealed class MainDashboardForm : Form
         var btnReload = new Button { Text = "↻", Width = 38, Height = 28 };
         var btnHome = new Button { Text = _isZh ? "🏠 消息页" : "🏠 Inbox", Width = 90, Height = 28 };
         var btnPaste = new Button { Text = _isZh ? "⚡ 填入剪贴板话术" : "⚡ Auto-Fill Clipboard", Width = 136, Height = 28 };
+        var btnClear = new Button { Text = _isZh ? "✓ 标为已处理" : "✓ Mark Handled", Width = 104, Height = 28 };
         var btnDash = new Button { Text = _isZh ? "📊 回总控台" : "📊 Dashboard", Width = 104, Height = 28 };
         btnBack.Click += (_, _) => { if (wv.CoreWebView2?.CanGoBack == true) wv.CoreWebView2.GoBack(); };
         btnFwd.Click += (_, _) => { if (wv.CoreWebView2?.CanGoForward == true) wv.CoreWebView2.GoForward(); };
@@ -275,11 +339,40 @@ internal sealed class MainDashboardForm : Form
             var clip = Clipboard.GetText() ?? "";
             if (string.IsNullOrWhiteSpace(clip) || wv.CoreWebView2 == null) return;
             var jsonStr = JsonSerializer.Serialize(clip);
-            var js = $"(function(){{ const msg = {jsonStr}; let el = document.activeElement; if (!el || (el.tagName !== 'TEXTAREA' && !el.isContentEditable && el.tagName !== 'INPUT')) {{ el = document.querySelector('textarea, [contenteditable=\"true\"]'); }} if (el) {{ el.focus(); document.execCommand('insertText', false, msg); }} }})();";
+            var js = $@"(function(){{
+                const msg = {jsonStr};
+                let el = document.activeElement;
+                const isEditable = (n) => n && (n.tagName === 'TEXTAREA' || n.isContentEditable || n.getAttribute?.('role') === 'textbox' || (n.tagName === 'INPUT' && !['checkbox','radio','file','submit','button'].includes(n.type)));
+                if (!isEditable(el)) {{
+                    const cands = Array.from(document.querySelectorAll('textarea, [contenteditable=""true""], [role=""textbox""], input[type=""text""]')).filter(n => n.offsetParent !== null);
+                    el = cands[cands.length - 1] || null;
+                }}
+                if (!el) return false;
+                el.focus();
+                if (el.isContentEditable || el.getAttribute?.('role') === 'textbox') {{
+                    if (!document.execCommand('insertText', false, msg)) {{
+                        el.textContent = (el.textContent || '') + msg;
+                        el.dispatchEvent(new InputEvent('input', {{ bubbles: true, data: msg, inputType: 'insertText' }}));
+                    }}
+                    return true;
+                }}
+                const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+                const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                const nextVal = (el.value || '') + msg;
+                if (setter) setter.call(el, nextVal); else el.value = nextVal;
+                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                return true;
+            }})();";
             await wv.CoreWebView2.ExecuteScriptAsync(js);
         };
+        btnClear.Click += async (_, _) =>
+        {
+            UpdateWatchUnread(watchId, 0, "", false);
+            await _dashboard.CoreWebView2.ExecuteScriptAsync("if(window.refreshState) window.refreshState();");
+        };
         btnDash.Click += (_, _) => { Show(); WindowState = FormWindowState.Normal; Activate(); };
-        bar.Controls.AddRange(new Control[] { btnBack, btnFwd, btnReload, btnHome, btnPaste, btnDash });
+        bar.Controls.AddRange(new Control[] { btnBack, btnFwd, btnReload, btnHome, btnPaste, btnClear, btnDash });
 
         form.Controls.Add(wv);
         form.Controls.Add(bar);
@@ -288,7 +381,7 @@ internal sealed class MainDashboardForm : Form
             if (e.CloseReason == CloseReason.UserClosing)
             {
                 e.Cancel = true;
-                form.Hide(); // Keep live WebSocket open passively in background with 0 page reloads!
+                form.Hide();
             }
         };
         _workspaceForms[watchId] = form;
@@ -296,36 +389,50 @@ internal sealed class MainDashboardForm : Form
 
         var env = await CoreWebView2Environment.CreateAsync(null, profileDir);
         await wv.EnsureCoreWebView2Async(env);
+        wv.CoreWebView2.NewWindowRequested += (_, args) =>
+        {
+            if (!string.IsNullOrEmpty(args.Uri))
+            {
+                args.Handled = true;
+                wv.CoreWebView2.Navigate(args.Uri);
+            }
+        };
         var obsPath = Path.Combine(AppContext.BaseDirectory, "resources", "passive-observer.js");
         if (File.Exists(obsPath))
         {
             await wv.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(obsPath));
         }
-        wv.CoreWebView2.WebMessageReceived += (_, args) =>
+        wv.CoreWebView2.WebMessageReceived += async (_, args) =>
         {
             try
             {
                 var p = JsonNode.Parse(args.TryGetWebMessageAsString())?.AsObject();
-                if (p?["action"]?.GetValue<string>() == "passiveUnread")
+                if (p?["passiveEvent"]?.GetValue<bool>() == true || p?["action"]?.GetValue<string>() == "passiveUnread")
                 {
                     var cnt = p["unreadCount"]?.GetValue<int>() ?? 0;
                     var snip = p["snippet"]?.GetValue<string>() ?? "";
-                    UpdateWatchUnread(watchId, cnt, snip);
+                    var authExp = p["authExpired"]?.GetValue<bool>() ?? false;
+                    UpdateWatchUnread(watchId, cnt, snip, authExp);
+                    await _dashboard.CoreWebView2.ExecuteScriptAsync("if(window.refreshState) window.refreshState();");
                 }
             }
             catch { }
         };
-        wv.CoreWebView2.DocumentTitleChanged += (_, _) =>
+        wv.CoreWebView2.DocumentTitleChanged += async (_, _) =>
         {
             var title = wv.CoreWebView2.DocumentTitle ?? "";
-            var m = System.Text.RegularExpressions.Regex.Match(title, @"(?:\(|\[|【)\s*(\d{1,4})\s*(?:\)|\]|条)");
+            var m = Regex.Match(title, @"(?:\(|\[|【)\s*(\d{1,4})\s*(?:\)|\]|条)");
             var count = m.Success && int.TryParse(m.Groups[1].Value, out var n) ? n : 0;
-            if (count > 0) UpdateWatchUnread(watchId, count, title);
+            if (count > 0)
+            {
+                UpdateWatchUnread(watchId, count, title, false);
+                await _dashboard.CoreWebView2.ExecuteScriptAsync("if(window.refreshState) window.refreshState();");
+            }
         };
         wv.CoreWebView2.Navigate(url);
     }
 
-    private void UpdateWatchUnread(string watchId, int count, string snippet)
+    private void UpdateWatchUnread(string watchId, int count, string snippet, bool authExpired)
     {
         var st = LoadState();
         var watches = st["watches"]?.AsArray();
@@ -336,21 +443,98 @@ internal sealed class MainDashboardForm : Form
             if (obj?["id"]?.GetValue<string>() == watchId)
             {
                 var prev = obj["unreadCount"]?.GetValue<int>() ?? 0;
-                obj["unreadCount"] = count;
-                obj["status"] = count > 0 ? "unread" : "idle";
-                obj["snippet"] = snippet;
-                if (count > 0 && count > prev)
+                obj["unreadCount"] = authExpired ? 0 : count;
+                obj["status"] = authExpired ? "auth_expired" : (count > 0 ? "unread" : "idle");
+                if (!string.IsNullOrEmpty(snippet)) obj["lastSnippet"] = snippet;
+                obj["lastCheckedAt"] = DateTime.UtcNow.ToString("O");
+                if (!authExpired && count > 0 && count > prev)
                 {
                     var siteName = obj["name"]?.GetValue<string>() ?? watchId;
                     var siteUrl = obj["url"]?.GetValue<string>() ?? "";
                     _tray.ShowBalloonTip(4000, _isZh ? "消息总管新消息提醒" : "ReplyRadar Unread Alert", $"{siteName}: {count}", ToolTipIcon.Info);
                     var wh = st["settings"]?["webhookUrl"]?.GetValue<string>() ?? "";
-                    SendWebhookPush(wh, siteName, count, snippet, siteUrl, _isZh);
+                    if (!string.IsNullOrWhiteSpace(wh))
+                        _ = SendWebhookPushAsync(wh, siteName, count, snippet, siteUrl, _isZh);
                 }
                 break;
             }
         }
         SaveState(st);
+    }
+
+    private static JsonObject ScanWindowsDesktopState()
+    {
+        var badges = new JsonObject();
+        var windows = new JsonArray();
+        var commProcs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["WeChat"] = "微信",
+            ["Weixin"] = "微信",
+            ["QQ"] = "QQ",
+            ["TIM"] = "TIM",
+            ["DingTalk"] = "钉钉",
+            ["Feishu"] = "飞书",
+            ["Lark"] = "Lark",
+            ["WeCom"] = "企业微信",
+            ["WXWork"] = "企业微信",
+            ["Telegram"] = "Telegram",
+            ["Slack"] = "Slack",
+            ["Discord"] = "Discord",
+            ["WhatsApp"] = "WhatsApp",
+            ["AliWorkbench"] = "千牛工作台"
+        };
+        var browserProcs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "chrome", "msedge", "firefox", "brave" };
+        var inboxTitleRe = new Regex(@"(消息中心|私信|聊天|客服|收件箱|未读|猎聘|直聘|BOSS|汇博|智联|前程无忧|拉勾|电鸭|闲鱼|千牛|抖店|创作中心|Inbox|Messages|Notifications|Direct)", RegexOptions.IgnoreCase);
+
+        try
+        {
+            foreach (var p in Process.GetProcesses())
+            {
+                try
+                {
+                    var pName = p.ProcessName ?? "";
+                    var title = (p.MainWindowTitle ?? "").Trim();
+                    if (string.IsNullOrEmpty(title)) continue;
+
+                    if (commProcs.TryGetValue(pName, out var appLabel))
+                    {
+                        var unreadMatch = Regex.Match(title, @"(?:\(|\[|【)\s*(\d{1,3})\s*(?:\)|\]|条)");
+                        var badge = unreadMatch.Success ? unreadMatch.Groups[1].Value : "";
+                        if (!string.IsNullOrEmpty(badge)) badges[appLabel] = badge;
+                        windows.Add(new JsonObject
+                        {
+                            ["windowId"] = p.Id,
+                            ["appName"] = appLabel,
+                            ["title"] = title,
+                            ["badge"] = badge
+                        });
+                    }
+                    else if (browserProcs.Contains(pName) && !title.Contains("消息总管") && !title.Contains("ReplyRadar"))
+                    {
+                        var unreadMatch = Regex.Match(title, @"(?:\(|\[|【)\s*(\d{1,3})\s*(?:\)|\]|条)");
+                        if (inboxTitleRe.IsMatch(title) || unreadMatch.Success)
+                        {
+                            var clean = Regex.Replace(title, @"\s*-\s*(Google Chrome|Microsoft​?\s*Edge|Mozilla Firefox|Brave).*$", "", RegexOptions.IgnoreCase).Trim();
+                            var shortLabel = $"浏览器 · {(clean.Length > 20 ? clean[..20] : clean)}";
+                            var badge = unreadMatch.Success ? unreadMatch.Groups[1].Value : "";
+                            if (!string.IsNullOrEmpty(badge)) badges[shortLabel] = badge;
+                            windows.Add(new JsonObject
+                            {
+                                ["windowId"] = p.Id,
+                                ["appName"] = shortLabel,
+                                ["title"] = title,
+                                ["badge"] = badge,
+                                ["snippet"] = "日常浏览器已登录窗口（免重复扫码自动看护）"
+                            });
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        return new JsonObject { ["ok"] = true, ["badges"] = badges, ["windows"] = windows, ["recentAlerts"] = new JsonArray() };
     }
 
     private async Task<JsonObject> HandleApiAsync(string method, string path, JsonObject? payload)
@@ -366,12 +550,64 @@ internal sealed class MainDashboardForm : Form
             var lic = string.IsNullOrEmpty(licKey) ? new JsonObject { ["valid"] = false, ["plan"] = "free" } : LicenseCheck.Verify(licKey);
             return new JsonObject
             {
-                ["version"] = "5.2.0",
+                ["version"] = "5.3.0",
                 ["license"] = lic,
                 ["settings"] = st["settings"]?.DeepClone() ?? new JsonObject(),
                 ["stats"] = new JsonObject { ["total"] = watches.Count, ["unreadCount"] = unreadWatches, ["unreadMessagesTotal"] = unreadTotal, ["activeCount"] = watches.Count },
                 ["watches"] = watches.DeepClone(),
                 ["quickReplies"] = st["quickReplies"]?.DeepClone() ?? new JsonArray()
+            };
+        }
+        if (path == "/api/desktop/state")
+        {
+            return ScanWindowsDesktopState();
+        }
+        if (method == "POST" && path == "/api/push/test")
+        {
+            var raw = payload?["webhookUrl"]?.GetValue<string>() ?? st["settings"]?["webhookUrl"]?.GetValue<string>() ?? "";
+            var (ok, channel, err) = await SendWebhookPushAsync(
+                raw,
+                _isZh ? "测试店铺（独立收件箱）" : "Test Store Inbox",
+                1,
+                _isZh ? "恭喜！您的手机锁屏强提醒已接通，客户发来新消息时将秒级响铃。" : "Your phone lock-screen alert is live!",
+                "",
+                _isZh
+            );
+            return new JsonObject { ["ok"] = ok, ["channel"] = channel, ["error"] = err };
+        }
+        if (method == "POST" && path == "/api/open-extension-dir")
+        {
+            var extDir = Path.Combine(AppContext.BaseDirectory, "extension");
+            var fallbackDir = Directory.Exists(extDir) ? extDir : Path.Combine(AppContext.BaseDirectory, "resources");
+            if (Directory.Exists(fallbackDir))
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{fallbackDir}\"") { UseShellExecute = true });
+                return new JsonObject { ["ok"] = true, ["dir"] = fallbackDir };
+            }
+            return new JsonObject { ["ok"] = false, ["error"] = "extension folder not found" };
+        }
+        if (path == "/api/mobile/info")
+        {
+            return new JsonObject
+            {
+                ["ok"] = false,
+                ["standaloneHint"] = _isZh
+                    ? "当前为轻量单机模式：点左下角「⚙️ 软件设置」粘贴免费 PushPlus 微信口令或 Bark 码，无需配网即可锁屏秒收手机通知；如需完整手机网页代发，安装 Node.js 后重开软件自动激活。"
+                    : "Standalone mode: Paste a webhook URL in Settings for instant phone alerts, or install Node.js to enable the interactive mobile web inbox."
+            };
+        }
+        if (path == "/api/cc/state" || path == "/api/ai-clients/status" || path == "/api/ai-butler/state")
+        {
+            return new JsonObject
+            {
+                ["ok"] = true,
+                ["agents"] = new JsonArray(),
+                ["sessions"] = new JsonArray(),
+                ["hookEvents"] = new JsonArray(),
+                ["clients"] = new JsonArray(),
+                ["providers"] = new JsonArray { new JsonObject { ["id"] = "rule_fast", ["name"] = "本地零延迟规则过滤", ["installed"] = true } },
+                ["suggestions"] = new JsonObject(),
+                ["standaloneHint"] = _isZh ? "安装 Node.js 后重开《消息总管》即可解锁本机 Claude Code / Cursor / Codex 自动接入。" : "Install Node.js to unlock local AI CLI & MCP integration."
             };
         }
         if (method == "POST" && path == "/api/quick-replies")
@@ -395,7 +631,8 @@ internal sealed class MainDashboardForm : Form
             var leads = new JsonArray();
             try
             {
-                Http.DefaultRequestHeaders.UserAgent.ParseAdd("ReplyRadar-Win/2.0");
+                if (!Http.DefaultRequestHeaders.UserAgent.Any())
+                    Http.DefaultRequestHeaders.UserAgent.ParseAdd("ReplyRadar-Win/5.3");
                 var hn = await Http.GetStringAsync($"https://hn.algolia.com/api/v1/search_by_date?query={Uri.EscapeDataString(q + " hiring freelance")}&tags=(story,comment)&hitsPerPage=8");
                 var hits = JsonNode.Parse(hn)?["hits"]?.AsArray();
                 if (hits != null)
@@ -434,6 +671,9 @@ internal sealed class MainDashboardForm : Form
             var set = st["settings"]?.AsObject() ?? new JsonObject();
             if (payload?["webhookUrl"] != null) set["webhookUrl"] = payload["webhookUrl"]!.GetValue<string>();
             if (payload?["termsAcceptedAt"] != null) set["termsAcceptedAt"] = payload["termsAcceptedAt"]!.GetValue<string>();
+            if (payload?["aiButlerEnabled"] != null) set["aiButlerEnabled"] = payload["aiButlerEnabled"]!.GetValue<bool>();
+            if (payload?["aiButlerProvider"] != null) set["aiButlerProvider"] = payload["aiButlerProvider"]!.GetValue<string>();
+            if (payload?["aiButlerPersona"] != null) set["aiButlerPersona"] = payload["aiButlerPersona"]!.GetValue<string>();
             st["settings"] = set;
             SaveState(st);
             return new JsonObject { ["ok"] = true, ["settings"] = set.DeepClone() };
@@ -511,6 +751,12 @@ internal static class Program
         {
             var bad = LicenseCheck.Verify("TP1.fake.fake");
             if (bad["valid"]?.GetValue<bool>() != false) return 2;
+            var pp = PushTargetHelper.Normalize("a1b2c3d4e5f60718293a4b5c6d7e8f90");
+            if (pp.kind != "pushplus") return 3;
+            var sc = PushTargetHelper.Normalize("SCT123456abcdef7890");
+            if (sc.kind != "serverchan") return 4;
+            var bk = PushTargetHelper.Normalize("AbCdEfGhIjKlMnOpQrStUv");
+            if (bk.kind != "bark") return 5;
             Console.WriteLine("WIN_SELFTEST_OK");
             return 0;
         }

@@ -760,6 +760,7 @@
             <span style="font-size:12px;color:var(--muted);" id="hdr-desk-sub">程序坞红点与通知纯文字同步 · 零注入不伤号</span>
           </div>
           <div class="pane-actions">
+            <button class="sm" onclick="openBrowserExtensionFolder()" title="免重新登录：打开配套 Chrome/Edge 扩展目录">🧩 接入日常浏览器</button>
             <button class="sm" onclick="refreshDesktopMonitorView()">↻ 刷新状态</button>
             <button class="primary sm" onclick="openMobileModal()">📲 手机随身收消息</button>
           </div>
@@ -935,8 +936,12 @@
     <div class="modal" style="max-width:520px;">
       <h2 id="add-modal-title">添加看护平台</h2>
       <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="add-modal-desc">
-        添加后点卡片「打开会话」登录一次即可，后台常驻静默听新消息，零定时刷页不伤号。
+        添加后点卡片「打开会话」在独立防串号仓登录一次即可，支持同站多开、发图片附件，零刷页不伤号。
       </p>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border:1px solid var(--border);border-radius:9px;margin-bottom:10px;font-size:12px;color:#475569;">
+        <span>💡 日常 Chrome/Edge 已登录的招聘与消息页会自动出现在「电脑软件」，无需重复扫码。</span>
+        <button class="sm" type="button" onclick="openBrowserExtensionFolder()" style="flex-shrink:0;">🧩 浏览器插件目录</button>
+      </div>
       <div class="form-row">
         <label id="lbl-name">平台或店铺名称</label>
         <input id="f-name" placeholder="例如：闲鱼买家咨询 / 小红书私信 / 电鸭社区" />
@@ -1064,25 +1069,37 @@
 
   <!-- MODAL: UNIFIED SETTINGS (PUSH WEBHOOK + LANGUAGE + UPDATE CHECK) -->
   <div class="modal-backdrop" id="modal-settings" onclick="if(event.target===this)closeModals()">
-    <div class="modal" style="max-width:500px;">
-      <h2 id="set-title">⚙️ 软件设置与外部推送</h2>
+    <div class="modal" style="max-width:540px;">
+      <h2 id="set-title">⚙️ 软件设置与手机锁屏强提醒</h2>
       <p style="font-size:12.5px;color:var(--muted);margin-top:0;" id="set-desc">
-        可选配置飞书机器人、企业微信、Bark 或 Server酱 Webhook，来新消息时同步推送到手机。
+        解决手机浏览器锁屏休眠漏信：任选下方一种方式填入免费口令，来新消息直接弹微信/系统锁屏通知。
       </p>
-      <div class="form-row">
-        <label id="lbl-hook">外部推送 Webhook 链接（可选）</label>
-        <input id="s-webhook" placeholder="https://..." />
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <button type="button" class="sm soft-primary" id="pwiz-wx" onclick="selectPushWizardPreset('wx')">💬 微信提醒 (PushPlus/Server酱·安卓苹果通用)</button>
+        <button type="button" class="sm" id="pwiz-bark" onclick="selectPushWizardPreset('bark')"> iPhone Bark</button>
+        <button type="button" class="sm" id="pwiz-im" onclick="selectPushWizardPreset('im')">🏢 飞书 / 企微 / 钉钉</button>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;margin:12px 0;gap:8px;flex-wrap:wrap;">
+      <div id="pwiz-guide" style="font-size:12px;color:#334155;background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">
+        微信搜公众号「<strong>pushplus推送加</strong>」点「一对一推送」复制 32 位 Token（或「Server酱」SCT 开头 SendKey），<strong>直接粘贴到下方即可，无需拼写复杂网址</strong>。
+      </div>
+      <div class="form-row">
+        <label id="lbl-hook">手机强提醒口令或 Webhook 链接</label>
+        <input id="s-webhook" placeholder="直接粘贴 32 位 PushPlus Token / SCT... / Bark Key / https://..." />
+      </div>
+      <div id="push-test-msg" style="font-size:12px;min-height:18px;margin-top:4px;color:var(--muted);"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;margin:10px 0;gap:8px;flex-wrap:wrap;">
         <div style="font-size:12.5px;color:#475569;">界面语言与软件版本</div>
         <div style="display:flex;gap:8px;">
           <button class="sm" onclick="toggleLang()" id="btn-lang">切换 English</button>
           <button class="sm" onclick="checkAppUpdate()" id="btn-update">🔄 检查更新</button>
         </div>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
-        <button onclick="closeModals()" id="btn-cancel-set">取消</button>
-        <button class="primary" onclick="saveWebhookSettings()" id="btn-save-set">保存设置</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        <button type="button" class="sm soft-primary" onclick="testLockScreenPushSettings()" id="btn-test-push">🔔 保存并发一条测试提醒</button>
+        <div style="display:flex;gap:8px;">
+          <button onclick="closeModals()" id="btn-cancel-set">取消</button>
+          <button class="primary" onclick="saveWebhookSettings()" id="btn-save-set">保存设置</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1114,7 +1131,8 @@
           </div>
         </div>
       </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;">
+        <span style="font-size:11.5px;color:var(--muted);">💡 锁屏防漏信：点左下角「⚙️ 软件设置」填入免费 PushPlus 微信口令或 Bark，锁屏熄屏也秒响。</span>
         <button onclick="closeModals()">关闭</button>
       </div>
     </div>
@@ -1921,7 +1939,8 @@
 
     function applyMobilePairingUi(info) {
       if (!info || !info.ok) {
-        document.getElementById("mob-qr-box").innerHTML = `<div style="padding:12px;font-size:12px;color:var(--muted);text-align:center;">本地手机网关启动中...</div>`;
+        const hint = info?.standaloneHint || "本地手机随身网关启动中（若未安装 Node.js，可直接在「⚙️ 软件设置」填入免费 PushPlus 微信口令或 Bark 接收手机提醒）";
+        document.getElementById("mob-qr-box").innerHTML = `<div style="padding:12px;font-size:12px;color:var(--muted);text-align:center;line-height:1.5;">${escapeHtml(hint)}</div>`;
         return;
       }
       lastMobileInfo = info;
@@ -2443,20 +2462,79 @@
 
     function openSettingsModal() {
       document.getElementById("s-webhook").value = appState.settings?.webhookUrl || "";
+      const msg = document.getElementById("push-test-msg");
+      if (msg) msg.textContent = "";
       document.getElementById("modal-settings").classList.add("open");
+    }
+
+    function selectPushWizardPreset(preset) {
+      const ids = { wx: "pwiz-wx", bark: "pwiz-bark", im: "pwiz-im" };
+      Object.entries(ids).forEach(([k, id]) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle("soft-primary", k === preset);
+      });
+      const guide = document.getElementById("pwiz-guide");
+      const inp = document.getElementById("s-webhook");
+      if (!guide || !inp) return;
+      if (preset === "bark") {
+        guide.innerHTML = 'iPhone 在 App Store 下载免费「<strong>Bark</strong>」，打开 App 复制专属推送码（或 <code>https://api.day.app/你的码</code>）粘贴到下方即可锁屏强响铃。';
+        inp.placeholder = "直接粘贴 Bark 推送码 或 https://api.day.app/...";
+      } else if (preset === "im") {
+        guide.innerHTML = '在飞书群 / 企业微信群 / 钉钉群添加「<strong>自定义群机器人</strong>」，复制生成的 Webhook 链接粘贴到下方即可秒推群消息。';
+        inp.placeholder = "https://open.feishu.cn/... 或 https://qyapi.weixin.qq.com/...";
+      } else {
+        guide.innerHTML = '微信搜公众号「<strong>pushplus推送加</strong>」点「一对一推送」复制 32 位 Token（或「Server酱」SCT 开头 SendKey），<strong>直接粘贴到下方即可，无需拼写复杂网址</strong>。';
+        inp.placeholder = "直接粘贴 32 位 PushPlus Token / SCT... / Bark Key / https://...";
+      }
+      inp.focus();
     }
 
     async function saveWebhookSettings() {
       const webhookUrl = document.getElementById("s-webhook").value.trim();
-      if (webhookUrl && !isProUnlocked()) {
-        closeModals();
-        openPaywallModal("外部 Webhook 实时消息推送属于专业版功能，解锁后支持飞书、企业微信、Bark 秒级提醒！");
-        return;
-      }
       await apiCall("POST", "/api/settings", { webhookUrl });
       closeModals();
       await refreshState();
       showToast("✅ 设置已保存");
+    }
+
+    async function testLockScreenPushSettings() {
+      const webhookUrl = document.getElementById("s-webhook").value.trim();
+      const msgEl = document.getElementById("push-test-msg");
+      if (!webhookUrl) {
+        if (msgEl) {
+          msgEl.style.color = "var(--red)";
+          msgEl.textContent = "⚠️ 请先在上方粘贴 PushPlus 口令、Bark 码或群机器人链接";
+        }
+        return;
+      }
+      if (msgEl) {
+        msgEl.style.color = "var(--muted)";
+        msgEl.textContent = "⏳ 正在保存并发出手机测试提醒...";
+      }
+      await apiCall("POST", "/api/settings", { webhookUrl });
+      const res = await apiCall("POST", "/api/push/test", { webhookUrl });
+      await refreshState();
+      if (res && res.ok) {
+        if (msgEl) {
+          msgEl.style.color = "var(--green)";
+          msgEl.textContent = `✅ 已通过「${res.channel || "推送通道"}」发出测试通知，请看一眼手机！`;
+        }
+        showToast("🎉 测试提醒已发出，请查看手机！");
+      } else {
+        if (msgEl) {
+          msgEl.style.color = "var(--red)";
+          msgEl.textContent = "⚠️ 发送失败：" + ((res && res.error) || "请核对口令或网络连接");
+        }
+      }
+    }
+
+    async function openBrowserExtensionFolder() {
+      const res = await apiCall("POST", "/api/open-extension-dir", {});
+      if (res && res.ok) {
+        showToast("📂 已打开浏览器插件目录！在 Chrome 扩展页开启「开发者模式」拖入即可免重登同步");
+      } else {
+        showToast("💡 您的日常 Chrome/Edge 打开的消息与招聘窗口已在「电脑软件」自动识别");
+      }
     }
 
     async function acceptTermsConsent() {
@@ -2512,16 +2590,17 @@
       const box = document.getElementById("ai-clients-list");
       if (!box) return;
       try {
-        const [res, bRes] = await Promise.all([fetch("/api/ai-clients/status"), fetch("/api/ai-butler/state")]);
-        const data = await res.json();
-        const bData = await bRes.json();
+        const [data, bData] = await Promise.all([
+          apiCall("GET", "/api/ai-clients/status"),
+          apiCall("GET", "/api/ai-butler/state"),
+        ]);
 
         const chk = document.getElementById("butler-enabled");
         if (chk) chk.checked = Boolean(appState.settings?.aiButlerEnabled);
         const pInput = document.getElementById("butler-persona");
         if (pInput) pInput.value = appState.settings?.aiButlerPersona || "";
         const sel = document.getElementById("butler-provider");
-        if (sel && Array.isArray(bData.providers)) {
+        if (sel && Array.isArray(bData?.providers)) {
           const curProv = appState.settings?.aiButlerProvider || "codex";
           sel.innerHTML = bData.providers
             .map((p) => `<option value="${escapeAttr(p.id)}" ${p.id === curProv ? "selected" : ""}>${escapeHtml(p.name)}${p.installed ? " ✓" : ""}</option>`)
@@ -2529,9 +2608,14 @@
         }
 
         const oneLiner = document.getElementById("ai-one-liner-box");
-        if (oneLiner) oneLiner.value = data.oneSentenceForAnyAi || "";
+        if (oneLiner) oneLiner.value = data?.oneSentenceForAnyAi || "";
 
-        box.innerHTML = (data.clients || []).map((c) => `
+        if (!data?.clients?.length && data?.standaloneHint) {
+          box.innerHTML = `<div style="font-size:12px;color:var(--muted);grid-column:1/-1;">${escapeHtml(data.standaloneHint)}</div>`;
+          return;
+        }
+
+        box.innerHTML = (data?.clients || []).map((c) => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:${c.connected ? "#f0fdf4" : "#f8fafc"};gap:10px;">
             <div style="min-width:0;">
               <div style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;">
@@ -2552,17 +2636,12 @@
     }
 
     async function installAiClientAction(clientId) {
-      const res = await fetch("/api/ai-clients/install", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId }),
-      });
-      const data = await res.json();
-      if (data.ok) {
+      const data = await apiCall("POST", "/api/ai-clients/install", { clientId });
+      if (data && data.ok) {
         showToast("✅ 已接入手机通知与拍板能力！");
         await refreshAiClientsModal();
       } else {
-        showToast("⚠️ " + (data.error || "接入失败"));
+        showToast("⚠️ " + ((data && data.error) || "接入失败"));
       }
     }
 
@@ -2578,13 +2657,8 @@
     async function simulateButlerIncoming() {
       showToast("⏳ 正在模拟客户来信并调 AI 助理拟稿...");
       const provider = document.getElementById("butler-provider")?.value || "rule_fast";
-      const res = await fetch("/api/ai-butler/simulate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider }),
-      });
-      const out = await res.json();
-      if (out.suggestion?.summary) {
+      const out = await apiCall("POST", "/api/ai-butler/simulate", { provider });
+      if (out?.suggestion?.summary) {
         showToast("🧠 AI 已拟稿：" + out.suggestion.summary);
       } else {
         showToast("✅ 已触发模拟来信");

@@ -9,7 +9,7 @@ on:
       tag:
         description: "Release tag to upload Windows zips to"
         required: true
-        default: "v5.2.0"
+        default: "v5.3.0"
 
 permissions:
   contents: write
@@ -40,6 +40,7 @@ jobs:
           cp hub/ui/sw.js out-cn/resources/sw.js
           cp docs/cold-reply-playbook.html out-cn/resources/cold-reply-playbook.html
           cp extension/passive-observer.js out-cn/resources/passive-observer.js
+          cp -r extension out-cn/extension
           cp presets.json out-cn/resources/presets.json
           ./out-cn/消息总管.exe --self-test
 
@@ -50,6 +51,7 @@ jobs:
           cp hub/ui/sw.js out-en/resources/sw.js
           cp docs/cold-reply-playbook.html out-en/resources/cold-reply-playbook.html
           cp extension/passive-observer.js out-en/resources/passive-observer.js
+          cp -r extension out-en/extension
           cp presets.json out-en/resources/presets.json
           ./out-en/ReplyRadar.exe --self-test
 

@@ -18,18 +18,47 @@ function externalEffectsDisabled() {
   return process.env.TABPULSE_DISABLE_EXTERNAL_EFFECTS === "1";
 }
 
+export function normalizeCustomerPushTarget(rawInput = "") {
+  const s = String(rawInput || "").trim();
+  if (!s) return { kind: "none", url: "", token: "" };
+  if (/^[0-9a-f]{32}$/i.test(s)) {
+    return { kind: "pushplus", url: "https://www.pushplus.plus/send", token: s };
+  }
+  if (/^SCT[0-9a-zA-Z]{10,}$/.test(s)) {
+    return { kind: "serverchan", url: `https://sctapi.ftqq.com/${s}.send`, token: s };
+  }
+  if (/^[A-Za-z0-9]{20,28}$/.test(s)) {
+    return { kind: "bark", url: `https://api.day.app/${s}`, token: s };
+  }
+  if (/^https?:\/\//i.test(s)) {
+    return { kind: "url", url: s, token: "" };
+  }
+  return { kind: "invalid", url: "", token: "" };
+}
+
 export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = "") {
-  const url = String(webhookUrl || "").trim();
-  if (!url || !/^https?:\/\//i.test(url)) return null;
-  const fullText = mobileLink ? `${text}\n📱 手机点此直接查看并回复：${mobileLink}` : text;
+  const norm = normalizeCustomerPushTarget(webhookUrl);
+  if (norm.kind === "none" || norm.kind === "invalid") return null;
+  const url = norm.url;
+  const fullText = mobileLink ? `${text}\n📱 手机点此直接看纯文字并回复：${mobileLink}` : text;
   try {
+    if (norm.kind === "pushplus" || url.includes("pushplus.plus/send")) {
+      const tok = norm.token || new URL(url).searchParams.get("token") || "";
+      const r = await fetch("https://www.pushplus.plus/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tok, title, content: fullText, template: "txt" }),
+      });
+      return { status: r.status, ok: r.ok, channel: "pushplus" };
+    }
+
     // Bark GET URL support (https://api.day.app/<key>) with ?url= jump straight into Mobile Pocket Console
-    if (url.includes("api.day.app/") && url.replace(/\/+$/, "").split("/").length === 4) {
+    if (norm.kind === "bark" || (url.includes("api.day.app/") && url.replace(/\/+$/, "").split("/").length === 4)) {
       const base = url.replace(/\/+$/, "");
       const q = mobileLink ? `?url=${encodeURIComponent(mobileLink)}` : "";
       const barkUrl = `${base}/${encodeURIComponent(title)}/${encodeURIComponent(text)}${q}`;
       const r = await fetch(barkUrl);
-      return { status: r.status, ok: r.ok };
+      return { status: r.status, ok: r.ok, channel: "bark" };
     }
 
     const payload =
@@ -37,11 +66,13 @@ export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = 
         ? { msg_type: "text", content: { text: `${title}\n${fullText}` } }
         : url.includes("qyapi.weixin.qq.com")
           ? { msgtype: "text", text: { content: `${title}\n${fullText}` } }
-          : url.includes("discord.com/api/webhooks")
-            ? { content: `**${title}**\n${fullText}` }
-            : url.includes("sctapi.ftqq.com")
-              ? { title, desp: fullText }
-              : { text: `${title}\n${fullText}`, title, desp: fullText, body: fullText, url: mobileLink };
+          : url.includes("oapi.dingtalk.com")
+            ? { msgtype: "text", text: { content: `【消息总管】${title}\n${fullText}` } }
+            : url.includes("discord.com/api/webhooks")
+              ? { content: `**${title}**\n${fullText}` }
+              : url.includes("sctapi.ftqq.com")
+                ? { title, desp: fullText }
+                : { text: `${title}\n${fullText}`, title, desp: fullText, body: fullText, url: mobileLink };
 
     const res = await fetch(url, {
       method: "POST",

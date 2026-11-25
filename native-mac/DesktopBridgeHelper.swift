@@ -501,6 +501,50 @@ case "launch":
     usleep(700_000)
     jsonOut(["ok": launchedOk, "launched": appPath])
 
+case "open-app-messages":
+    let appQuery = (args.count > 2 ? args[2] : "").trimmingCharacters(in: .whitespacesAndNewlines)
+    let qLower = appQuery.lowercased()
+    let running = NSWorkspace.shared.runningApplications.first { app in
+        let n = (app.localizedName ?? "").lowercased()
+        let b = (app.bundleIdentifier ?? "").lowercased()
+        return !n.isEmpty && (n == qLower || n.contains(qLower) || qLower.contains(n) || b.contains(qLower))
+    }
+    if let app = running {
+        app.unhide()
+        app.activate(options: [.activateIgnoringOtherApps])
+        if let bURL = app.bundleURL {
+            let cfg = NSWorkspace.OpenConfiguration()
+            cfg.activates = true
+            let sem = DispatchSemaphore(value: 0)
+            NSWorkspace.shared.openApplication(at: bURL, configuration: cfg) { _, _ in sem.signal() }
+            _ = sem.wait(timeout: .now() + 2.5)
+        }
+        usleep(550_000)
+    } else if FileManager.default.fileExists(atPath: "/Applications/\(appQuery).app") {
+        let cfg = NSWorkspace.OpenConfiguration()
+        cfg.activates = true
+        let sem = DispatchSemaphore(value: 0)
+        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/Applications/\(appQuery).app"), configuration: cfg) { _, _ in sem.signal() }
+        _ = sem.wait(timeout: .now() + 3.5)
+        usleep(650_000)
+    }
+    let rawWins = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? []
+    let candidates = rawWins.filter { w in
+        let owner = ((w[kCGWindowOwnerName as String] as? String) ?? "").lowercased()
+        guard !owner.isEmpty else { return false }
+        return owner == qLower || owner.contains(qLower) || qLower.contains(owner)
+    }
+    let best = candidates.max { a, b in
+        let ba = (a[kCGWindowBounds as String] as? [String: CGFloat]) ?? [:]
+        let bb = (b[kCGWindowBounds as String] as? [String: CGFloat]) ?? [:]
+        return ((ba["Width"] ?? 0) * (ba["Height"] ?? 0)) < ((bb["Width"] ?? 0) * (bb["Height"] ?? 0))
+    }
+    if let found = best, let wid = found[kCGWindowNumber as String] as? Int {
+        jsonOut(extractStructuredWindowMessages(wid))
+    } else {
+        jsonOut(["ok": false, "error": "暂未找到「\(appQuery)」主窗口，请在电脑上登录该软件后重试"])
+    }
+
 default:
     jsonOut(["ok": false, "error": "unknown command"])
 }
