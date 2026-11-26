@@ -439,10 +439,22 @@
     const DL_WIN_EN = `${EDGE_DL}/ReplyRadar-EN-Windows-x64.zip`;
     let siteLang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
 
+    // Set true only after Creem store KYC & live storefront verification completes (avoids 404 checkout links)
+    const CREEM_LIVE_ENABLED = false;
+    const CREEM_YEAR_URL = "https://www.creem.io/product/prod_7GwFeV4qIacTtjIg6t8QE";
+    const CREEM_LIFE_URL = "https://www.creem.io/product/prod_WXZloyzwbIaBZ2LAlOgkX";
+
     function openSiteCheckout(preset) {
+      if (preset === "gl_year" || preset === "gl_life") {
+        siteLang = "en";
+        applySiteLang();
+      } else if (preset === "year" || preset === "life") {
+        // Keep current language unless explicitly triggered from CN cards
+      }
       const radios = document.querySelectorAll('input[name="tpPlan"]');
       const wantYear = preset === "year" || preset === "gl_year";
       radios.forEach((r) => { r.checked = r.value === (wantYear ? "year" : "life"); });
+      document.getElementById("ck-toast").textContent = "";
       refreshSiteCheckoutText();
       document.getElementById("siteCheckoutModal").style.display = "flex";
     }
@@ -457,53 +469,71 @@
       document.getElementById("ck-card-year").style.borderColor = val === "year" ? "#3b82f6" : "#334155";
       document.getElementById("ck-card-life").style.borderColor = val === "life" ? "#3b82f6" : "#334155";
       if (en) {
-        document.getElementById("ck-title").textContent = "⚡ Unlock ReplyRadar Pro — Instant Offline Key";
+        document.getElementById("ck-title").textContent = "⚡ Unlock ReplyRadar Pro — Offline Ed25519 License Key";
         document.getElementById("ck-lbl-year").textContent = "$4.99 / yr Annual Pro";
+        document.getElementById("ck-sub-year").textContent = "Up to 10 isolated accounts · Instant push alerts";
         document.getElementById("ck-lbl-life").textContent = "🔥 $14.99 Lifetime Pro (Pay Once, Own Forever)";
-        document.getElementById("ck-way-1").innerHTML = "💳 <strong>Option 1 (Instant Card / Apple Pay via Creem)</strong>: Click the blue button below to complete secure checkout and receive your <code>TP1.</code> key immediately.";
-        document.getElementById("ck-way-2").innerHTML = " <strong>Option 2 (Mac App Store / Support)</strong>: Search <code>ReplyRadar</code> on Mac App Store, or email <code>a3152557994@gmail.com</code>.";
-        document.getElementById("btn-ck-xy").textContent = val === "year" ? "💳 Pay $4.99 / yr via Creem →" : "💳 Pay $14.99 Lifetime via Creem →";
-        document.getElementById("btn-ck-qq").textContent = "✉️ Email Support";
+        document.getElementById("ck-sub-life").textContent = "Unlimited isolated accounts + Mobile companion + Cold-Reply Playbook";
+        if (CREEM_LIVE_ENABLED) {
+          document.getElementById("ck-way-1").innerHTML = "💳 <strong>Option 1 (Instant Card / Apple Pay)</strong>: Click below to complete secure checkout and receive your <code>TP1.</code> key immediately.";
+          document.getElementById("btn-ck-xy").textContent = val === "year" ? "💳 Pay $4.99 / yr Now →" : "💳 Pay $14.99 Lifetime Now →";
+        } else {
+          document.getElementById("ck-way-1").innerHTML = "✉️ <strong>Option 1 (Direct Invoice &amp; Fast Key Dispatch)</strong>: Click the primary button below to copy your order code and email <code style=\"color:#fbbf24;\">a3152557994@gmail.com</code> (PayPal / Alipay / Card invoice supported — your permanent <code>TP1.</code> offline key is issued with a 14-day 100% refund guarantee).";
+          document.getElementById("btn-ck-xy").textContent = val === "year" ? "✉️ Request $4.99 Annual Key (Copy + Email) →" : "✉️ Request $14.99 Lifetime Key (Copy + Email) →";
+        }
+        document.getElementById("ck-way-2").innerHTML = "🛒 <strong>Option 2 (24/7 Automated Self-Serve via Goofish / QQ)</strong>: Have Alipay/WeChat? Switch to <strong>中文版</strong> or search <code>消息总管 多开防串号</code> on Goofish (Xianyu) / add QQ <code style=\"color:#34d399;\">3152557994</code> for 24/7 automated <code>TP1.</code> key delivery.";
+        document.getElementById("btn-ck-qq").textContent = "📋 Copy Support Email & Order ID";
       } else {
         document.getElementById("ck-title").textContent = "⚡ 选择方案 · 极速获取正版离线激活码";
         document.getElementById("ck-lbl-year").textContent = "¥9.9 / 年 轻量体验年卡";
+        document.getElementById("ck-sub-year").textContent = "看护最多 6 个账号 · 同站双开防串号";
         document.getElementById("ck-lbl-life").textContent = "🔥 ¥39 永久买断专业版（92% 首选）";
+        document.getElementById("ck-sub-life").textContent = "无限个账号物理隔离多开 + 永久固定手机书签 + 赠《破冰话术库》";
         document.getElementById("ck-way-1").innerHTML = "🛒 <strong>方式 1（24h 自动秒发卡密 · 平台担保）</strong>：打开<strong>闲鱼 App</strong> 搜索「<code style=\"color:#fbbf24;\">消息总管 多开防串号</code>」拍下系统自动秒发 <code>TP1.</code> 激活码！";
-        document.getElementById("ck-way-2").innerHTML = "💬 <strong>方式 2（QQ / 海外卡直付）</strong>：加客服 QQ <code style=\"color:#34d399;\">3152557994</code> 秒发收款码，或切至 English 走海外卡支付。";
+        document.getElementById("ck-way-2").innerHTML = "💬 <strong>方式 2（QQ / 邮箱人工极速直发）</strong>：直接加客服 QQ <code style=\"color:#34d399;\">3152557994</code>（或发邮件至 <code>3152557994@qq.com</code>），秒发微信/支付宝收款码与永久激活码，粘贴进软件左下角「💎 解锁专业版」即刻生效。";
         document.getElementById("btn-ck-xy").textContent = "📋 复制闲鱼自动发卡搜索词";
         document.getElementById("btn-ck-qq").textContent = "💬 复制客服 QQ + 下单口令";
       }
       const planLabel = en
-        ? (val === "year" ? "ReplyRadar Annual ($4.99)" : "ReplyRadar Lifetime ($14.99)")
+        ? (val === "year" ? "ReplyRadar Annual Pro ($4.99/yr)" : "ReplyRadar Lifetime Pro ($14.99 Once)")
         : (val === "year" ? "《消息总管》¥9.9 轻量年卡" : "《消息总管》¥39 永久买断专业版");
-      document.getElementById("ck-order-code").textContent = `下单方案：${planLabel}（支持 Mac + Windows 双端离线永久激活）`;
+      document.getElementById("ck-order-code").textContent = en
+        ? `Order Plan: ${planLabel} (Works offline on macOS + Windows)`
+        : `下单方案：${planLabel}（支持 Mac + Windows 双端离线永久激活）`;
     }
 
     async function copyCheckoutXianyu() {
       const en = siteLang === "en";
       const val = document.querySelector('input[name="tpPlan"]:checked')?.value || "life";
       if (en) {
-        const creemUrl =
-          val === "year"
-            ? "https://www.creem.io/product/prod_7GwFeV4qIacTtjIg6t8QE"
-            : "https://www.creem.io/product/prod_WXZloyzwbIaBZ2LAlOgkX";
-        window.open(creemUrl, "_blank", "noopener");
+        if (CREEM_LIVE_ENABLED) {
+          window.open(val === "year" ? CREEM_YEAR_URL : CREEM_LIFE_URL, "_blank", "noopener");
+          return;
+        }
+        const orderText = document.getElementById("ck-order-code").textContent;
+        await navigator.clipboard.writeText(`a3152557994@gmail.com | ${orderText}`).catch(() => {});
+        document.getElementById("ck-toast").textContent = "✅ Copied support email & order details! Send to a3152557994@gmail.com to receive your TP1. offline license key.";
+        const sub = encodeURIComponent(`[License Order] ${orderText}`);
+        const body = encodeURIComponent(`Hi ReplyRadar team,\n\nI'd like to purchase ${orderText}.\nPreferred payment method (PayPal / Alipay / Card Invoice):\n`);
+        location.href = `mailto:a3152557994@gmail.com?subject=${sub}&body=${body}`;
         return;
       }
       const text = "消息总管 多开防串号";
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(text).catch(() => {});
       document.getElementById("ck-toast").textContent = "✅ 已复制「消息总管 多开防串号」！打开闲鱼粘贴搜索拍下，系统24h自动秒发 TP1 激活码！";
     }
 
     async function copyCheckoutQq() {
       const en = siteLang === "en";
       if (en) {
-        const sub = encodeURIComponent(document.getElementById("ck-order-code").textContent);
-        location.href = `mailto:a3152557994@gmail.com?subject=${sub}`;
+        const orderText = document.getElementById("ck-order-code").textContent;
+        await navigator.clipboard.writeText(`a3152557994@gmail.com — ${orderText}`).catch(() => {});
+        document.getElementById("ck-toast").textContent = "✅ Copied: a3152557994@gmail.com (plus your selected plan)! Email anytime for fast activation.";
         return;
       }
-      await navigator.clipboard.writeText("3152557994");
-      document.getElementById("ck-toast").textContent = "✅ 已复制客服 QQ 号「3152557994」（或发邮件至 3152557994@qq.com 秒回发码）！";
+      const orderText = document.getElementById("ck-order-code").textContent;
+      await navigator.clipboard.writeText(`3152557994（${orderText}）`).catch(() => {});
+      document.getElementById("ck-toast").textContent = "✅ 已复制客服 QQ 号「3152557994」及下单方案（也可发邮件至 3152557994@qq.com 秒回发码）！";
     }
 
     function applySiteLang() {
@@ -666,6 +696,8 @@
     scanNow();
     if (location.hash === "#checkout-life") openSiteCheckout("life");
     else if (location.hash === "#checkout-year") openSiteCheckout("year");
+    else if (location.hash === "#checkout-gl-life") openSiteCheckout("gl_life");
+    else if (location.hash === "#checkout-gl-year") openSiteCheckout("gl_year");
   </script>
 </body>
 </html>

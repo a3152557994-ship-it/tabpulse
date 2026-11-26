@@ -16,31 +16,79 @@ function getHubBaseUrl() {
   return `http://127.0.0.1:${port}`;
 }
 
-async function callHubOrLocal(method, apiPath, body, localFallback, timeoutMs = 2500) {
+function isHubOfflineError(err) {
+  if (!err) return false;
+  return (
+    err.name === "AbortError" ||
+    err.cause?.code === "ECONNREFUSED" ||
+    err.cause?.code === "ECONNRESET" ||
+    /fetch failed|ECONNREFUSED|network/i.test(String(err.message || ""))
+  );
+}
+
+async function isHubReachable(timeoutMs = 1200) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${getHubBaseUrl()}/api/health`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callHubOrLocal(method, apiPath, body, localFallback, timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
     const res = await fetch(`${getHubBaseUrl()}${apiPath}`, {
       method,
       headers: { "Content-Type": "application/json" },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
-    clearTimeout(timer);
     if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(errText || `HTTP ${res.status}`);
+      const errText = await res.text().catch(() => "");
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed && typeof parsed === "object") {
+          return {
+            ok: false,
+            status: res.status,
+            ...parsed,
+            error: parsed.error || `HTTP ${res.status}`,
+          };
+        }
+      } catch {}
+      return {
+        ok: false,
+        status: res.status,
+        error: (errText && errText.trim()) || `HTTP ${res.status}`,
+      };
     }
     return await res.json();
   } catch (err) {
-    if (
-      localFallback &&
-      err &&
-      (err.name === "AbortError" || err.cause?.code === "ECONNREFUSED" || /fetch failed/i.test(err.message))
-    ) {
-      return localFallback();
+    if (isHubOfflineError(err)) {
+      if (typeof localFallback === "function") {
+        return localFallback();
+      }
+      return {
+        ok: false,
+        hubOffline: true,
+        error: `本地《消息总管》(ReplyRadar) 服务未启动或无法连接 (${getHubBaseUrl()})`,
+      };
     }
-    throw err;
+    return {
+      ok: false,
+      error: err?.message || String(err),
+    };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -48,7 +96,7 @@ const TOOLS = [
   {
     name: "tabpulse_notify_phone",
     description:
-      "Immediately push a notification alert and red unread badge to the user's phone inbox (消息总管 / ReplyRadar). Call this automatically whenever you finish a multi-step task, hit an error, or find a high-value result so the user gets notified on their phone without staring at the computer.",
+      "仅当用户明确要求推送手机通知时调用：向用户的《消息总管》(ReplyRadar) 手机收件箱发送一条纯文字提醒与未读红点。严禁在常规任务完成后擅自自动调用。",
     inputSchema: {
       type: "object",
       properties: {
@@ -69,7 +117,7 @@ const TOOLS = [
   {
     name: "tabpulse_ask_human",
     description:
-      "Push a question with 1-tap choice buttons to the user's phone lock screen & red-dot inbox, and WAIT for the user's mobile tap or typed reply before continuing! Use whenever you need human approval, a decision between options, or confirmation to send a customer quote while the user may be away from their desk.",
+      "仅当用户明确要求通过手机远程确认/询问时调用：向用户的《消息总管》(ReplyRadar) 手机端推送带点选按钮的问题并等待手机端回复。严禁未经用户要求自动阻塞等待拍板。",
     inputSchema: {
       type: "object",
       properties: {
@@ -236,6 +284,15 @@ async function executeTool(name, args = {}) {
 
     case "tabpulse_ask_human": {
       const timeoutSec = Math.max(5, Math.min(600, Number(args.timeoutSeconds) || 240));
+      const offlineFallback = () => ({
+        ok: false,
+        answered: false,
+        hubOffline: true,
+        error: `本地《消息总管》(ReplyRadar) 随身网关未启动 (${getHubBaseUrl()})，无法向手机端发起实时点选确认，请在当前对话直接询问用户。`,
+      });
+      if (!(await isHubReachable(1200))) {
+        return offlineFallback();
+      }
       return callHubOrLocal(
         "POST",
         "/api/ai-inbox/ask",
@@ -246,7 +303,7 @@ async function executeTool(name, args = {}) {
           context: args.context || "",
           timeoutSeconds: timeoutSec,
         },
-        null,
+        offlineFallback,
         (timeoutSec + 5) * 1000
       );
     }

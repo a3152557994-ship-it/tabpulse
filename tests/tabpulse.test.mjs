@@ -250,8 +250,13 @@ test("MCP stdio server v0.2.0 exposes 5 tools and completes roundtrip", async ()
 
     const listed = await sendAndWait({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     assert.equal(listed.result.tools.length, 9);
-    assert.ok(listed.result.tools.some((t) => t.name === "tabpulse_notify_phone"));
-    assert.ok(listed.result.tools.some((t) => t.name === "tabpulse_ask_human"));
+    const notifyTool = listed.result.tools.find((t) => t.name === "tabpulse_notify_phone");
+    const askTool = listed.result.tools.find((t) => t.name === "tabpulse_ask_human");
+    assert.ok(notifyTool && askTool);
+    // Regression: tool descriptions must NOT instruct AI to auto-push or auto-block unprompted
+    assert.equal(/automatically whenever/i.test(notifyTool.description), false);
+    assert.ok(notifyTool.description.includes("仅当用户明确要求"));
+    assert.ok(askTool.description.includes("仅当用户明确要求"));
 
     const notifyCall = await sendAndWait({
       jsonrpc: "2.0",
@@ -265,6 +270,29 @@ test("MCP stdio server v0.2.0 exposes 5 tools and completes roundtrip", async ()
     const notifyPayload = JSON.parse(notifyCall.result.content[0].text);
     assert.equal(notifyPayload.ok, true);
     assert.equal(notifyPayload.targetKey, "ai:claude-code");
+
+    // Regression: tabpulse_ask_human when Hub is offline must return graceful JSON immediately instead of throwing or hanging
+    const askOfflineCall = await sendAndWait({
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tools/call",
+      params: {
+        name: "tabpulse_ask_human",
+        arguments: { agentName: "Antigravity", question: "是否确认？", timeoutSeconds: 30 },
+      },
+    });
+    assert.notEqual(askOfflineCall.result.isError, true);
+    const askOfflinePayload = JSON.parse(askOfflineCall.result.content[0].text);
+    assert.equal(askOfflinePayload.ok, false);
+    assert.equal(askOfflinePayload.hubOffline, true);
+
+    // Verify MAS UI hides unsupported sandbox elements & site checkout guards pending Creem KYC
+    const uiHtml = fs.readFileSync(path.join(PROJECT_ROOT, "hub", "ui", "index.html"), "utf-8");
+    assert.ok(uiHtml.includes("body.mas-mode #row-prevent-sleep"));
+    assert.ok(uiHtml.includes("body.mas-mode #tab-desktop"));
+    assert.ok(uiHtml.includes("body.mas-mode #tab-cc"));
+    const siteHtml = fs.readFileSync(path.join(PROJECT_ROOT, "site", "index.html"), "utf-8");
+    assert.ok(siteHtml.includes("const CREEM_LIVE_ENABLED = false;"));
   } finally {
     child.kill();
   }

@@ -675,6 +675,18 @@
       padding: 9px 15px; border-radius: 10px; font-size: 12.5px; font-weight: 600;
       display: none; z-index: 1200; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25);
     }
+
+    /* Mac App Store (MAS) Sandbox Safe Mode: strictly hide unsupported non-sandboxed shells & switches */
+    body.mas-mode #tab-desktop,
+    body.mas-mode #tab-cc,
+    body.mas-mode #view-desktop,
+    body.mas-mode #view-cc,
+    body.mas-mode #btn-mobile-qr,
+    body.mas-mode #row-prevent-sleep,
+    body.mas-mode #lbl-mob-prevent-sleep,
+    body.mas-mode #btn-update {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
@@ -1037,7 +1049,7 @@
             <li>🎁 <strong>Free Bonus</strong>: High-Converting Cold Reply Playbook</li>
             <li>🛡️ <strong>14-Day Guarantee</strong>: Catch a real lead or 100% refund</li>
           </ul>
-          <a class="btn primary" id="direct-buy-gl" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#pricing" target="_blank">Get Instant License Key →</a>
+          <a class="btn primary" id="direct-buy-gl" style="width:100%;justify-content:center;margin-top:6px;" href="https://a3152557994-ship-it.github.io/tabpulse/#checkout-gl-life" target="_blank">Get Instant License Key →</a>
           <button class="btn primary" id="mas-buy-life-gl" style="display:none;width:100%;justify-content:center;margin-top:6px;" onclick="buyMasIap('com.yanghe.replyradar.pro.lifetime')"> Unlock Lifetime via Apple ($14.99)</button>
         </div>
       </div>
@@ -1084,7 +1096,7 @@
         <input id="s-webhook" placeholder="直接粘贴 32 位 PushPlus Token / SCT... / Bark Key / https://..." />
       </div>
       <div id="push-test-msg" style="font-size:12px;min-height:18px;margin-top:4px;color:var(--muted);"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin:8px 0;gap:8px;flex-wrap:wrap;">
+      <div id="row-prevent-sleep" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin:8px 0;gap:8px;flex-wrap:wrap;">
         <div style="font-size:12.5px;color:#166534;">☕ <strong>防止电脑息屏/睡眠断联</strong>（出门随身看护建议开启）</div>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#15803d;cursor:pointer;">
           <input type="checkbox" id="s-prevent-sleep" onchange="togglePreventSleep(this.checked)" />
@@ -1135,7 +1147,7 @@
             <button class="sm primary" id="btn-toggle-tunnel" onclick="toggleMobileTunnel()">🔒 开启加密穿透</button>
             <button class="sm" onclick="copyPrimaryMobileUrl()">📋 复制链接</button>
             <button class="sm danger" onclick="emergencyLockMobile()" title="立即关闭外网与局域网连接，并让旧手机二维码立刻作废">🚨 一键断连换码</button>
-            <label style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:#047857;font-weight:700;cursor:pointer;margin-left:2px;" title="开启后阻止电脑自动睡眠断网">
+            <label id="lbl-mob-prevent-sleep" style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:#047857;font-weight:700;cursor:pointer;margin-left:2px;" title="开启后阻止电脑自动睡眠断网">
               <input type="checkbox" id="mob-prevent-sleep" onchange="togglePreventSleep(this.checked)" />
               <span>☕ 防休眠</span>
             </label>
@@ -1336,6 +1348,7 @@
     function applyStaticLanguage() {
       const en = currentLang === "en";
       const isMas = Boolean(window.__TABPULSE_MAS_MODE);
+      document.body.classList.toggle("mas-mode", isMas);
       document.title = en ? "ReplyRadar — Multi-Account Unread Inbox" : "消息总管 — 多平台未读消息与找单工作台";
       document.getElementById("t-title").textContent = en ? "ReplyRadar" : "消息总管";
       document.getElementById("t-guard-text").textContent = en ? "Zero-Reload Active" : "零刷页守护中";
@@ -1351,9 +1364,13 @@
       const mobBtn = document.getElementById("btn-mobile-qr");
       const deskTab = document.getElementById("tab-desktop");
       const ccTab = document.getElementById("tab-cc");
+      const preventSleepRow = document.getElementById("row-prevent-sleep");
+      const updBtn = document.getElementById("btn-update");
       if (mobBtn) mobBtn.style.display = isMas ? "none" : "flex";
       if (deskTab) deskTab.style.display = isMas ? "none" : "flex";
       if (ccTab) ccTab.style.display = isMas ? "none" : "flex";
+      if (preventSleepRow) preventSleepRow.style.display = isMas ? "none" : "flex";
+      if (updBtn) updBtn.style.display = isMas ? "none" : "inline-flex";
 
       document.getElementById("txt-mobile-btn").textContent = en ? "📲 Mobile Companion" : "📲 手机随身收件箱";
       document.getElementById("btn-push").textContent = en ? "⚙️ Settings" : "⚙️ 设置";
@@ -1689,7 +1706,7 @@
               </div>
             </div>
             ${w.snippet ? `<div class="snippet-box">${escapeHtml(w.snippet)}</div>` : ""}
-            <textarea class="draft-area" id="draft-${escapeAttr(w.id)}" placeholder="${en ? "Reply draft..." : "回复草稿（如开启 AI 个人助理会自动拟好填入，点下方复制并去发送）..."}">${escapeHtml(w.lastDraft || "")}</textarea>
+            <textarea class="draft-area" id="draft-${escapeAttr(w.id)}" placeholder="${en ? "Reply draft..." : (window.__TABPULSE_MAS_MODE ? "回复草稿（输入或粘贴话术，点下方复制并打开会话发送）..." : "回复草稿（如开启 AI 个人助理会自动拟好填入，点下方复制并去发送）...")}">${escapeHtml(w.lastDraft || "")}</textarea>
             <div style="display:flex;gap:8px;margin-top:6px;">
               <button class="sm soft-primary" onclick="copyDraft('${escapeAttr(w.id)}')">📋 ${en ? "Copy & Open" : "复制草稿并打开会话"}</button>
               <button class="sm" onclick="saveDraft('${escapeAttr(w.id)}')">💾 ${en ? "Save Draft" : "保存草稿"}</button>
@@ -1878,6 +1895,9 @@
     }
 
     function switchTab(tab) {
+      if (window.__TABPULSE_MAS_MODE && (tab === "desktop" || tab === "cc")) {
+        tab = "inbox";
+      }
       for (const k of ["inbox", "desktop", "cc", "replies", "scanner"]) {
         document.getElementById("tab-" + k)?.classList.toggle("active", tab === k);
         const v = document.getElementById("view-" + k);
@@ -2748,6 +2768,10 @@
     }
 
     function openSettingsModal() {
+      const isMas = Boolean(window.__TABPULSE_MAS_MODE);
+      document.body.classList.toggle("mas-mode", isMas);
+      const preventSleepRow = document.getElementById("row-prevent-sleep");
+      if (preventSleepRow) preventSleepRow.style.display = isMas ? "none" : "flex";
       document.getElementById("s-webhook").value = appState.settings?.webhookUrl || "";
       const sleepChk = document.getElementById("s-prevent-sleep");
       if (sleepChk) sleepChk.checked = Boolean(appState.settings?.preventSleep);
