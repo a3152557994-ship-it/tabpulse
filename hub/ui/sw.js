@@ -6,7 +6,18 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+function getScopeBasePrefix() {
+  try {
+    const scopePath = new URL(self.registration.scope).pathname.replace(/\/+$/, "");
+    const m = scopePath.match(/^(\/box\/bx_[a-zA-Z0-9]+)/);
+    return m ? m[1] : "";
+  } catch {
+    return "";
+  }
+}
+
 self.addEventListener("push", (event) => {
+  const prefix = getScopeBasePrefix();
   let data = { title: "🔔 消息总管新消息", body: "点击进入查看详情并回复", targetKey: "", unreadTotal: 1 };
   if (event.data) {
     try {
@@ -19,8 +30,8 @@ self.addEventListener("push", (event) => {
   const tasks = [
     self.registration.showNotification(data.title || "🔔 消息总管新消息", {
       body: data.body || "收到新消息提醒",
-      icon: "/mobile-icon.svg",
-      badge: "/mobile-icon.svg",
+      icon: `${prefix}/mobile-icon.svg`,
+      badge: `${prefix}/mobile-icon.svg`,
       tag: data.targetKey || "tabpulse-msg",
       renotify: true,
       data: { targetKey: data.targetKey || "" },
@@ -36,8 +47,9 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const prefix = getScopeBasePrefix();
   const targetKey = event.notification.data?.targetKey || "";
-  const targetUrl = targetKey ? `/m#open=${encodeURIComponent(targetKey)}` : "/m";
+  const targetUrl = targetKey ? `${prefix}/m#open=${encodeURIComponent(targetKey)}` : `${prefix}/m`;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {

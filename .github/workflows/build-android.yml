@@ -1,0 +1,107 @@
+name: Build & Release Android Standalone APK
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - main
+    paths:
+      - "android-app/**"
+      - "seed/platform-catalog.mjs"
+      - "extension/passive-observer.js"
+      - ".github/workflows/build-android.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional GitHub Release tag to attach XiaoXiZongGuan-Android.apk"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Sync 86-Platform Catalog & Passive Observer into Android Assets
+        run: |
+          mkdir -p android-app/app/src/main/assets
+          node -e "import('./seed/platform-catalog.mjs').then(m => import('node:fs').then(fs => fs.writeFileSync('android-app/app/src/main/assets/catalog.json', JSON.stringify({ categories: m.PLATFORM_CATALOG_CATEGORIES, platforms: m.PLATFORM_CATALOG }, null, 2))))"
+          cp extension/passive-observer.js android-app/app/src/main/assets/passive-observer.js
+          ls -lh android-app/app/src/main/assets/
+
+      - name: Decode Release Signing Keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            echo "$ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+            chmod 600 "$RUNNER_TEMP/release.p12"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run Kotlin Unit Tests & Assemble Signed Release APK
+        working-directory: android-app
+        env:
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          gradle testReleaseUnitTest assembleRelease --no-daemon --stacktrace
+
+      - name: Verify APK Signature & Size (<20 MB)
+        run: |
+          APK_SRC="android-app/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_SRC" ]; then
+            echo "Signed APK not found, checking unsigned..."
+            ls -la android-app/app/build/outputs/apk/release/
+            exit 1
+          fi
+          cp "$APK_SRC" XiaoXiZongGuan-Android.apk
+          SIZE_BYTES=$(stat -c%s XiaoXiZongGuan-Android.apk)
+          echo "APK size: $SIZE_BYTES bytes"
+          if [ "$SIZE_BYTES" -gt 20971520 ]; then
+            echo "ERROR: APK exceeds 20MB limit!"
+            exit 1
+          fi
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --verbose XiaoXiZongGuan-Android.apk
+          fi
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XiaoXiZongGuan-Android-APK
+          path: XiaoXiZongGuan-Android.apk
+
+      - name: Upload APK to GitHub Release (on tag push or manual tag input)
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "Uploading XiaoXiZongGuan-Android.apk to release $TAG..."
+          gh release upload "$TAG" XiaoXiZongGuan-Android.apk --clobber

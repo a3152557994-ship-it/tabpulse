@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import tls from "node:tls";
 import { promisify } from "node:util";
+import { desktopRelay } from "./mobile-bridge.mjs";
 import { broadcastMobileWebPush } from "./store.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -51,12 +53,28 @@ export function normalizeCustomerPushTarget(rawInput = "") {
   if (/^SCT[0-9a-zA-Z]{10,}$/.test(s)) {
     return { kind: "serverchan", url: `https://sctapi.ftqq.com/${s}.send`, token: s };
   }
+  if (/^tg:\/\/([^@\s]+)@(-?\d+)$/i.test(s)) {
+    const m = s.match(/^tg:\/\/([^@\s]+)@(-?\d+)$/i);
+    return {
+      kind: "telegram",
+      url: `https://api.telegram.org/bot${m[1]}/sendMessage`,
+      token: m[1],
+      chatId: m[2],
+    };
+  }
+  if (/^ntfy:\/\/([a-zA-Z0-9._-]{3,64})$/i.test(s)) {
+    const topic = s.replace(/^ntfy:\/\//i, "");
+    return { kind: "ntfy", url: `https://ntfy.sh/${topic}`, token: topic };
+  }
   if (/^[A-Za-z0-9]{20,28}$/.test(s)) {
     return { kind: "bark", url: `https://api.day.app/${s}`, token: s };
   }
   if (/^https?:\/\//i.test(s)) {
     if (process.env.TABPULSE_ALLOW_LOCAL_WEBHOOK_TEST !== "1" && isPrivateOrLocalWebhookHost(s)) {
       return { kind: "invalid", url: "", token: "" };
+    }
+    if (/^https?:\/\/ntfy\.sh\/[a-zA-Z0-9._-]+/i.test(s)) {
+      return { kind: "ntfy", url: s, token: "" };
     }
     return { kind: "url", url: s, token: "" };
   }
@@ -65,23 +83,118 @@ export function normalizeCustomerPushTarget(rawInput = "") {
 
 function inspectWebhookJsonResult(data, defaultChannel) {
   if (!data || typeof data !== "object") return { ok: true, channel: defaultChannel };
-  // PushPlus: { code: 200, msg: "请求成功" }
+  if (defaultChannel === "Telegram" && data.ok === false) {
+    return { ok: false, channel: defaultChannel, error: data.description || "Telegram 推送失败" };
+  }
   if (defaultChannel === "PushPlus" && typeof data.code === "number" && data.code !== 200) {
     return { ok: false, channel: defaultChannel, error: data.msg || `PushPlus 错误 (${data.code})` };
   }
-  // Bark: { code: 200, message: "success" }
   if (defaultChannel === "Bark" && typeof data.code === "number" && data.code !== 200) {
     return { ok: false, channel: defaultChannel, error: data.message || `Bark 错误 (${data.code})` };
   }
-  // Server酱 / Feishu: { code: 0, ... }
   if ((defaultChannel === "Server酱" || defaultChannel === "飞书") && typeof data.code === "number" && data.code !== 0) {
     return { ok: false, channel: defaultChannel, error: data.message || data.msg || `${defaultChannel} 错误 (${data.code})` };
   }
-  // WeCom / DingTalk: { errcode: 0, errmsg: "ok" }
   if (typeof data.errcode === "number" && data.errcode !== 0) {
     return { ok: false, channel: defaultChannel, error: data.errmsg || `${defaultChannel} 错误 (${data.errcode})` };
   }
   return { ok: true, channel: defaultChannel };
+}
+
+export async function sendEmailPushNotification(emailCfg, subject, text) {
+  if (!emailCfg || !emailCfg.enabled || !emailCfg.user || !emailCfg.pass) return null;
+  const user = String(emailCfg.user).trim();
+  const pass = String(emailCfg.pass).trim();
+  const to = String(emailCfg.to || user).trim();
+  const defaultHost = user.endsWith("@qq.com")
+    ? "smtp.qq.com"
+    : user.endsWith("@163.com")
+      ? "smtp.163.com"
+      : user.endsWith("@126.com")
+        ? "smtp.126.com"
+        : user.endsWith("@gmail.com")
+          ? "smtp.gmail.com"
+          : "";
+  const host = String(emailCfg.host || defaultHost).trim();
+  const port = Number(emailCfg.port) || 465;
+  if (!host || !to) return { ok: false, channel: "Email", error: "缺少 SMTP 服务器地址或收件箱" };
+  if (isPrivateOrLocalWebhookHost(`https://${host}`)) {
+    return { ok: false, channel: "Email", error: "不允许使用内网 SMTP 地址" };
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (res) => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch {}
+      resolve(res);
+    };
+
+    const socket = tls.connect({ host, port, servername: host, timeout: 10000 });
+    let buf = "";
+    let step = 0;
+
+    const sendLine = (line) => socket.write(`${line}\r\n`);
+    const encodeHeader = (str) => `=?UTF-8?B?${Buffer.from(String(str), "utf-8").toString("base64")}?=`;
+
+    socket.on("timeout", () => finish({ ok: false, channel: "Email", error: "SMTP 连接超时" }));
+    socket.on("error", (err) => finish({ ok: false, channel: "Email", error: err.message }));
+    socket.on("data", (chunk) => {
+      buf += chunk.toString("utf-8");
+      const lines = buf.split("\r\n");
+      buf = lines.pop() || "";
+      for (const line of lines) {
+        if (!line || /^\d{3}-/.test(line)) continue;
+        const code = parseInt(line.slice(0, 3), 10) || 0;
+        if (code >= 400) {
+          finish({ ok: false, channel: "Email", error: line.slice(0, 120) });
+          return;
+        }
+        if (step === 0 && code === 220) {
+          step = 1;
+          sendLine("EHLO replyradar.local");
+        } else if (step === 1 && code === 250) {
+          step = 2;
+          sendLine("AUTH LOGIN");
+        } else if (step === 2 && code === 334) {
+          step = 3;
+          sendLine(Buffer.from(user, "utf-8").toString("base64"));
+        } else if (step === 3 && code === 334) {
+          step = 4;
+          sendLine(Buffer.from(pass, "utf-8").toString("base64"));
+        } else if (step === 4 && code === 235) {
+          step = 5;
+          sendLine(`MAIL FROM:<${user}>`);
+        } else if (step === 5 && code === 250) {
+          step = 6;
+          sendLine(`RCPT TO:<${to}>`);
+        } else if (step === 6 && (code === 250 || code === 251)) {
+          step = 7;
+          sendLine("DATA");
+        } else if (step === 7 && code === 354) {
+          step = 8;
+          const bodyB64 = Buffer.from(String(text || ""), "utf-8").toString("base64");
+          const mime = [
+            `From: ${encodeHeader("消息总管")} <${user}>`,
+            `To: <${to}>`,
+            `Subject: ${encodeHeader(subject)}`,
+            "MIME-Version: 1.0",
+            "Content-Type: text/plain; charset=UTF-8",
+            "Content-Transfer-Encoding: base64",
+            "",
+            bodyB64,
+            ".",
+          ].join("\r\n");
+          sendLine(mime);
+        } else if (step === 8 && code === 250) {
+          step = 9;
+          sendLine("QUIT");
+          finish({ ok: true, channel: "Email" });
+        }
+      }
+    });
+  });
 }
 
 export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = "") {
@@ -91,7 +204,7 @@ export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = 
     return {
       ok: false,
       channel: "invalid",
-      error: "格式不正确：请粘贴 32 位 PushPlus 口令、SCT 开头 SendKey、Bark 码或 https:// 开头链接",
+      error: "格式不正确：支持 32位 PushPlus 口令、SCT SendKey、Bark码、tg://BotToken@ChatId、ntfy://主题 或 https:// 链接",
     };
   }
   const url = norm.url;
@@ -109,10 +222,35 @@ export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = 
       return { status: r.status, ...inspectWebhookJsonResult(data, "PushPlus") };
     }
 
-    // Bark GET URL support (https://api.day.app/<key>) with ?url= jump straight into Mobile Pocket Console
+    if (norm.kind === "telegram") {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: norm.chatId, text: `${title}\n${fullText}` }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) return { status: r.status, ok: false, channel: "Telegram", error: data?.description || `HTTP ${r.status}` };
+      return { status: r.status, ...inspectWebhookJsonResult(data, "Telegram") };
+    }
+
+    if (norm.kind === "ntfy") {
+      const headers = {
+        Title: Buffer.from(title, "utf-8").toString("ascii").replace(/[^\x20-\x7E]/g, "") || "ReplyRadar Alert",
+        Priority: "high",
+      };
+      if (mobileLink) headers.Click = mobileLink;
+      const r = await fetch(url, {
+        method: "POST",
+        headers,
+        body: `${title}\n${fullText}`,
+      });
+      if (!r.ok) return { status: r.status, ok: false, channel: "ntfy", error: `HTTP ${r.status}` };
+      return { status: r.status, ok: true, channel: "ntfy" };
+    }
+
     if (norm.kind === "bark" || (url.includes("api.day.app/") && url.replace(/\/+$/, "").split("/").length === 4)) {
       const base = url.replace(/\/+$/, "");
-      const q = mobileLink ? `?url=${encodeURIComponent(mobileLink)}` : "";
+      const q = mobileLink ? `?url=${encodeURIComponent(mobileLink)}&sound=minuet` : "?sound=minuet";
       const barkUrl = `${base}/${encodeURIComponent(title)}/${encodeURIComponent(text)}${q}`;
       const r = await fetch(barkUrl);
       const data = await r.json().catch(() => null);
@@ -159,7 +297,12 @@ export async function sendCustomerWebhook(webhookUrl, title, text, mobileLink = 
   }
 }
 
-async function showMacBanner(title, subtitle) {
+async function showMacBanner(title, subtitle, watchId = "", targetKey = "") {
+  // Primary: Push directly to connected native macOS 消息总管.app (UNUserNotificationCenter + Glass sound + clickable jump!)
+  if (desktopRelay.isDesktopConnected()) {
+    desktopRelay.pushNativeNotice({ title, body: subtitle, watchId, targetKey });
+    return "native-app";
+  }
   if (process.platform !== "darwin" || !fs.existsSync("/usr/bin/osascript")) return null;
   try {
     const safeTitle = String(title).slice(0, 64).replace(/["\\]/g, "'");
@@ -169,7 +312,7 @@ async function showMacBanner(title, subtitle) {
       ["-e", `display notification "${safeSub}" with title "${safeTitle}" sound name "Glass"`],
       { timeout: 5000 }
     );
-    return "shown";
+    return "osascript";
   } catch {
     return null;
   }
@@ -215,10 +358,12 @@ export async function notifyUnread(item, settings = {}, mobileLink = "") {
     return { skipped: true, reason: "TABPULSE_DISABLE_EXTERNAL_EFFECTS=1" };
   }
 
-  const result = { macBanner: null, agent: null, webhook: null, webPush: null };
+  const result = { macBanner: null, agent: null, webhook: null, email: null, webPush: null };
   result.macBanner = await showMacBanner(
     `消息总管：${item.name} (${item.unreadCount}条新消息)`,
-    item.snippet || item.contextSummary || "点击打开工作台或手机随身端直接回复"
+    item.snippet || item.contextSummary || "点击打开工作台或手机随身端直接回复",
+    item.id,
+    targetKey
   );
 
   result.webPush = await broadcastMobileWebPush({
@@ -229,6 +374,15 @@ export async function notifyUnread(item, settings = {}, mobileLink = "") {
 
   if (settings?.webhookUrl) {
     result.webhook = await sendCustomerWebhook(settings.webhookUrl, subject, body, deepLink);
+  }
+
+  if (settings?.emailPush?.enabled) {
+    const emailBody = deepLink ? `${body}\n\n📱 手机直达回复：${deepLink}` : body;
+    result.email = await sendEmailPushNotification(settings.emailPush, subject, emailBody).catch((e) => ({
+      ok: false,
+      channel: "Email",
+      error: e.message,
+    }));
   }
 
   if (item.conversationId && fs.existsSync(AGENTAPI_BIN)) {
@@ -258,13 +412,14 @@ export async function notifyAuthExpired(item, settings = {}, mobileLink = "") {
   const targetKey = `web:${item.id}`;
   const deepLink = mobileLink ? `${mobileLink}#open=${encodeURIComponent(targetKey)}` : "";
   const title = `🟠【消息总管】登录待刷新：${item.name}`;
-  const summary = `平台「${item.name}」当前未登录，已自动停检保护账号。`;
+  const summary = `平台「${item.name}」登录已过期，请在电脑或手机端直接扫码续登。`;
 
   if (externalEffectsDisabled()) {
     notificationLog.push({ type: "auth_expired", id: item.id, title, summary, skipped: true });
     return { skipped: true, reason: "TABPULSE_DISABLE_EXTERNAL_EFFECTS=1" };
   }
 
+  await showMacBanner(title, summary, item.id, targetKey);
   await broadcastMobileWebPush({
     title,
     body: summary,
@@ -283,7 +438,7 @@ export async function notifyAgentAlert({ title, summary, targetKey = "" }, setti
     return { skipped: true };
   }
   const deepLink = mobileLink && targetKey ? `${mobileLink}#open=${encodeURIComponent(targetKey)}` : mobileLink;
-  await showMacBanner(title, summary);
+  await showMacBanner(title, summary, "", targetKey);
   const webPush = await broadcastMobileWebPush({
     title,
     body: summary,
@@ -293,5 +448,13 @@ export async function notifyAgentAlert({ title, summary, targetKey = "" }, setti
   if (settings?.webhookUrl) {
     webhook = await sendCustomerWebhook(settings.webhookUrl, title, summary, deepLink);
   }
-  return { ok: true, webhook, webPush };
+  let email = null;
+  if (settings?.emailPush?.enabled) {
+    email = await sendEmailPushNotification(
+      settings.emailPush,
+      title,
+      deepLink ? `${summary}\n\n📱 手机直达：${deepLink}` : summary
+    ).catch(() => null);
+  }
+  return { ok: true, webhook, email, webPush };
 }

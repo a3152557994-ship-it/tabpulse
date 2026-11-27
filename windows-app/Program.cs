@@ -99,6 +99,15 @@ internal static class PushTargetHelper
         if (Regex.IsMatch(trimmed, "^SCT[a-zA-Z0-9]{10,64}$"))
             return ($"https://sctapi.ftqq.com/{trimmed}.send", "serverchan", trimmed);
 
+        if (trimmed.StartsWith("tg://", StringComparison.OrdinalIgnoreCase) && trimmed.Contains('@'))
+            return (trimmed[5..], "telegram", "");
+
+        if (trimmed.StartsWith("ntfy://", StringComparison.OrdinalIgnoreCase))
+        {
+            var topic = trimmed[7..].Trim('/');
+            if (!string.IsNullOrEmpty(topic)) return ($"https://ntfy.sh/{topic}", "ntfy", topic);
+        }
+
         if (Regex.IsMatch(trimmed, "^[A-Za-z0-9]{20,28}$") && !trimmed.StartsWith("TP1"))
             return ($"https://api.day.app/{trimmed}", "bark", trimmed);
 
@@ -109,6 +118,7 @@ internal static class PushTargetHelper
         if (host == "localhost" || host == "0.0.0.0" || host == "::1" || host.EndsWith(".local") ||
             host.StartsWith("127.") || host.StartsWith("10.") || host.StartsWith("192.168.") || host.StartsWith("169.254."))
             return ("", "invalid", "");
+        if (host == "ntfy.sh") return (trimmed, "ntfy", "");
         if (host.Contains("pushplus.plus")) return (trimmed, "pushplus_url", "");
         if (host.Contains("sctapi.ftqq.com")) return (trimmed, "serverchan", "");
         if (host.Contains("api.day.app")) return (trimmed.TrimEnd('/'), "bark", "");
@@ -309,6 +319,27 @@ internal sealed class MainDashboardForm : Form
                 return (true, ch, "");
             }
 
+            if (kind == "telegram")
+            {
+                var parts = targetUrl.Split('@', 2);
+                if (parts.Length == 2)
+                {
+                    var tgBody = new JsonObject { ["chat_id"] = parts[1], ["text"] = full };
+                    using var tgContent = new StringContent(tgBody.ToJsonString(), Encoding.UTF8, "application/json");
+                    var r = await Http.PostAsync($"https://api.telegram.org/bot{parts[0]}/sendMessage", tgContent);
+                    var b = await r.Content.ReadAsStringAsync();
+                    return EvalJson(r, b, "Telegram");
+                }
+            }
+            if (kind == "ntfy")
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, targetUrl);
+                req.Headers.Add("Title", "ReplyRadar Alert");
+                req.Headers.Add("Priority", "high");
+                req.Content = new StringContent(full, Encoding.UTF8, "text/plain");
+                var r = await Http.SendAsync(req);
+                return (r.IsSuccessStatusCode, "ntfy", r.IsSuccessStatusCode ? "" : $"HTTP {(int)r.StatusCode}");
+            }
             if (kind == "bark" && targetUrl.Split('/').Length <= 4)
             {
                 var r = await Http.GetAsync($"{targetUrl}/{Uri.EscapeDataString(title)}/{Uri.EscapeDataString(bodyText)}?sound=minuet");
@@ -725,6 +756,42 @@ internal sealed class MainDashboardForm : Form
             var arr = File.Exists(pFile) ? JsonNode.Parse(File.ReadAllText(pFile)) : new JsonArray();
             return new JsonObject { ["ok"] = true, ["packs"] = arr };
         }
+        if (path == "/api/catalog")
+        {
+            var cFile = Path.Combine(AppContext.BaseDirectory, "resources", "catalog.json");
+            if (File.Exists(cFile))
+            {
+                var obj = JsonNode.Parse(File.ReadAllText(cFile))?.AsObject() ?? new JsonObject();
+                obj["ok"] = true;
+                return obj;
+            }
+            return new JsonObject { ["ok"] = true, ["categories"] = new JsonArray(), ["platforms"] = new JsonArray() };
+        }
+        if (method == "POST" && path.EndsWith("/unbind"))
+        {
+            var targetId = Uri.UnescapeDataString(path.Replace("/api/watches/", "").Replace("/unbind", ""));
+            if (_workspaceForms.TryGetValue(targetId, out var wf))
+            {
+                _workspaceForms.Remove(targetId);
+                _workspaceWebViews.Remove(targetId);
+                try { wf.Dispose(); } catch { }
+            }
+            var safeFolder = string.Concat(targetId.Select(c => char.IsLetterOrDigit(c) || c == '-' ? c : '_'));
+            var profileDir = Path.Combine(_appRoot, "profiles", safeFolder);
+            try { if (Directory.Exists(profileDir)) Directory.Delete(profileDir, true); } catch { }
+            foreach (var w in watches)
+            {
+                var o = w?.AsObject();
+                if (o?["id"]?.GetValue<string>() == targetId)
+                {
+                    o["status"] = "auth_expired";
+                    o["unreadCount"] = 0;
+                    o["snippet"] = "";
+                }
+            }
+            SaveState(st);
+            return new JsonObject { ["ok"] = true, ["unbound"] = true };
+        }
         if (path.StartsWith("/api/scan-leads"))
         {
             var q = "Shopify";
@@ -984,7 +1051,7 @@ internal sealed class MainDashboardForm : Form
         var detectedIp = GetLanIPv4();
         var lanUrl = allowLan ? $"http://{detectedIp}:{_mobilePort}/m?t={tok}" : $"http://127.0.0.1:{_mobilePort}/m?t={tok}";
         var permUrl = (!string.IsNullOrEmpty(_publicTunnelUrl) && !string.IsNullOrEmpty(boxId))
-            ? $"{EdgeGatewayOrigin}/go/{boxId}?t={tok}"
+            ? $"{EdgeGatewayOrigin}/box/{boxId}/m?t={tok}"
             : "";
         var rawTun = !string.IsNullOrEmpty(_publicTunnelUrl) ? $"{_publicTunnelUrl}/m?t={tok}" : "";
         var tunUrl = !string.IsNullOrEmpty(permUrl) ? permUrl : rawTun;
@@ -1213,7 +1280,7 @@ internal sealed class MainDashboardForm : Form
 
             if (pathname == "/api/health")
             {
-                await SendJsonObjAsync(new JsonObject { ["ok"] = true, ["version"] = "5.5.0", ["standalone"] = true });
+                await SendJsonObjAsync(new JsonObject { ["ok"] = true, ["version"] = "5.6.0", ["standalone"] = true });
                 return;
             }
             if (pathname == "/sw.js")
@@ -1223,7 +1290,7 @@ internal sealed class MainDashboardForm : Form
                 return;
             }
 
-            if (pathname.StartsWith("/api/mobile/") || pathname == "/api/settings" || pathname == "/api/license/activate")
+            if (pathname == "/api/mobile/info" || pathname == "/api/mobile/tunnel" || pathname == "/api/settings" || pathname == "/api/license/activate")
             {
                 await SendJsonObjAsync(new JsonObject { ["ok"] = false, ["error"] = "desktop only" }, 403);
                 return;
@@ -1274,12 +1341,28 @@ internal sealed class MainDashboardForm : Form
                 return;
             }
             lock (_failedAuthByIp) { _failedAuthByIp.Remove(clientIp); }
-            var extraCookie = "Referrer-Policy: no-referrer\r\nX-Frame-Options: DENY\r\n" + (!string.IsNullOrEmpty(queryTok) ? $"Set-Cookie: tp_mob_tok={expectedTok}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000\r\n" : "");
+            var extraCookie = "Referrer-Policy: no-referrer\r\nX-Frame-Options: DENY\r\n" + (!string.IsNullOrEmpty(queryTok) ? $"Set-Cookie: tp_mob_tok={expectedTok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000\r\n" : "");
 
             if (pathname == "/" || pathname == "/m")
             {
                 var mf = Path.Combine(AppContext.BaseDirectory, "resources", "mobile.html");
                 if (File.Exists(mf)) await SendRawAsync(200, "text/html; charset=utf-8", File.ReadAllBytes(mf), extraCookie);
+                return;
+            }
+            if (pathname == "/api/mobile/bundle")
+            {
+                var stateOut = await HandleApiAsync("GET", "/api/state", null);
+                var deskOut = ScanWindowsDesktopState();
+                var bundle = new JsonObject
+                {
+                    ["ok"] = true,
+                    ["state"] = stateOut,
+                    ["desktop"] = deskOut,
+                    ["cc"] = new JsonObject { ["ok"] = true, ["sessions"] = new JsonArray(), ["hookEvents"] = new JsonArray() },
+                    ["aiInbox"] = new JsonObject { ["ok"] = true, ["channels"] = new JsonArray() },
+                    ["aiButler"] = new JsonObject { ["ok"] = true, ["suggestions"] = new JsonObject() }
+                };
+                await SendJsonObjAsync(bundle, 200, extraCookie);
                 return;
             }
             if (pathname == "/api/events-stream")

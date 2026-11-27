@@ -79,7 +79,7 @@ const DEFAULT_QUICK_REPLIES = DEFAULT_QUICK_REPLIES_RAW.map(normalizeQuickReply)
 
 function makeDefaultState(now = new Date()) {
   return {
-    version: "5.5.0",
+    version: "5.6.0",
     extensionHeartbeatAt: null,
     license: null,
     mobileToken: crypto.randomBytes(24).toString("base64url"),
@@ -89,6 +89,8 @@ function makeDefaultState(now = new Date()) {
     pushSubscriptions: [],
     settings: {
       webhookUrl: "",
+      emailPush: { enabled: false, host: "", port: 465, user: "", pass: "", to: "" },
+      keepAliveEnabled: true,
       radarKeywords: "Shopify",
       lang: "zh",
       preventSleep: false,
@@ -219,8 +221,31 @@ export function activateLicenseKey(rawKey, nowDate = new Date()) {
 export function updateSettings(patch = {}, nowDate = new Date()) {
   const state = loadState(nowDate);
   const current = state.settings || { webhookUrl: "", radarKeywords: "Shopify", lang: "zh", termsAcceptedAt: null };
+  const prevEmail = (current.emailPush && typeof current.emailPush === "object")
+    ? current.emailPush
+    : { enabled: false, host: "", port: 465, user: "", pass: "", to: "" };
+  const nextEmail = patch.emailPush && typeof patch.emailPush === "object"
+    ? {
+        enabled: patch.emailPush.enabled !== undefined ? Boolean(patch.emailPush.enabled) : Boolean(prevEmail.enabled),
+        host: patch.emailPush.host !== undefined ? String(patch.emailPush.host || "").trim() : String(prevEmail.host || ""),
+        port: patch.emailPush.port !== undefined ? Number(patch.emailPush.port) || 465 : Number(prevEmail.port) || 465,
+        user: patch.emailPush.user !== undefined ? String(patch.emailPush.user || "").trim() : String(prevEmail.user || ""),
+        pass:
+          patch.emailPush.pass !== undefined && patch.emailPush.pass !== "••••••••"
+            ? String(patch.emailPush.pass || "").trim()
+            : String(prevEmail.pass || ""),
+        to: patch.emailPush.to !== undefined ? String(patch.emailPush.to || "").trim() : String(prevEmail.to || ""),
+      }
+    : prevEmail;
   state.settings = {
     webhookUrl: patch.webhookUrl !== undefined ? String(patch.webhookUrl || "").trim() : current.webhookUrl,
+    emailPush: nextEmail,
+    keepAliveEnabled:
+      patch.keepAliveEnabled !== undefined
+        ? Boolean(patch.keepAliveEnabled)
+        : current.keepAliveEnabled !== undefined
+          ? Boolean(current.keepAliveEnabled)
+          : true,
     radarKeywords:
       patch.radarKeywords !== undefined ? String(patch.radarKeywords || "").trim() : current.radarKeywords,
     lang: patch.lang === "en" ? "en" : patch.lang === "zh" ? "zh" : current.lang || "zh",
@@ -479,6 +504,7 @@ export function recordProbeReport(id, report = {}, nowDate = new Date(), randomF
       item.status = "auth_expired";
     }
   } else if (unreadCount > 0) {
+    item.lastLoginVerifiedAt = nowIso;
     if (fingerprint !== item.lastFingerprint) {
       shouldAlertUnread = true;
       item.lastFingerprint = fingerprint;
@@ -491,6 +517,7 @@ export function recordProbeReport(id, report = {}, nowDate = new Date(), randomF
       item.status = "unread";
     }
   } else {
+    item.lastLoginVerifiedAt = nowIso;
     item.unreadCount = 0;
     item.snippet = "";
     item.lastFingerprint = "";
@@ -551,6 +578,24 @@ export function resolveWatch(id, action = "resolve", nowDate = new Date()) {
     item.nextCheckAt = computeNextCheck(item, nowDate);
   }
 
+  state.watches[idx] = item;
+  saveState(state);
+  return item;
+}
+
+export function unbindWatch(id, nowDate = new Date()) {
+  const state = loadState(nowDate);
+  const idx = state.watches.findIndex((w) => w.id === id);
+  if (idx < 0) return null;
+  const item = {
+    ...state.watches[idx],
+    status: "auth_expired",
+    unreadCount: 0,
+    snippet: "",
+    lastFingerprint: "",
+    lastLoginVerifiedAt: null,
+    unboundAt: nowDate.toISOString(),
+  };
   state.watches[idx] = item;
   saveState(state);
   return item;
@@ -645,7 +690,7 @@ export function getPublicSummary(nowDate = new Date()) {
   const authExpiredWatches = watches.filter((w) => w.status === "auth_expired");
   const pausedWatches = watches.filter((w) => w.status === "paused");
   return {
-    version: "5.4.0",
+    version: "5.6.0",
     pushSubscribersCount: (state.pushSubscriptions || []).length,
     extensionHeartbeatAt: state.extensionHeartbeatAt,
     license: getLicenseStatus(nowDate, state),

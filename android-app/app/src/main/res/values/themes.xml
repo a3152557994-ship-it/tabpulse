@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.XiaoXiZongGuan" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">#0B1120</item>
+        <item name="android:statusBarColor">#0B1120</item>
+        <item name="android:navigationBarColor">#0B1120</item>
+        <item name="colorPrimary">#3B82F6</item>
+        <item name="colorPrimaryDark">#0B1120</item>
+        <item name="colorAccent">#3B82F6</item>
+    </style>
+</resources>

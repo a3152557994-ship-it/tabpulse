@@ -25,6 +25,14 @@ const ALLOWED_RELEASE_ASSETS = new Map([
     "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/ReplyRadar-EN-Windows-x64.zip",
   ],
   [
+    "XiaoXiZongGuan-Android.apk",
+    "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-Android.apk",
+  ],
+  [
+    "消息总管-安卓手机版.apk",
+    "https://github.com/a3152557994-ship-it/tabpulse/releases/latest/download/XiaoXiZongGuan-Android.apk",
+  ],
+  [
     "cloudflared-darwin-arm64.tgz",
     "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz",
   ],
@@ -366,7 +374,7 @@ export default {
         return Response.json({ ok: false, error: "unknown asset" }, { status: 404, headers: cors });
       }
       const noCache = url.searchParams.get("nocache") === "1";
-      const cacheKey = new Request(`https://edge-cache.replyradar.internal/v55/${encodeURIComponent(name)}`, {
+      const cacheKey = new Request(`https://edge-cache.replyradar.internal/v56/${encodeURIComponent(name)}`, {
         method: "GET",
       });
       const cache = caches.default;
@@ -432,20 +440,12 @@ export default {
       return Response.json({ ok: true, permanentUrl, ...res }, { headers: cors });
     }
 
-    // 5. Permanent Bookmark Redirect (/go/:boxId?t=...)
+    // 5. Permanent Bookmark Redirect (/go/:boxId?t=...) -> Stable same-origin reverse proxy /box/:boxId/m
     const goMatch = url.pathname.match(/^\/go\/(bx_[a-zA-Z0-9]{10,36})\/?$/);
     if (goMatch && (request.method === "GET" || request.method === "HEAD")) {
       const boxId = goMatch[1];
-      const stub = env.TUNNEL_BOX.getByName(boxId);
-      const info = await stub.getTunnel();
-      if (!info || !info.targetOrigin) {
-        return new Response(renderOfflinePage(boxId, ""), {
-          status: 503,
-          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
-        });
-      }
       const tok = url.searchParams.get("t") || "";
-      const dest = `${info.targetOrigin}/m${tok ? `?t=${encodeURIComponent(tok)}` : ""}`;
+      const dest = `${url.origin}/box/${boxId}/m${tok ? `?t=${encodeURIComponent(tok)}` : ""}`;
       return new Response(null, {
         status: 302,
         headers: {
@@ -455,6 +455,128 @@ export default {
           "X-Content-Type-Options": "nosniff",
         },
       });
+    }
+
+    // 6. Permanent Same-Origin Reverse Proxy (/box/:boxId/*) -> Keeps Mobile Cookies, PWA Icon & Web Push Alive Forever!
+    const boxMatch = url.pathname.match(/^\/box\/(bx_[a-zA-Z0-9]{10,36})(\/.*)?$/);
+    if (boxMatch) {
+      const boxId = boxMatch[1];
+      const subPath = boxMatch[2] || "/m";
+      const stub = env.TUNNEL_BOX.getByName(boxId);
+      const info = await stub.getTunnel();
+      if (!info || !info.targetOrigin) {
+        if (subPath.startsWith("/api/")) {
+          return Response.json(
+            { ok: false, offline: true, error: "电脑端《消息总管》当前离线，请确认电脑已开机并开启穿透" },
+            { status: 503, headers: { "Cache-Control": "no-store" } }
+          );
+        }
+        return new Response(renderOfflinePage(boxId, ""), {
+          status: 503,
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        });
+      }
+
+      if (subPath === "/manifest.webmanifest" && request.method === "GET") {
+        return Response.json(
+          {
+            name: "消息总管 · 手机随身版",
+            short_name: "消息总管",
+            start_url: `/box/${boxId}/m`,
+            scope: `/box/${boxId}/`,
+            display: "standalone",
+            background_color: "#0b1120",
+            theme_color: "#0b1120",
+            icons: [
+              {
+                src: `/box/${boxId}/mobile-icon.svg`,
+                sizes: "512x512",
+                type: "image/svg+xml",
+                purpose: "any maskable",
+              },
+            ],
+          },
+          { headers: { "Content-Type": "application/manifest+json; charset=utf-8", "Cache-Control": "no-store" } }
+        );
+      }
+
+      const upstreamUrl = `${info.targetOrigin}${subPath}${url.search}`;
+      const fwdHeaders = new Headers();
+      for (const hName of ["accept", "content-type", "cookie", "authorization", "x-tabpulse-token", "user-agent"]) {
+        const val = request.headers.get(hName);
+        if (val) fwdHeaders.set(hName, val);
+      }
+      const cfIp = request.headers.get("cf-connecting-ip");
+      if (cfIp) fwdHeaders.set("x-forwarded-for", cfIp);
+      fwdHeaders.set("x-forwarded-proto", "https");
+      fwdHeaders.set("x-tabpulse-box-prefix", `/box/${boxId}`);
+
+      try {
+        let fwdBody = undefined;
+        if (request.method !== "GET" && request.method !== "HEAD") {
+          const buf = await request.arrayBuffer();
+          fwdBody = buf;
+          fwdHeaders.set("content-length", String(buf.byteLength));
+        }
+        const upRes = await fetch(upstreamUrl, {
+          method: request.method,
+          headers: fwdHeaders,
+          body: fwdBody,
+          redirect: "manual",
+        });
+
+        if (upRes.status >= 502 && upRes.status <= 504) {
+          if (subPath.startsWith("/api/")) {
+            return Response.json(
+              { ok: false, offline: true, error: "家里电脑隧道重连中，请稍等几秒后重试" },
+              { status: 503, headers: { "Cache-Control": "no-store" } }
+            );
+          }
+          return new Response(renderOfflinePage(boxId, info.updatedAt), {
+            status: 503,
+            headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+          });
+        }
+
+        const outHeaders = new Headers();
+        for (const [k, v] of upRes.headers.entries()) {
+          const lk = k.toLowerCase();
+          if (lk === "set-cookie") {
+            const rewritten = v
+              .replace(/Path=\/([^;]*)/i, `Path=/box/${boxId}/`)
+              .replace(/SameSite=Strict/i, "SameSite=Lax");
+            outHeaders.append("Set-Cookie", rewritten.includes("Secure") ? rewritten : `${rewritten}; Secure`);
+          } else if (lk === "location") {
+            outHeaders.set(
+              "Location",
+              v.startsWith("/") ? `/box/${boxId}${v}` : v
+            );
+          } else if (lk === "service-worker-allowed") {
+            outHeaders.set("Service-Worker-Allowed", `/box/${boxId}/`);
+          } else if (lk !== "content-length" && lk !== "transfer-encoding") {
+            outHeaders.set(k, v);
+          }
+        }
+        if (subPath === "/sw.js") {
+          outHeaders.set("Service-Worker-Allowed", `/box/${boxId}/`);
+        }
+
+        return new Response(upRes.body, {
+          status: upRes.status,
+          headers: outHeaders,
+        });
+      } catch {
+        if (subPath.startsWith("/api/")) {
+          return Response.json(
+            { ok: false, offline: true, error: "暂时无法连上家里电脑，请确认电脑端软件正在运行" },
+            { status: 503, headers: { "Cache-Control": "no-store" } }
+          );
+        }
+        return new Response(renderOfflinePage(boxId, info.updatedAt), {
+          status: 503,
+          headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        });
+      }
     }
 
     return Response.json({ ok: false, error: "not found" }, { status: 404, headers: cors });

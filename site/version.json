@@ -1,12 +1,13 @@
 {
-  "latestVersion": "5.5.0",
-  "publishedAt": "2026-11-25",
+  "latestVersion": "5.6.0",
+  "publishedAt": "2026-11-27",
   "downloadUrl": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-macOS.dmg",
   "downloadUrlWinCn": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-Windows-x64.zip",
   "downloadUrlWinEn": "https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-Windows-x64.zip",
-  "notesCn": "v5.5.0 安全加固与零网址傻瓜版：内置闲鱼、小红书、抖店、拼多多、BOSS直聘等 38 个常用平台点图标一键添加（免复制网址），默认关闭公共 Wi-Fi 局域网端口防攻击，新增配对密钥自动隐身与一键断连换码！",
-  "notesZh": "v5.5.0 安全加固与零网址傻瓜版：内置闲鱼、小红书、抖店、拼多多、BOSS直聘等 38 个常用平台点图标一键添加（免复制网址），默认关闭公共 Wi-Fi 局域网端口防攻击，新增配对密钥自动隐身与一键断连换码！",
-  "notesEn": "v5.5.0 Security & Zero-URL Edition: Built-in 38+ one-click platform icon directory (no URL copying needed), loopback-only default to block public Wi-Fi attacks, automatic URL token scrubbing, and 1-tap emergency disconnect!"
+  "downloadUrlAndroid": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-Android.apk",
+  "notesCn": "v5.6.0 手机电脑双端超级版：新增原生安卓独立版 APK（无需电脑也能独立登录86个常用/小众平台、长效保活、后台收消息弹窗提醒）；桌面端新增86平台常用+小众目录、Cookie保险库持久登录直至解绑、原生通知+多渠道推送与固定同源手机入口！",
+  "notesZh": "v5.6.0 手机电脑双端超级版：新增原生安卓独立版 APK（无需电脑也能独立登录86个常用/小众平台、长效保活、后台收消息弹窗提醒）；桌面端新增86平台常用+小众目录、Cookie保险库持久登录直至解绑、原生通知+多渠道推送与固定同源手机入口！",
+  "notesEn": "v5.6.0 Mobile + Desktop Edition: Native standalone Android APK (works with or without a PC, 86 popular + niche platforms, persistent session cookies, background foreground-service notifications) + desktop 86-platform directory, session cookie vault, and permanent same-origin mobile gateway!"
 }

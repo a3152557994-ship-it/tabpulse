@@ -25,7 +25,7 @@ func resolveSpintaxSwift(_ raw: String) -> String {
     return result
 }
 
-let SAFARI_DESKTOP_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15"
+let SAFARI_DESKTOP_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15"
 
 enum WebhookDispatcher {
     static func normalizePushInput(_ raw: String) -> (mode: String, target: String) {
@@ -37,6 +37,13 @@ enum WebhookDispatcher {
         if s.range(of: "^[0-9a-fA-F]{32}$", options: .regularExpression) != nil {
             return ("pushplus", s)
         }
+        if s.lowercased().hasPrefix("tg://") && s.contains("@") {
+            return ("telegram", String(s.dropFirst(5)))
+        }
+        if s.lowercased().hasPrefix("ntfy://") {
+            let topic = String(s.dropFirst(7)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if !topic.isEmpty { return ("ntfy", "https://ntfy.sh/\(topic)") }
+        }
         if s.range(of: "^[A-Za-z0-9]{20,28}$", options: .regularExpression) != nil && !s.hasPrefix("TP1") {
             return ("bark", "https://api.day.app/\(s)")
         }
@@ -46,6 +53,7 @@ enum WebhookDispatcher {
                    h.hasPrefix("127.") || h.hasPrefix("10.") || h.hasPrefix("192.168.") || h.hasPrefix("169.254.") {
                     return ("invalid", "")
                 }
+                if h == "ntfy.sh" { return ("ntfy", s) }
             }
             return ("url", s)
         }
@@ -101,6 +109,35 @@ enum WebhookDispatcher {
             ])
             URLSession.shared.dataTask(with: req) { d, r, e in
                 let res = evaluatePushResponse(data: d, resp: r, err: e, channel: "PushPlus")
+                completion?(res.0, res.1, res.2)
+            }.resume()
+            return
+        }
+
+        if norm.mode == "telegram" {
+            let comps = norm.target.split(separator: "@", maxSplits: 1).map(String.init)
+            if comps.count == 2, let tgURL = URL(string: "https://api.telegram.org/bot\(comps[0])/sendMessage") {
+                var req = URLRequest(url: tgURL, timeoutInterval: 8.0)
+                req.httpMethod = "POST"
+                req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+                req.httpBody = try? JSONSerialization.data(withJSONObject: ["chat_id": comps[1], "text": fullText])
+                URLSession.shared.dataTask(with: req) { d, r, e in
+                    let res = evaluatePushResponse(data: d, resp: r, err: e, channel: "Telegram")
+                    completion?(res.0, res.1, res.2)
+                }.resume()
+                return
+            }
+        }
+
+        if norm.mode == "ntfy", let ntfyURL = URL(string: norm.target) {
+            var req = URLRequest(url: ntfyURL, timeoutInterval: 8.0)
+            req.httpMethod = "POST"
+            req.setValue("ReplyRadar Alert", forHTTPHeaderField: "Title")
+            req.setValue("high", forHTTPHeaderField: "Priority")
+            if !siteUrl.isEmpty { req.setValue(siteUrl, forHTTPHeaderField: "Click") }
+            req.httpBody = Data(fullText.utf8)
+            URLSession.shared.dataTask(with: req) { d, r, e in
+                let res = evaluatePushResponse(data: d, resp: r, err: e, channel: "ntfy")
                 completion?(res.0, res.1, res.2)
             }.resume()
             return
@@ -176,6 +213,123 @@ func deterministicProfileUUID(_ seed: String) -> UUID {
         bytes[8], bytes[9], bytes[10], bytes[11],
         bytes[12], bytes[13], bytes[14], bytes[15]
     ))
+}
+
+// MARK: - Local Persistent Cookie Vault (Promotes Session Cookies Across App Restarts Until Explicit Unbind)
+final class SessionCookieVault {
+    static let shared = SessionCookieVault()
+    private let vaultDir: URL
+    private let ioQueue = DispatchQueue(label: "com.tabpulse.cookievault")
+
+    init() {
+        let appSup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        vaultDir = appSup.appendingPathComponent("TabPulse/session-vault", isDirectory: true)
+        try? FileManager.default.createDirectory(at: vaultDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: vaultDir.path)
+    }
+
+    private func fileURL(for watchId: String) -> URL {
+        let safe = watchId.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
+        return vaultDir.appendingPathComponent("\(safe.isEmpty ? "default" : safe).json")
+    }
+
+    func snapshotCookies(watchId: String, from store: WKWebsiteDataStore) {
+        guard !watchId.isEmpty else { return }
+        DispatchQueue.main.async {
+            store.httpCookieStore.getAllCookies { cookies in
+                guard !cookies.isEmpty else { return }
+                let minPersist = Date().addingTimeInterval(180 * 86400)
+                var serialized: [[String: Any]] = []
+                for c in cookies {
+                    // Promote session-only cookies or short-lived cookies so app restart / Mac reboot NEVER drops login!
+                    let expDate: Date = {
+                        if let ex = c.expiresDate, ex > minPersist { return ex }
+                        if c.isSessionOnly { return minPersist }
+                        if let ex = c.expiresDate, ex > Date() { return max(ex, Date().addingTimeInterval(30 * 86400)) }
+                        return minPersist
+                    }()
+                    var dict: [String: Any] = [
+                        "name": c.name,
+                        "value": c.value,
+                        "domain": c.domain,
+                        "path": c.path,
+                        "expires": expDate.timeIntervalSince1970,
+                        "secure": c.isSecure,
+                        "httpOnly": c.isHTTPOnly
+                    ]
+                    if let sp = c.sameSitePolicy {
+                        dict["sameSite"] = sp.rawValue
+                    }
+                    serialized.append(dict)
+                }
+                let target = self.fileURL(for: watchId)
+                self.ioQueue.async {
+                    guard let data = try? JSONSerialization.data(withJSONObject: ["savedAt": Date().timeIntervalSince1970, "cookies": serialized]) else { return }
+                    // Write directly to a 0600-created temp file inside 0700 vaultDir then atomically swap (zero 0644 exposure window!)
+                    let tmp = target.appendingPathExtension("tmp.\(UUID().uuidString.prefix(8))")
+                    if FileManager.default.createFile(atPath: tmp.path, contents: data, attributes: [.posixPermissions: 0o600]) {
+                        _ = try? FileManager.default.replaceItemAt(target, withItemAt: tmp)
+                    }
+                }
+            }
+        }
+    }
+
+    func restoreCookies(watchId: String, into store: WKWebsiteDataStore, completion: @escaping () -> Void) {
+        guard !watchId.isEmpty else { completion(); return }
+        let target = fileURL(for: watchId)
+        guard let data = try? Data(contentsOf: target),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let list = root["cookies"] as? [[String: Any]],
+              !list.isEmpty else {
+            completion()
+            return
+        }
+        let now = Date().timeIntervalSince1970
+        var toRestore: [HTTPCookie] = []
+        for item in list {
+            guard let name = item["name"] as? String,
+                  let value = item["value"] as? String,
+                  let domain = item["domain"] as? String,
+                  let path = item["path"] as? String else { continue }
+            let expTs = (item["expires"] as? Double) ?? (now + 180 * 86400)
+            if expTs <= now { continue }
+            var props: [HTTPCookiePropertyKey: Any] = [
+                .name: name,
+                .value: value,
+                .domain: domain,
+                .path: path,
+                .expires: Date(timeIntervalSince1970: expTs),
+                .version: "1"
+            ]
+            if (item["secure"] as? Bool) == true { props[.secure] = "TRUE" }
+            if let ss = item["sameSite"] as? String {
+                props[.sameSitePolicy] = HTTPCookieStringPolicy(rawValue: ss)
+            }
+            if let cookie = HTTPCookie(properties: props) {
+                toRestore.append(cookie)
+            }
+        }
+        guard !toRestore.isEmpty else { completion(); return }
+        let group = DispatchGroup()
+        DispatchQueue.main.async {
+            for c in toRestore {
+                group.enter()
+                store.httpCookieStore.setCookie(c) { group.leave() }
+            }
+            group.notify(queue: .main) {
+                completion()
+            }
+        }
+    }
+
+    func clearVault(watchId: String) {
+        guard !watchId.isEmpty else { return }
+        let target = fileURL(for: watchId)
+        ioQueue.async {
+            try? FileManager.default.removeItem(at: target)
+        }
+    }
 }
 
 // MARK: - Ed25519 Offline License Verifier (Matches hub/license.mjs)
@@ -369,12 +523,12 @@ final class StandaloneStore {
             ]
         ]
         let initial: [String: Any] = [
-            "version": "5.5.0",
+            "version": "5.6.0",
             "license": NSNull(),
             "mobileToken": UUID().uuidString.replacingOccurrences(of: "-", with: ""),
             "tunnelBoxId": "bx_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(20).lowercased(),
             "tunnelWriteKey": UUID().uuidString.replacingOccurrences(of: "-", with: "") + UUID().uuidString.prefix(8),
-            "settings": ["webhookUrl": "", "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "preventSleep": false, "tunnelAutoStart": false, "allowLanDirect": false, "termsAcceptedAt": NSNull()],
+            "settings": ["webhookUrl": "", "keepAliveEnabled": true, "radarKeywords": "Shopify", "lang": isChineseSystem ? "zh" : "en", "preventSleep": false, "tunnelAutoStart": false, "allowLanDirect": false, "termsAcceptedAt": NSNull()],
             "watches": defaultWatches,
             "quickReplies": defaultQuickReplies
         ]
@@ -427,7 +581,7 @@ final class StandaloneStore {
         #endif
 
         return [
-            "version": "5.5.0",
+            "version": "5.6.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -542,8 +696,8 @@ final class NativeLeadScanner {
     }
 }
 
-// MARK: - Main App Delegate (Window + Menu Bar + Silent WebKit Probe)
-final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
+// MARK: - Main App Delegate (Window + Menu Bar + Persistent Cookie Vault + Bulletproof Alerts)
+final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
     var mainWindow: NSWindow!
     var dashboardWebView: WKWebView!
     var probeHostWindow: NSWindow!
@@ -559,8 +713,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var accountSwitcherPopup: NSPopUpButton?
     var quickReplyPopup: NSPopUpButton?
     var toolbarStatusLabel: NSTextField?
+    var nextPendingBtn: NSButton?
+    var unbindBtn: NSButton?
     var cachedExternalState: [String: Any]?
-    var didWarmUpPassiveTabs = false
+    var warmedUpIds: Set<String> = []
+    var lastKeepAliveAt: [String: Date] = [:]
     var loginWebView: WKWebView?
     var liveTabs: [String: WKWebView] = [:]
     var tabMeta: [String: (name: String, url: String, profileUuid: String)] = [:]
@@ -570,7 +727,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var isDockedInMainWindow = false
     var statusItem: NSStatusItem!
     var sentinelTimer: Timer?
+    var keepAliveTimer: Timer?
     var bridgeTimer: Timer?
+    var appNapActivity: NSObjectProtocol?
     #if !MAS_BUILD
     var spawnedHubProcess: Process?
     #endif
@@ -579,7 +738,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var currentProbeTargetName: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+
+        // Prevent macOS App Nap from freezing background WebViews, WebSockets & session refresh timers!
+        appNapActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep, .suddenTerminationDisabled],
+            reason: "Keep messaging inbox listeners and login sessions alive"
+        )
+
         setupMainMenu()
         setupStatusBar()
         setupMainWindow()
@@ -588,6 +756,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         sentinelTimer = Timer.scheduledTimer(withTimeInterval: 55.0, repeats: true) { [weak self] _ in
             self?.runSilentCheckCycle()
+            if self?.useExternalHub == true {
+                self?.syncExternalHubState { [weak self] in
+                    self?.ensureActiveTabsWarmedUp()
+                }
+            }
+        }
+        keepAliveTimer = Timer.scheduledTimer(withTimeInterval: 1800.0, repeats: true) { [weak self] _ in
+            self?.runSessionKeepAliveCycle()
         }
         #if !MAS_BUILD
         bridgeTimer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
@@ -597,19 +773,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let act = appNapActivity {
+            ProcessInfo.processInfo.endActivity(act)
+            appNapActivity = nil
+        }
+        for (wid, wv) in liveTabs {
+            SessionCookieVault.shared.snapshotCookies(watchId: wid, from: wv.configuration.websiteDataStore)
+        }
         #if !MAS_BUILD
         spawnedHubProcess?.terminate()
         StandaloneMobileGateway.shared.stopAll()
         #endif
     }
 
-    func postLocalNotification(title: String, body: String) {
+    // Always display macOS notification banner + sound EVEN WHEN 消息总管.app is frontmost!
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        if #available(macOS 11.0, *) {
+            completionHandler([.banner, .list, .sound, .badge])
+        } else {
+            completionHandler([.alert, .sound, .badge])
+        }
+    }
+
+    // Clicking a macOS notification jumps straight into that platform's chat!
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        let info = response.notification.request.content.userInfo
+        DispatchQueue.main.async {
+            if let wid = info["watchId"] as? String, !wid.isEmpty, let meta = self.tabMeta[wid] {
+                self.openLoginSheet(urlStr: meta.url, name: meta.name, watchId: wid, profileUuidStr: meta.profileUuid, isolated: true, dockInMain: true)
+            } else {
+                self.showMainWindow()
+            }
+        }
+        completionHandler()
+    }
+
+    func postLocalNotification(title: String, body: String, watchId: String = "") {
+        DispatchQueue.main.async {
+            NSSound(named: NSSound.Name("Glass"))?.play()
+        }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        if !watchId.isEmpty {
+            content.userInfo = ["watchId": watchId]
+        }
         let req = UNNotificationRequest(identifier: "tp-\(UUID().uuidString)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+    }
+
+    func runSessionKeepAliveCycle() {
+        let hour = Calendar.current.component(.hour, from: Date())
+        if hour < 8 || hour >= 23 { return }
+        let st = activeStateSnapshot()
+        let keepAliveOn = ((st["settings"] as? [String: Any])?["keepAliveEnabled"] as? Bool) ?? true
+        if !keepAliveOn { return }
+        let watches = (st["watches"] as? [[String: Any]]) ?? []
+        let statusById = Dictionary(uniqueKeysWithValues: watches.compactMap { w -> (String, String)? in
+            guard let id = w["id"] as? String else { return nil }
+            return (id, (w["status"] as? String) ?? "idle")
+        })
+        let now = Date()
+        for (wid, wv) in liveTabs {
+            let stStr = statusById[wid] ?? "idle"
+            if stStr == "paused" || stStr == "auth_expired" { continue }
+            if let last = lastKeepAliveAt[wid], now.timeIntervalSince(last) < 3.5 * 3600 { continue }
+            lastKeepAliveAt[wid] = now
+            wv.evaluateJavaScript("window.__TABPULSE_KEEPALIVE_PING__ && window.__TABPULSE_KEEPALIVE_PING__()") { [weak self] _, _ in
+                guard self != nil else { return }
+                SessionCookieVault.shared.snapshotCookies(watchId: wid, from: wv.configuration.websiteDataStore)
+            }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -708,7 +943,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         useExternalHub = false
         loadStandaloneUI()
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.warmUpPassiveRedTabsIfNeeded()
+            self?.ensureActiveTabsWarmedUp()
         }
         return
         #else
@@ -723,14 +958,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 if let http = resp as? HTTPURLResponse, http.statusCode == 200, data != nil {
                     self?.useExternalHub = true
                     self?.syncExternalHubState { [weak self] in
-                        self?.warmUpPassiveRedTabsIfNeeded()
+                        self?.ensureActiveTabsWarmedUp()
                     }
                     self?.dashboardWebView.load(URLRequest(url: URL(string: "http://127.0.0.1:17890/")!))
                 } else if self?.trySpawnBundledNodeHub() == true {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
                         self?.useExternalHub = true
                         self?.syncExternalHubState { [weak self] in
-                            self?.warmUpPassiveRedTabsIfNeeded()
+                            self?.ensureActiveTabsWarmedUp()
                         }
                         self?.dashboardWebView.load(URLRequest(url: URL(string: "http://127.0.0.1:17890/")!))
                     }
@@ -739,7 +974,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     StandaloneMobileGateway.shared.start(appDelegate: self)
                     self?.loadStandaloneUI()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        self?.warmUpPassiveRedTabsIfNeeded()
+                        self?.ensureActiveTabsWarmedUp()
                     }
                 }
             }
@@ -822,6 +1057,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func returnToDashboard() {
         if isDockedInMainWindow {
             if let wid = activeLoginWatchId, let liveWV = liveTabs[wid] {
+                SessionCookieVault.shared.snapshotCookies(watchId: wid, from: liveWV.configuration.websiteDataStore)
                 activeLoginWatchId = nil
                 parkWebViewInBackground(liveWV)
             } else {
@@ -1126,16 +1362,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
 
+        let nextBtn = makeNavBtn(isChineseSystem ? "⚡ 下一个待登录" : "⚡ Next Sign-In", action: #selector(wsOpenNextPending))
+        nextBtn.isHidden = true
+        nextPendingBtn = nextBtn
+
+        let unbindB = makeNavBtn(isChineseSystem ? "🔌 解绑" : "🔌 Unbind", action: #selector(wsUnbindCurrent))
+        unbindBtn = unbindB
+
         let qrPop = NSPopUpButton(frame: .zero, pullsDown: true)
         qrPop.font = NSFont.systemFont(ofSize: 12, weight: .medium)
         qrPop.target = self
         qrPop.action = #selector(wsQuickReplyPicked(_:))
-        qrPop.widthAnchor.constraint(lessThanOrEqualToConstant: 210).isActive = true
+        qrPop.widthAnchor.constraint(lessThanOrEqualToConstant: 195).isActive = true
         quickReplyPopup = qrPop
 
         let popBtn = makeNavBtn(isChineseSystem ? "↗ 独立窗口" : "↗ Pop Out", action: #selector(popOutWorkspaceWindow))
 
-        let hStack = NSStackView(views: [bBack, bFwd, bReload, bHome, titleLbl, statusLbl, spacer, qrPop, popBtn])
+        let hStack = NSStackView(views: [bBack, bFwd, bReload, bHome, titleLbl, statusLbl, spacer, nextBtn, unbindB, qrPop, popBtn])
         hStack.orientation = .horizontal
         hStack.alignment = .centerY
         hStack.spacing = 6
@@ -1164,6 +1407,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func wsGoHome() {
         if let h = activeHomeURL, let u = URL(string: h) {
             loginWebView?.load(URLRequest(url: u))
+        }
+    }
+
+    @objc func wsOpenNextPending() {
+        let st = activeStateSnapshot()
+        let watches = (st["watches"] as? [[String: Any]]) ?? []
+        let pending = watches.filter { w in
+            let wid = (w["id"] as? String) ?? ""
+            let s = (w["status"] as? String) ?? "idle"
+            let checked = (w["lastCheckedAt"] as? String) ?? ""
+            return wid != activeLoginWatchId && (s == "auth_expired" || (s != "paused" && checked.isEmpty))
+        }
+        if let nxt = pending.first,
+           let wid = nxt["id"] as? String,
+           let url = nxt["url"] as? String,
+           let nm = nxt["name"] as? String {
+            let pUuid = (nxt["profileUuid"] as? String) ?? ""
+            openLoginSheet(urlStr: url, name: nm, watchId: wid, profileUuidStr: pUuid, isolated: true, dockInMain: isDockedInMainWindow)
+        } else {
+            toolbarStatusLabel?.stringValue = isChineseSystem ? "✅ 全部平台已完成登录！" : "✅ All platforms signed in!"
+            nextPendingBtn?.isHidden = true
+        }
+    }
+
+    @objc func wsUnbindCurrent() {
+        guard let wid = activeLoginWatchId, let meta = tabMeta[wid] else { return }
+        let alert = NSAlert()
+        alert.messageText = isChineseSystem ? "确认解绑「\(meta.name)」？" : "Unbind \(meta.name)?"
+        alert.informativeText = isChineseSystem
+            ? "解绑后将清除此平台保存在本机的持久登录状态（Cookie），下次需要重新登录；不会影响其他平台。"
+            : "This clears saved login cookies for this platform only."
+        alert.addButton(withTitle: isChineseSystem ? "确认解绑退出" : "Unbind")
+        alert.addButton(withTitle: isChineseSystem ? "取消" : "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            unbindWatchSession(watchId: wid, profileUuidStr: meta.profileUuid) { [weak self] in
+                guard let self = self else { return }
+                if self.useExternalHub, let u = URL(string: "http://127.0.0.1:17890/api/watches/\(wid.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? wid)/unbind") {
+                    var req = URLRequest(url: u)
+                    req.httpMethod = "POST"
+                    URLSession.shared.dataTask(with: req) { _, _, _ in
+                        self.syncExternalHubState()
+                    }.resume()
+                } else {
+                    var st = StandaloneStore.shared.loadState()
+                    var watches = (st["watches"] as? [[String: Any]]) ?? []
+                    if let idx = watches.firstIndex(where: { ($0["id"] as? String) == wid }) {
+                        watches[idx]["status"] = "auth_expired"
+                        watches[idx]["unreadCount"] = 0
+                        watches[idx]["snippet"] = ""
+                        st["watches"] = watches
+                        StandaloneStore.shared.saveState(st)
+                    }
+                }
+                DispatchQueue.main.async {
+                    self.toolbarStatusLabel?.stringValue = isChineseSystem ? "🔌 已解绑并清除持久登录" : "🔌 Unbound"
+                    self.returnToDashboard()
+                }
+            }
         }
     }
 
@@ -1232,6 +1533,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             if let docView = stack.superview {
                 let neededH = max(CGFloat(orderedIds.count) * 34.0 + 16.0, docView.superview?.bounds.height ?? 400)
                 docView.frame.size.height = neededH
+            }
+        }
+
+        if let nb = nextPendingBtn {
+            let pendingCnt = watches.filter { w in
+                let wid = (w["id"] as? String) ?? ""
+                let s = (w["status"] as? String) ?? "idle"
+                let checked = (w["lastCheckedAt"] as? String) ?? ""
+                return wid != activeLoginWatchId && (s == "auth_expired" || (s != "paused" && checked.isEmpty))
+            }.count
+            nb.isHidden = (pendingCnt == 0)
+            nb.title = isChineseSystem ? "⚡ 下一个待登录 (\(pendingCnt))" : "⚡ Next Sign-In (\(pendingCnt))"
+        }
+        unbindBtn?.isHidden = (activeLoginWatchId == nil)
+
+        if let curId = activeLoginWatchId,
+           let curW = watches.first(where: { ($0["id"] as? String) == curId }) {
+            let s = (curW["status"] as? String) ?? "idle"
+            if s == "auth_expired" {
+                toolbarStatusLabel?.stringValue = isChineseSystem ? "🟠 等待扫码/登录（登录后自动持久保活）" : "🟠 Waiting for sign-in"
+                toolbarStatusLabel?.textColor = NSColor(calibratedRed: 0.85, green: 0.47, blue: 0.02, alpha: 1.0)
+            } else {
+                toolbarStatusLabel?.stringValue = isChineseSystem ? "🟢 已登录 · 持久保活中（独立隔离仓）" : "🟢 Signed In · Persistent"
+                toolbarStatusLabel?.textColor = NSColor(calibratedRed: 0.02, green: 0.59, blue: 0.41, alpha: 1.0)
             }
         }
 
@@ -1391,6 +1716,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         } else {
             cfg.websiteDataStore = .default()
         }
+        cfg.defaultWebpagePreferences.allowsContentJavaScript = true
         cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
         cfg.userContentController.add(self, name: "tabpulsePassive")
         if let obsURL = Bundle.main.url(forResource: "passive-observer", withExtension: "js"),
@@ -1401,13 +1727,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let created = WKWebView(frame: NSRect(x: 0, y: 0, width: 1180, height: 736), configuration: cfg)
         created.customUserAgent = SAFARI_DESKTOP_UA
         created.uiDelegate = self
-        created.load(URLRequest(url: u))
         if !watchId.isEmpty {
             liveTabs[watchId] = created
             webViewToWatchId[ObjectIdentifier(created)] = watchId
             parkWebViewInBackground(created)
+            // Restore persisted session cookies from local vault BEFORE first navigation!
+            SessionCookieVault.shared.restoreCookies(watchId: watchId, into: cfg.websiteDataStore) {
+                created.load(URLRequest(url: u))
+            }
+        } else {
+            created.load(URLRequest(url: u))
         }
         return created
+    }
+
+    func unbindWatchSession(watchId: String, profileUuidStr: String = "", completion: (() -> Void)? = nil) {
+        guard !watchId.isEmpty else { completion?(); return }
+        SessionCookieVault.shared.clearVault(watchId: watchId)
+        warmedUpIds.remove(watchId)
+        lastKeepAliveAt.removeValue(forKey: watchId)
+        if let popWin = popOutWindows.removeValue(forKey: watchId) {
+            windowToWatchId.removeValue(forKey: ObjectIdentifier(popWin))
+            popWin.close()
+        }
+        if let existing = liveTabs.removeValue(forKey: watchId) {
+            existing.stopLoading()
+            existing.removeFromSuperview()
+            webViewToWatchId.removeValue(forKey: ObjectIdentifier(existing))
+        }
+        if activeLoginWatchId == watchId {
+            activeLoginWatchId = nil
+            loginWebView = nil
+        }
+        if #available(macOS 14.0, *) {
+            let targetUUID = UUID(uuidString: profileUuidStr) ?? deterministicProfileUUID(watchId)
+            let store = WKWebsiteDataStore(forIdentifier: targetUUID)
+            store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
+                DispatchQueue.main.async { completion?() }
+            }
+        } else {
+            completion?()
+        }
     }
 
     func openLoginSheet(urlStr: String, name: String, watchId: String = "", profileUuidStr: String = "", isolated: Bool = true, dockInMain: Bool = true) {
@@ -1494,10 +1854,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         URLSession.shared.dataTask(with: pollURL) { [weak self] data, _, _ in
             defer { self?.isPollingBridge = false }
             guard let d = data,
-                  let obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any],
-                  let cmds = obj["commands"] as? [[String: Any]],
-                  !cmds.isEmpty else { return }
+                  let obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return }
+            let cmds = (obj["commands"] as? [[String: Any]]) ?? []
+            let notices = (obj["notices"] as? [[String: Any]]) ?? []
+            if cmds.isEmpty && notices.isEmpty { return }
             DispatchQueue.main.async {
+                for n in notices {
+                    let t = (n["title"] as? String) ?? "消息总管新消息"
+                    let b = (n["body"] as? String) ?? ""
+                    let wid = (n["watchId"] as? String) ?? ""
+                    self?.postLocalNotification(title: t, body: b, watchId: wid)
+                }
                 for cmd in cmds {
                     self?.executeBridgeCommand(cmd)
                 }
@@ -1513,9 +1880,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let name = (cmd["name"] as? String) ?? watchId
         let pUuid = (cmd["profileUuid"] as? String) ?? ""
 
+        if type == "unbind" {
+            unbindWatchSession(watchId: watchId, profileUuidStr: pUuid) { [weak self] in
+                self?.postBridgeResult(taskId: taskId, watchId: watchId, payload: ["ok": true, "unbound": true])
+            }
+            return
+        }
+
         let wasCold = liveTabs[watchId] == nil
         guard let wv = getOrCreateLiveWebView(watchId: watchId, urlStr: urlStr, name: name, profileUuidStr: pUuid, isolated: true) else {
             postBridgeResult(taskId: taskId, watchId: watchId, payload: ["error": "Invalid URL"])
+            return
+        }
+
+        if type == "loginState" {
+            let delay = wasCold ? 2.2 : 0.25
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                self.extractLoginStateAndSnapshot(wv: wv, watchId: watchId) { payload in
+                    self.postBridgeResult(taskId: taskId, watchId: watchId, payload: payload)
+                }
+            }
+            return
+        }
+
+        if type == "loginFill" {
+            let fields = (cmd["fields"] as? [[String: Any]]) ?? []
+            let clickBtn = (cmd["clickButtonText"] as? String) ?? ""
+            applyLoginFill(wv: wv, fields: fields, clickButtonText: clickBtn) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+                    self.extractLoginStateAndSnapshot(wv: wv, watchId: watchId) { payload in
+                        self.postBridgeResult(taskId: taskId, watchId: watchId, payload: payload)
+                    }
+                }
+            }
             return
         }
 
@@ -1562,7 +1959,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             })();
             """
             wv.evaluateJavaScript(clickJS) { _, _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
                     self.captureAndPostSnapshot(wv: wv, taskId: taskId, watchId: watchId, extra: [:])
                 }
             }
@@ -1597,6 +1994,131 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let delay = wasCold ? 2.2 : 0.15
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             self.captureAndPostSnapshot(wv: wv, taskId: taskId, watchId: watchId, extra: [:])
+        }
+    }
+
+    func extractLoginStateAndSnapshot(wv: WKWebView, watchId: String, completion: @escaping ([String: Any]) -> Void) {
+        let formJS = """
+        (function() {
+          const vw = Math.max(1, window.innerWidth || 1180);
+          const vh = Math.max(1, window.innerHeight || 736);
+          const isVisible = (el) => {
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            if (r.width < 12 || r.height < 12 || r.bottom < 0 || r.top > vh * 1.4) return false;
+            const st = window.getComputedStyle(el);
+            return st.display !== 'none' && st.visibility !== 'hidden' && st.opacity !== '0';
+          };
+          const authRequired =
+            Boolean(document.querySelector('input[type="password"]')) ||
+            /\\/(login|signin|sign-in|passport|sso|i\\/flow\\/login)/i.test(location.pathname) ||
+            /(登录|扫码登录|请登录|Sign in|Log in)/i.test(document.title + ' ' + ((document.body?.innerText || '').slice(0, 700)));
+
+          const fields = [];
+          const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="file"])')).filter(isVisible);
+          inputs.slice(0, 5).forEach((el, idx) => {
+            const ph = (el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.name || '').trim();
+            const tp = (el.type || 'text').toLowerCase();
+            const isCode = /(验证码|code|sms|otp|动态码)/i.test(ph + ' ' + (el.name || ''));
+            const isPhone = tp === 'tel' || /(手机|电话|phone|mobile|账号|用户名|email|邮箱)/i.test(ph + ' ' + (el.name || ''));
+            fields.push({
+              idx,
+              type: tp === 'password' ? 'password' : isCode ? 'code' : isPhone ? 'account' : 'text',
+              placeholder: ph || (tp === 'password' ? '密码' : isCode ? '短信验证码' : '手机号/账号'),
+              hasValue: Boolean((el.value || '').trim())
+            });
+          });
+
+          const buttons = [];
+          const seenBtns = new Set();
+          const btnEls = Array.from(document.querySelectorAll('button, [role="button"], a, span, div')).filter(el => {
+            if (!isVisible(el)) return false;
+            if (el.children.length > 2) return false;
+            const txt = (el.innerText || el.value || '').trim().replace(/\\s+/g, ' ');
+            if (txt.length < 2 || txt.length > 18) return false;
+            return /(登录|登 录|获取验证码|发送验证码|短信登录|密码登录|扫码登录|账号登录|手机号登录|微信登录|下一步|确认|Sign in|Log in|Next|Continue|Send code|Agree|同意)/i.test(txt);
+          });
+          for (const el of btnEls) {
+            const txt = (el.innerText || el.value || '').trim().replace(/\\s+/g, ' ');
+            if (seenBtns.has(txt)) continue;
+            seenBtns.add(txt);
+            const r = el.getBoundingClientRect();
+            buttons.push({
+              text: txt,
+              xRatio: Math.max(0.02, Math.min(0.98, (r.left + r.width * 0.5) / vw)),
+              yRatio: Math.max(0.02, Math.min(0.98, (r.top + r.height * 0.5) / vh))
+            });
+            if (buttons.length >= 8) break;
+          }
+
+          return { authRequired, fields, buttons, pageTitle: document.title || '', currentUrl: location.href };
+        })();
+        """
+        wv.evaluateJavaScript(formJS) { [weak self] res, _ in
+            let dict = (res as? [String: Any]) ?? [:]
+            let authReq = (dict["authRequired"] as? Bool) ?? true
+            if !authReq && !watchId.isEmpty {
+                SessionCookieVault.shared.snapshotCookies(watchId: watchId, from: wv.configuration.websiteDataStore)
+            }
+            self?.captureWebViewJpegDataUrl(wv: wv) { dataUrl in
+                var out: [String: Any] = [
+                    "ok": true,
+                    "authRequired": authReq,
+                    "pageTitle": (dict["pageTitle"] as? String) ?? (wv.title ?? ""),
+                    "currentUrl": (dict["currentUrl"] as? String) ?? (wv.url?.absoluteString ?? ""),
+                    "fields": dict["fields"] ?? [],
+                    "buttons": dict["buttons"] ?? []
+                ]
+                if let d = dataUrl { out["screenshotDataUrl"] = d }
+                completion(out)
+            }
+        }
+    }
+
+    func applyLoginFill(wv: WKWebView, fields: [[String: Any]], clickButtonText: String, completion: @escaping () -> Void) {
+        let payloadObj: [String: Any] = ["fields": fields, "clickButtonText": clickButtonText]
+        guard let data = try? JSONSerialization.data(withJSONObject: payloadObj),
+              let jsonLiteral = String(data: data, encoding: .utf8) else {
+            completion()
+            return
+        }
+        let js = """
+        (function() {
+          const payload = \(jsonLiteral);
+          const isVisible = (el) => {
+            if (!el) return false;
+            const r = el.getBoundingClientRect();
+            if (r.width < 12 || r.height < 12) return false;
+            const st = window.getComputedStyle(el);
+            return st.display !== 'none' && st.visibility !== 'hidden' && st.opacity !== '0';
+          };
+          const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="file"])')).filter(isVisible);
+          for (const f of (payload.fields || [])) {
+            const el = inputs[Number(f.idx)];
+            if (!el || typeof f.value !== 'string') continue;
+            el.focus();
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (setter) setter.call(el, f.value); else el.value = f.value;
+            el.dispatchEvent(new InputEvent('input', { bubbles: true, data: f.value, inputType: 'insertText' }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          // Auto-check unchecked agreement checkboxes when submitting login
+          if (payload.clickButtonText && /(登录|登 录|Sign in|Log in|下一步|获取验证码)/i.test(payload.clickButtonText)) {
+            const cbs = Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(cb => isVisible(cb) && !cb.checked);
+            if (cbs.length === 1) cbs[0].click();
+          }
+          if (payload.clickButtonText) {
+            const targetTxt = payload.clickButtonText.trim();
+            const cands = Array.from(document.querySelectorAll('button, [role="button"], a, span, div')).filter(el => isVisible(el) && el.children.length <= 2);
+            const hit = cands.find(el => (el.innerText || el.value || '').trim().replace(/\\s+/g, ' ') === targetTxt)
+                     || cands.find(el => (el.innerText || el.value || '').trim().includes(targetTxt));
+            if (hit) hit.click();
+          }
+          return true;
+        })();
+        """
+        wv.evaluateJavaScript(js) { _, _ in
+            completion()
         }
     }
 
@@ -1795,6 +2317,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
             return
         }
+        if action == "openNextPending" {
+            wsOpenNextPending()
+            return
+        }
+        if action == "openSystemNotifySettings" {
+            if let u = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+                NSWorkspace.shared.open(u)
+            }
+            return
+        }
+        if action == "checkNotifyPerm" {
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                let authorized = (settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional)
+                let statusStr = authorized ? "authorized" : (settings.authorizationStatus == .denied ? "denied" : "notDetermined")
+                DispatchQueue.main.async {
+                    self.dashboardWebView.evaluateJavaScript("if(window.__onNotifyPermStatus) window.__onNotifyPermStatus({authorized:\(authorized ? "true" : "false"),status:'\(statusStr)'});", completionHandler: nil)
+                }
+            }
+            return
+        }
+        if action == "testDesktopNotification" {
+            postLocalNotification(
+                title: isChineseSystem ? "🔔 消息总管电脑通知已就绪" : "🔔 ReplyRadar Desktop Alert Ready",
+                body: isChineseSystem ? "收到客户或平台新消息时，您会立刻看到此弹窗并听到提示音！" : "Incoming messages will pop up right here with sound!"
+            )
+            return
+        }
         if action == "api" {
             let reqId = (body["reqId"] as? String) ?? ""
             let method = (body["method"] as? String) ?? "GET"
@@ -1829,6 +2378,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
             return
         }
+        if path == "/api/catalog" {
+            if let u = Bundle.main.url(forResource: "catalog", withExtension: "json"),
+               let d = try? Data(contentsOf: u),
+               var obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] {
+                obj["ok"] = true
+                replyCallback(reqId, obj)
+            } else {
+                replyCallback(reqId, ["ok": true, "categories": [], "platforms": []])
+            }
+            return
+        }
+        if method == "POST" && path.hasSuffix("/unbind") {
+            let mid = path.replacingOccurrences(of: "/api/watches/", with: "").replacingOccurrences(of: "/unbind", with: "")
+            let rawId = mid.removingPercentEncoding ?? mid
+            var st = StandaloneStore.shared.loadState()
+            var watches = (st["watches"] as? [[String: Any]]) ?? []
+            var pUuid = ""
+            if let idx = watches.firstIndex(where: { ($0["id"] as? String) == rawId }) {
+                pUuid = (watches[idx]["profileUuid"] as? String) ?? ""
+                watches[idx]["status"] = "auth_expired"
+                watches[idx]["unreadCount"] = 0
+                watches[idx]["snippet"] = ""
+                watches[idx]["lastLoginVerifiedAt"] = NSNull()
+                st["watches"] = watches
+                StandaloneStore.shared.saveState(st)
+            }
+            unbindWatchSession(watchId: rawId, profileUuidStr: pUuid) {
+                self.refreshWorkspaceToolbarMenus()
+                self.replyCallback(reqId, ["ok": true, "unbound": true])
+            }
+            return
+        }
         if path.hasPrefix("/api/scan-leads") {
             let comps = URLComponents(string: "http://local\(path)")
             let q = comps?.queryItems?.first(where: { $0.name == "q" })?.value ?? "Shopify"
@@ -1855,6 +2436,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             var set = (st["settings"] as? [String: Any]) ?? [:]
             if let wh = payload?["webhookUrl"] as? String { set["webhookUrl"] = wh }
             if let ta = payload?["termsAcceptedAt"] as? String { set["termsAcceptedAt"] = ta }
+            if let ka = payload?["keepAliveEnabled"] as? Bool { set["keepAliveEnabled"] = ka }
             if let ps = payload?["preventSleep"] as? Bool {
                 set["preventSleep"] = ps
                 #if !MAS_BUILD
@@ -1910,18 +2492,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             st["watches"] = watches
             StandaloneStore.shared.saveState(st)
             refreshWorkspaceToolbarMenus()
+            ensureActiveTabsWarmedUp()
             replyCallback(reqId, ["ok": true, "watch": newItem])
             return
         }
         if method == "DELETE" && path.hasPrefix("/api/watches/") {
             let rawId = String(path.dropFirst("/api/watches/".count)).removingPercentEncoding ?? ""
-            if let wv = liveTabs.removeValue(forKey: rawId) {
-                wv.removeFromSuperview()
-                webViewToWatchId.removeValue(forKey: ObjectIdentifier(wv))
-            }
-            tabMeta.removeValue(forKey: rawId)
             var st = StandaloneStore.shared.loadState()
             var watches = (st["watches"] as? [[String: Any]]) ?? []
+            let pUuid = (watches.first(where: { ($0["id"] as? String) == rawId })?["profileUuid"] as? String) ?? ""
+            unbindWatchSession(watchId: rawId, profileUuidStr: pUuid, completion: nil)
+            tabMeta.removeValue(forKey: rawId)
             watches.removeAll { ($0["id"] as? String) == rawId }
             st["watches"] = watches
             StandaloneStore.shared.saveState(st)
@@ -2076,6 +2657,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             }
         }
         DispatchQueue.main.async {
+            NSApp.dockTile.badgeLabel = unread > 0 ? "\(unread)" : nil
             if isChineseSystem {
                 self.statusItem?.button?.title = unread > 0 ? "🔴 \(unread) 未读" : "🔔 消息"
             } else {
@@ -2180,22 +2762,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     #endif
 
-    func warmUpPassiveRedTabsIfNeeded() {
-        guard !didWarmUpPassiveTabs else { return }
-        didWarmUpPassiveTabs = true
+    func ensureActiveTabsWarmedUp() {
         let st = activeStateSnapshot()
         let watches = (st["watches"] as? [[String: Any]]) ?? []
-        let redTargets = watches.filter { w in
+        let targets = watches.filter { w in
+            guard let wid = w["id"] as? String else { return false }
             let tier = (w["publishTier"] as? String) ?? "yellow"
             let status = (w["status"] as? String) ?? "idle"
-            return tier == "red" && status != "paused" && status != "auth_expired"
+            if status == "paused" || status == "auth_expired" { return false }
+            if liveTabs[wid] != nil || warmedUpIds.contains(wid) { return false }
+            // Warm up all active red-tier tabs + any tab with verified login cookies so real-time listeners & session keep-alive run continuously!
+            return tier == "red" || (w["lastLoginVerifiedAt"] as? String) != nil
         }
-        for (idx, w) in redTargets.enumerated() {
+        let availableSlots = max(0, 16 - liveTabs.count)
+        guard availableSlots > 0, !targets.isEmpty else { return }
+        for (idx, w) in targets.prefix(availableSlots).enumerated() {
             guard let wid = w["id"] as? String,
                   let urlStr = w["url"] as? String,
                   let name = w["name"] as? String else { continue }
             let pUuid = (w["profileUuid"] as? String) ?? ""
-            let delay = 2.0 + Double(idx) * 1.8
+            warmedUpIds.insert(wid)
+            let delay = 1.6 + Double(idx) * 1.6
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self = self, self.liveTabs[wid] == nil else { return }
                 _ = self.getOrCreateLiveWebView(watchId: wid, urlStr: urlStr, name: name, profileUuidStr: pUuid, isolated: true)
@@ -2204,10 +2791,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     func handlePassiveEvent(watchId: String, unreadCount: Int, snippet: String, authExpired: Bool = false) {
-        if authExpired && activeLoginWatchId != watchId {
-            if let parkedWV = liveTabs.removeValue(forKey: watchId) {
-                parkedWV.removeFromSuperview()
-                webViewToWatchId.removeValue(forKey: ObjectIdentifier(parkedWV))
+        // Persist cookies locally whenever a tab is actively logged in!
+        if !authExpired, let liveWV = liveTabs[watchId] {
+            SessionCookieVault.shared.snapshotCookies(watchId: watchId, from: liveWV.configuration.websiteDataStore)
+        }
+        if activeLoginWatchId == watchId {
+            DispatchQueue.main.async {
+                if authExpired {
+                    self.toolbarStatusLabel?.stringValue = isChineseSystem ? "🟠 等待扫码/登录（登录后自动持久保活）" : "🟠 Waiting for sign-in"
+                    self.toolbarStatusLabel?.textColor = NSColor(calibratedRed: 0.85, green: 0.47, blue: 0.02, alpha: 1.0)
+                } else {
+                    self.toolbarStatusLabel?.stringValue = isChineseSystem ? "🟢 已登录 · 持久保活中（独立隔离仓）" : "🟢 Signed In · Persistent"
+                    self.toolbarStatusLabel?.textColor = NSColor(calibratedRed: 0.02, green: 0.59, blue: 0.41, alpha: 1.0)
+                }
             }
         }
         let resolvedName = tabMeta[watchId]?.name ?? watchId
@@ -2225,6 +2821,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             DispatchQueue.main.async {
                 if unreadCount > 0 && !authExpired {
                     self.statusItem?.button?.title = isChineseSystem ? "🔴 \(unreadCount) 未读" : "🔴 \(unreadCount) Unread"
+                    NSApp.dockTile.badgeLabel = "\(unreadCount)"
                 }
             }
         } else {
@@ -2241,20 +2838,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     watches[idx]["status"] = "auth_expired"
                     watches[idx]["unreadCount"] = 0
                 } else if unreadCount > 0 {
+                    watches[idx]["lastLoginVerifiedAt"] = ISO8601DateFormatter().string(from: Date())
                     watches[idx]["status"] = "unread"
                     watches[idx]["unreadCount"] = unreadCount
                     watches[idx]["snippet"] = snippet
                     watches[idx]["lastFingerprint"] = fp
                     if unreadCount > prevUnread || fp != prevFp {
-                        NSSound.beep()
                         postLocalNotification(
                             title: isChineseSystem ? "🔴 \(siteName) 有 \(unreadCount) 条新消息" : "🔴 \(unreadCount) Unread in \(siteName)",
-                            body: snippet.isEmpty ? siteUrl : snippet
+                            body: snippet.isEmpty ? siteUrl : snippet,
+                            watchId: watchId
                         )
                         let wh = ((st["settings"] as? [String: Any])?["webhookUrl"] as? String) ?? ""
-                        WebhookDispatcher.send(webhookUrlStr: wh, siteName: siteName, unreadCount: unreadCount, snippet: snippet, siteUrl: siteUrl)
+                        var pushLink = siteUrl
+                        #if !MAS_BUILD
+                        let mobBase = (StandaloneMobileGateway.shared.currentPairingInfo()["primaryUrl"] as? String) ?? ""
+                        if !mobBase.isEmpty && !mobBase.contains("127.0.0.1") {
+                            pushLink = "\(mobBase)#open=web:\(watchId)"
+                        }
+                        #endif
+                        WebhookDispatcher.send(webhookUrlStr: wh, siteName: siteName, unreadCount: unreadCount, snippet: snippet, siteUrl: pushLink)
                     }
                 } else {
+                    watches[idx]["lastLoginVerifiedAt"] = ISO8601DateFormatter().string(from: Date())
                     watches[idx]["status"] = "idle"
                     watches[idx]["unreadCount"] = 0
                     watches[idx]["lastFingerprint"] = ""
@@ -2287,7 +2893,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         nextProbe.navigationDelegate = self
         probeWebView = nextProbe
         backgroundTabsContainer.addSubview(nextProbe)
-        nextProbe.load(URLRequest(url: url))
+        // Restore persisted session cookies from vault BEFORE probing yellow/green sites after restart!
+        SessionCookieVault.shared.restoreCookies(watchId: watchId, into: cfg.websiteDataStore) {
+            nextProbe.load(URLRequest(url: url))
+        }
     }
 
     func runSilentCheckCycle(forceImmediate: Bool = false, targetId: String = "") {
@@ -2390,6 +2999,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             let unreadCount = (report["unreadCount"] as? Int) ?? 0
             let authExpired = (report["authExpired"] as? Bool) ?? false
             let snippet = (report["snippet"] as? String) ?? ""
+            if !authExpired {
+                SessionCookieVault.shared.snapshotCookies(watchId: targetId, from: self.probeWebView.configuration.websiteDataStore)
+            }
 
             if self.useExternalHub, let repURL = URL(string: "http://127.0.0.1:17890/api/report") {
                 var req = URLRequest(url: repURL)
@@ -2399,10 +3011,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 body["id"] = targetId
                 req.httpBody = try? JSONSerialization.data(withJSONObject: body)
                 URLSession.shared.dataTask(with: req) { [weak self] _, _, _ in
+                    self?.syncExternalHubState()
                     self?.notifyDashboardProbeDone(id: targetId, name: targetName, unreadCount: unreadCount, authExpired: authExpired)
                 }.resume()
                 DispatchQueue.main.async {
-                    if unreadCount > 0 { self.statusItem?.button?.title = "🔴 \(unreadCount) 未读" }
+                    if unreadCount > 0 {
+                        self.statusItem?.button?.title = "🔴 \(unreadCount) 未读"
+                        NSApp.dockTile.badgeLabel = "\(unreadCount)"
+                    }
                 }
             } else {
                 var st = StandaloneStore.shared.loadState()
@@ -2418,20 +3034,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                     if authExpired {
                         watches[idx]["status"] = "auth_expired"
                     } else if unreadCount > 0 {
+                        watches[idx]["lastLoginVerifiedAt"] = ISO8601DateFormatter().string(from: Date())
                         watches[idx]["status"] = "unread"
                         watches[idx]["unreadCount"] = unreadCount
                         watches[idx]["snippet"] = snippet
                         watches[idx]["lastFingerprint"] = fp
                         if unreadCount > prevUnread || fp != prevFp {
-                            NSSound.beep()
                             self.postLocalNotification(
                                 title: isChineseSystem ? "🔴 \(targetName) 有 \(unreadCount) 条新消息" : "🔴 \(unreadCount) Unread in \(targetName)",
-                                body: snippet.isEmpty ? siteUrl : snippet
+                                body: snippet.isEmpty ? siteUrl : snippet,
+                                watchId: targetId
                             )
                             let wh = ((st["settings"] as? [String: Any])?["webhookUrl"] as? String) ?? ""
-                            WebhookDispatcher.send(webhookUrlStr: wh, siteName: targetName, unreadCount: unreadCount, snippet: snippet, siteUrl: siteUrl)
+                            var pushLink = siteUrl
+                            #if !MAS_BUILD
+                            let mobBase = (StandaloneMobileGateway.shared.currentPairingInfo()["primaryUrl"] as? String) ?? ""
+                            if !mobBase.isEmpty && !mobBase.contains("127.0.0.1") {
+                                pushLink = "\(mobBase)#open=web:\(targetId)"
+                            }
+                            #endif
+                            WebhookDispatcher.send(webhookUrlStr: wh, siteName: targetName, unreadCount: unreadCount, snippet: snippet, siteUrl: pushLink)
                         }
                     } else {
+                        watches[idx]["lastLoginVerifiedAt"] = ISO8601DateFormatter().string(from: Date())
                         watches[idx]["status"] = "idle"
                         watches[idx]["unreadCount"] = 0
                         watches[idx]["lastFingerprint"] = ""
@@ -2562,7 +3187,7 @@ final class StandaloneMobileGateway {
         let allowLan = (set["allowLanDirect"] as? Bool) ?? false
         let detectedIp = getLanIP()
         let lanUrl = allowLan ? "http://\(detectedIp):\(port)/m?t=\(tok)" : "http://127.0.0.1:\(port)/m?t=\(tok)"
-        let permUrl = (!publicUrl.isEmpty && !boxId.isEmpty) ? "\(edgeOrigin)/go/\(boxId)?t=\(tok)" : ""
+        let permUrl = (!publicUrl.isEmpty && !boxId.isEmpty) ? "\(edgeOrigin)/box/\(boxId)/m?t=\(tok)" : ""
         let rawTun = !publicUrl.isEmpty ? "\(publicUrl)/m?t=\(tok)" : ""
         let tunUrl = !permUrl.isEmpty ? permUrl : rawTun
         let primary = !tunUrl.isEmpty ? tunUrl : lanUrl
@@ -2720,6 +3345,26 @@ final class StandaloneMobileGateway {
         }
     }
 
+    private func decodeChunkedBody(_ raw: Data) -> Data? {
+        var idx = 0
+        var out = Data()
+        let crlf = Data("\r\n".utf8)
+        while idx < raw.count {
+            guard let lineEnd = raw.range(of: crlf, in: idx..<raw.count),
+                  let sizeStr = String(data: raw.subdata(in: idx..<lineEnd.lowerBound), encoding: .utf8)?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces),
+                  let chunkLen = Int(sizeStr, radix: 16) else { return nil }
+            let dataStart = lineEnd.upperBound
+            if chunkLen == 0 {
+                if raw.count >= dataStart + 2 { return out }
+                return nil
+            }
+            if raw.count < dataStart + chunkLen + 2 { return nil }
+            out.append(raw.subdata(in: dataStart..<(dataStart + chunkLen)))
+            idx = dataStart + chunkLen + 2
+        }
+        return nil
+    }
+
     private func handleConnection(_ conn: NWConnection) {
         conn.start(queue: DispatchQueue.global(qos: .userInitiated))
         var buffer = Data()
@@ -2730,13 +3375,23 @@ final class StandaloneMobileGateway {
                     let headerData = buffer.subdata(in: 0..<sepRange.lowerBound)
                     let headerStr = String(data: headerData, encoding: .utf8) ?? ""
                     var contentLen = 0
+                    var isChunked = false
                     for line in headerStr.split(separator: "\r\n") {
-                        if line.lowercased().hasPrefix("content-length:") {
+                        let low = line.lowercased()
+                        if low.hasPrefix("content-length:") {
                             contentLen = Int(line.dropFirst(15).trimmingCharacters(in: .whitespaces)) ?? 0
+                        } else if low.hasPrefix("transfer-encoding:") && low.contains("chunked") {
+                            isChunked = true
                         }
                     }
                     let bodyStart = sepRange.upperBound
-                    if buffer.count - bodyStart >= contentLen {
+                    if isChunked {
+                        let rawBody = buffer.subdata(in: bodyStart..<buffer.count)
+                        if let decoded = self?.decodeChunkedBody(rawBody) {
+                            self?.dispatchHttpRequest(conn: conn, headerStr: headerStr, bodyData: decoded)
+                            return
+                        }
+                    } else if buffer.count - bodyStart >= contentLen {
                         let bodyData = buffer.subdata(in: bodyStart..<(bodyStart + contentLen))
                         self?.dispatchHttpRequest(conn: conn, headerStr: headerStr, bodyData: bodyData)
                         return
@@ -2787,7 +3442,7 @@ final class StandaloneMobileGateway {
         }
 
         if pathname == "/api/health" {
-            sendJson(conn: conn, obj: ["ok": true, "version": "5.5.0", "standalone": true])
+            sendJson(conn: conn, obj: ["ok": true, "version": "5.6.0", "standalone": true])
             return
         }
         if pathname == "/sw.js",
@@ -2805,7 +3460,14 @@ final class StandaloneMobileGateway {
         let st = StandaloneStore.shared.loadState()
         let expectedTok = (st["mobileToken"] as? String) ?? ""
         let queryTok = comps?.queryItems?.first(where: { $0.name == "t" })?.value ?? ""
-        let headerTok = headers["x-tabpulse-token"] ?? ""
+        let bearerTok: String = {
+            let authH = headers["authorization"] ?? ""
+            if authH.lowercased().hasPrefix("bearer ") {
+                return String(authH.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+            }
+            return ""
+        }()
+        let headerTok = !(headers["x-tabpulse-token"] ?? "").isEmpty ? (headers["x-tabpulse-token"] ?? "") : bearerTok
         var cookieTok = ""
         if let ck = headers["cookie"] {
             for seg in ck.split(separator: ";") {
@@ -2815,7 +3477,13 @@ final class StandaloneMobileGateway {
                 }
             }
         }
-        let clientIp = headers["x-forwarded-for"]?.split(separator: ",").first.map(String.init) ?? String(describing: conn.endpoint)
+        let rawEndpointHost: String = {
+            if case .hostPort(let host, _) = conn.endpoint {
+                return "\(host)"
+            }
+            return String(describing: conn.endpoint).split(separator: ":").first.map(String.init) ?? "unknown"
+        }()
+        let clientIp = headers["x-forwarded-for"]?.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? rawEndpointHost
         authLock.lock()
         if let rec = failedAttempts[clientIp], rec.count >= 8, Date().timeIntervalSince(rec.lastAt) < 600 {
             authLock.unlock()
@@ -2842,7 +3510,7 @@ final class StandaloneMobileGateway {
 
         var extraH: [String: String] = ["Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"]
         if !queryTok.isEmpty {
-            extraH["Set-Cookie"] = "tp_mob_tok=\(expectedTok); Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000"
+            extraH["Set-Cookie"] = "tp_mob_tok=\(expectedTok); Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"
         }
 
         if pathname == "/" || pathname == "/m" {
@@ -2857,10 +3525,41 @@ final class StandaloneMobileGateway {
             sendHttp(conn: conn, status: 200, contentType: "text/event-stream; charset=utf-8", body: Data(sse.utf8), extraHeaders: extraH)
             return
         }
+        if pathname == "/api/catalog" {
+            if let u = Bundle.main.url(forResource: "catalog", withExtension: "json"),
+               let d = try? Data(contentsOf: u),
+               var obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] {
+                obj["ok"] = true
+                sendJson(conn: conn, obj: obj, extraHeaders: extraH)
+                return
+            }
+            sendJson(conn: conn, obj: ["ok": true, "categories": [], "platforms": []], extraHeaders: extraH)
+            return
+        }
+        if pathname == "/api/mobile/bundle" {
+            var sum = StandaloneStore.shared.publicSummary()
+            if var sObj = sum["settings"] as? [String: Any] {
+                let hasWh = !((sObj["webhookUrl"] as? String) ?? "").isEmpty
+                sObj["webhookConfigured"] = hasWh
+                sObj["webhookUrl"] = hasWh ? "••••••••" : ""
+                sum["settings"] = sObj
+            }
+            sendJson(conn: conn, obj: [
+                "ok": true,
+                "state": sum,
+                "desktop": ["ok": true, "windows": [], "badges": [], "recentAlerts": [], "installedApps": []],
+                "cc": ["ok": true, "sessions": [], "hookEvents": [], "agents": []],
+                "aiInbox": ["ok": true, "channels": []],
+                "aiButler": ["ok": true, "suggestions": [:], "events": []]
+            ], extraHeaders: extraH)
+            return
+        }
         if pathname == "/api/state" {
             var sum = StandaloneStore.shared.publicSummary()
             if var sObj = sum["settings"] as? [String: Any] {
-                sObj["webhookUrl"] = ""
+                let hasWh = !((sObj["webhookUrl"] as? String) ?? "").isEmpty
+                sObj["webhookConfigured"] = hasWh
+                sObj["webhookUrl"] = hasWh ? "••••••••" : ""
                 sum["settings"] = sObj
             }
             sendJson(conn: conn, obj: sum, extraHeaders: extraH)
@@ -2891,6 +3590,98 @@ final class StandaloneMobileGateway {
         }
         let bodyJson = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any]
 
+        if method == "POST" && pathname == "/api/push/test" {
+            let cur = StandaloneStore.shared.loadState()
+            let wh = ((cur["settings"] as? [String: Any])?["webhookUrl"] as? String) ?? ""
+            DispatchQueue.main.async {
+                self.appDelegate?.postLocalNotification(
+                    title: "🔔 消息总管通知测试",
+                    body: "手机端触发测试成功！电脑与手机双端提醒链路正常。"
+                )
+            }
+            if !wh.isEmpty {
+                let mobLink = (currentPairingInfo()["primaryUrl"] as? String) ?? ""
+                WebhookDispatcher.send(
+                    webhookUrlStr: wh,
+                    siteName: "通知测试",
+                    unreadCount: 1,
+                    snippet: "手机与电脑双端提醒已连通！",
+                    siteUrl: mobLink
+                ) { ok, channel, err in
+                    self.sendJson(conn: conn, obj: ["ok": true, "webhook": ["ok": ok, "channel": channel, "error": err]], extraHeaders: extraH)
+                }
+            } else {
+                sendJson(conn: conn, obj: ["ok": true, "desktopNotified": true], extraHeaders: extraH)
+            }
+            return
+        }
+
+        if method == "POST" && pathname == "/api/watches" {
+            var cur = StandaloneStore.shared.loadState()
+            var watches = (cur["watches"] as? [[String: Any]]) ?? []
+            var rawUrl = ((bodyJson?["url"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !rawUrl.isEmpty && !rawUrl.lowercased().hasPrefix("http://") && !rawUrl.lowercased().hasPrefix("https://") {
+                rawUrl = "https://\(rawUrl)"
+            }
+            let id = (bodyJson?["id"] as? String) ?? "watch-\(Int(Date().timeIntervalSince1970))-\(Int.random(in: 100...999))"
+            let allowDup = (bodyJson?["allowDuplicateUrl"] as? Bool) ?? false
+            let pUuid = deterministicProfileUUID(id).uuidString.lowercased()
+            let newItem: [String: Any] = [
+                "id": id,
+                "name": (bodyJson?["name"] as? String) ?? rawUrl,
+                "url": rawUrl,
+                "category": (bodyJson?["category"] as? String) ?? "主力阵地",
+                "publishTier": (bodyJson?["publishTier"] as? String) ?? "red",
+                "isolatedProfile": true,
+                "profileUuid": pUuid,
+                "contextSummary": (bodyJson?["contextSummary"] as? String) ?? "手机端添加 · 零刷页静默看护",
+                "baseIntervalMinutes": 60,
+                "status": "idle",
+                "unreadCount": 0,
+                "snippet": "",
+                "lastDraft": "",
+                "nextCheckAt": StandaloneStore.shared.computeNextCheckISO(baseMinutes: 60)
+            ]
+            if let idx = watches.firstIndex(where: { ($0["id"] as? String) == id || (!allowDup && ($0["url"] as? String) == rawUrl) }) {
+                watches[idx] = newItem
+            } else {
+                watches.append(newItem)
+            }
+            cur["watches"] = watches
+            StandaloneStore.shared.saveState(cur)
+            DispatchQueue.main.async {
+                self.appDelegate?.refreshWorkspaceToolbarMenus()
+                self.appDelegate?.ensureActiveTabsWarmedUp()
+            }
+            sendJson(conn: conn, status: 201, obj: ["ok": true, "watch": newItem], extraHeaders: extraH)
+            return
+        }
+
+        if method == "POST" && pathname.hasSuffix("/unbind") && pathname.hasPrefix("/api/watches/") {
+            let rawId = (pathname.replacingOccurrences(of: "/api/watches/", with: "").replacingOccurrences(of: "/unbind", with: "")).removingPercentEncoding ?? ""
+            var cur = StandaloneStore.shared.loadState()
+            var watches = (cur["watches"] as? [[String: Any]]) ?? []
+            var pUuid = ""
+            if let idx = watches.firstIndex(where: { ($0["id"] as? String) == rawId }) {
+                pUuid = (watches[idx]["profileUuid"] as? String) ?? ""
+                watches[idx]["status"] = "auth_expired"
+                watches[idx]["unreadCount"] = 0
+                watches[idx]["snippet"] = ""
+                cur["watches"] = watches
+                StandaloneStore.shared.saveState(cur)
+            }
+            if let del = appDelegate {
+                DispatchQueue.main.async {
+                    del.unbindWatchSession(watchId: rawId, profileUuidStr: pUuid) {
+                        self.sendJson(conn: conn, obj: ["ok": true, "unbound": true], extraHeaders: extraH)
+                    }
+                }
+            } else {
+                sendJson(conn: conn, obj: ["ok": true, "unbound": true], extraHeaders: extraH)
+            }
+            return
+        }
+
         if method == "POST" && pathname.hasSuffix("/resolve") {
             let rawId = (pathname.replacingOccurrences(of: "/api/watches/", with: "").replacingOccurrences(of: "/resolve", with: "")).removingPercentEncoding ?? ""
             var cur = StandaloneStore.shared.loadState()
@@ -2901,7 +3692,7 @@ final class StandaloneMobileGateway {
                 cur["watches"] = watches
                 StandaloneStore.shared.saveState(cur)
             }
-            sendJson(conn: conn, obj: ["ok": true])
+            sendJson(conn: conn, obj: ["ok": true], extraHeaders: extraH)
             return
         }
 
@@ -2911,43 +3702,94 @@ final class StandaloneMobileGateway {
             if segs.count == 2 {
                 let wid = segs[0].removingPercentEncoding ?? segs[0]
                 let op = segs[1]
-                let watches = (StandaloneStore.shared.loadState()["watches"] as? [[String: Any]]) ?? []
-                guard let w = watches.first(where: { ($0["id"] as? String) == wid }),
-                      let uStr = w["url"] as? String,
-                      let nm = w["name"] as? String else {
+                var cur = StandaloneStore.shared.loadState()
+                var watches = (cur["watches"] as? [[String: Any]]) ?? []
+                guard let wIdx = watches.firstIndex(where: { ($0["id"] as? String) == wid }),
+                      let uStr = watches[wIdx]["url"] as? String,
+                      let nm = watches[wIdx]["name"] as? String else {
                     sendJson(conn: conn, status: 404, obj: ["ok": false, "error": "watch not found"])
                     return
                 }
-                let pUuid = (w["profileUuid"] as? String) ?? ""
+                let pUuid = (watches[wIdx]["profileUuid"] as? String) ?? ""
+                if op == "unbind" && method == "POST" {
+                    watches[wIdx]["status"] = "auth_expired"
+                    watches[wIdx]["unreadCount"] = 0
+                    watches[wIdx]["snippet"] = ""
+                    cur["watches"] = watches
+                    StandaloneStore.shared.saveState(cur)
+                    DispatchQueue.main.async {
+                        del.unbindWatchSession(watchId: wid, profileUuidStr: pUuid) {
+                            self.sendJson(conn: conn, obj: ["ok": true, "unbound": true], extraHeaders: extraH)
+                        }
+                    }
+                    return
+                }
                 DispatchQueue.main.async {
                     let wasCold = del.liveTabs[wid] == nil
                     guard let wv = del.getOrCreateLiveWebView(watchId: wid, urlStr: uStr, name: nm, profileUuidStr: pUuid, isolated: true) else {
                         self.sendJson(conn: conn, obj: ["ok": false, "error": "invalid url"])
                         return
                     }
-                    if op == "snapshot" {
+                    if op == "login-state" {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + (wasCold ? 2.2 : 0.25)) {
+                            del.extractLoginStateAndSnapshot(wv: wv, watchId: wid) { info in
+                                self.sendJson(conn: conn, obj: info, extraHeaders: extraH)
+                            }
+                        }
+                    } else if op == "snapshot" {
                         DispatchQueue.main.asyncAfter(deadline: .now() + (wasCold ? 1.8 : 0.1)) {
                             del.extractDomSnapshotDict(wv: wv) { snap in
-                                self.sendJson(conn: conn, obj: snap)
+                                self.sendJson(conn: conn, obj: snap, extraHeaders: extraH)
                             }
                         }
                     } else if op == "peek-image" {
                         DispatchQueue.main.asyncAfter(deadline: .now() + (wasCold ? 1.8 : 0.1)) {
                             del.captureWebViewJpegDataUrl(wv: wv) { dUrl in
                                 if let d = dUrl {
-                                    self.sendJson(conn: conn, obj: ["ok": true, "dataUrl": d])
+                                    self.sendJson(conn: conn, obj: ["ok": true, "dataUrl": d], extraHeaders: extraH)
                                 } else {
-                                    self.sendJson(conn: conn, obj: ["ok": false, "error": "画面提取失败"])
+                                    self.sendJson(conn: conn, obj: ["ok": false, "error": "画面提取失败"], extraHeaders: extraH)
                                 }
                             }
                         }
                     } else if op == "action" && method == "POST" {
-                        let txt = (bodyJson?["text"] as? String) ?? ""
-                        del.injectTextIntoWebView(wv, text: txt, autoSubmit: true) { ok in
-                            self.sendJson(conn: conn, obj: ["ok": ok, "injected": ok])
+                        let actType = (bodyJson?["type"] as? String) ?? "reply"
+                        if actType == "loginFill" {
+                            let fields = (bodyJson?["fields"] as? [[String: Any]]) ?? []
+                            let clickBtn = (bodyJson?["clickButtonText"] as? String) ?? ""
+                            del.applyLoginFill(wv: wv, fields: fields, clickButtonText: clickBtn) {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+                                    del.extractLoginStateAndSnapshot(wv: wv, watchId: wid) { info in
+                                        self.sendJson(conn: conn, obj: info, extraHeaders: extraH)
+                                    }
+                                }
+                            }
+                        } else if actType == "click" {
+                            let xr = (bodyJson?["xRatio"] as? Double) ?? 0.5
+                            let yr = (bodyJson?["yRatio"] as? Double) ?? 0.5
+                            let clickJS = "(function(){const x=Math.round(window.innerWidth*\(xr)),y=Math.round(window.innerHeight*\(yr)),el=document.elementFromPoint(x,y);if(!el)return false;el.focus&&el.focus();['pointerdown','mousedown','mouseup','click'].forEach(t=>el.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,clientX:x,clientY:y})));return true;})();"
+                            wv.evaluateJavaScript(clickJS) { _, _ in
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                                    del.extractLoginStateAndSnapshot(wv: wv, watchId: wid) { info in
+                                        self.sendJson(conn: conn, obj: info, extraHeaders: extraH)
+                                    }
+                                }
+                            }
+                        } else if actType == "reload" {
+                            wv.reload()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                                del.extractLoginStateAndSnapshot(wv: wv, watchId: wid) { info in
+                                    self.sendJson(conn: conn, obj: info, extraHeaders: extraH)
+                                }
+                            }
+                        } else {
+                            let txt = (bodyJson?["text"] as? String) ?? ""
+                            del.injectTextIntoWebView(wv, text: txt, autoSubmit: true) { ok in
+                                self.sendJson(conn: conn, obj: ["ok": ok, "injected": ok], extraHeaders: extraH)
+                            }
                         }
                     } else {
-                        self.sendJson(conn: conn, obj: ["ok": true])
+                        self.sendJson(conn: conn, obj: ["ok": true], extraHeaders: extraH)
                     }
                 }
                 return

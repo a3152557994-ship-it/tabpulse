@@ -13,3 +13,10 @@ worker/node_modules/
 worker/dist/
 worker/.wrangler/
 worker/.cloudflare/
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+*.jks
+*.p12
+*.keystore

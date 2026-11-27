@@ -25,10 +25,11 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Export Preset Packs JSON
+      - name: Export Preset Packs & Platform Catalog JSON
         shell: pwsh
         run: |
           node -e "import('./seed/preset-packs.mjs').then(m => import('node:fs').then(fs => fs.writeFileSync('presets.json', JSON.stringify(m.PRESET_PACKS, null, 2))))"
+          node -e "import('./seed/platform-catalog.mjs').then(m => import('node:fs').then(fs => fs.writeFileSync('catalog.json', JSON.stringify({ categories: m.PLATFORM_CATALOG_CATEGORIES, platforms: m.PLATFORM_CATALOG }, null, 2))))"
 
       - name: Build Chinese Edition (消息总管.exe) & English Edition (ReplyRadar.exe)
         shell: pwsh
@@ -42,6 +43,7 @@ jobs:
           cp extension/passive-observer.js out-cn/resources/passive-observer.js
           cp -r extension out-cn/extension
           cp presets.json out-cn/resources/presets.json
+          cp catalog.json out-cn/resources/catalog.json
           @"
           @echo off
           chcp 65001 >nul
@@ -63,6 +65,7 @@ jobs:
           cp extension/passive-observer.js out-en/resources/passive-observer.js
           cp -r extension out-en/extension
           cp presets.json out-en/resources/presets.json
+          cp catalog.json out-en/resources/catalog.json
           @"
           @echo off
           dotnet --list-runtimes 2>nul | findstr /C:"Microsoft.WindowsDesktop.App 8." >nul

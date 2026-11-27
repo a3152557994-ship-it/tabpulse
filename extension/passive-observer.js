@@ -2,12 +2,17 @@
   if (window.__TABPULSE_PASSIVE_INSTALLED__) return;
   window.__TABPULSE_PASSIVE_INSTALLED__ = true;
 
+  const INSTALLED_AT = Date.now();
+  let consecutiveAuthHits = 0;
+
   function postPassive(payload) {
     try {
       if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tabpulsePassive) {
         window.webkit.messageHandlers.tabpulsePassive.postMessage(payload);
       } else if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage(JSON.stringify({ passiveEvent: true, ...payload }));
+      } else if (window.TabPulseAndroid && typeof window.TabPulseAndroid.onPassiveEvent === "function") {
+        window.TabPulseAndroid.onPassiveEvent(JSON.stringify(payload));
       }
     } catch {
       // ignore
@@ -25,25 +30,25 @@
   function detectAuthOrChallengeGate() {
     const title = (document.title || "").trim();
     const pathname = location.pathname || "";
-    const bodyText = ((document.body && document.body.innerText) || "").slice(0, 1400);
+    const bodyText = ((document.body && document.body.innerText) || "").slice(0, 1600);
 
     if (/(安全验证|滑动验证|人机验证|Verify you are human|Just a moment|Security Check)/i.test(title)) {
       return true;
     }
-    if (/\/(login|signin|sign-in|passport|sso|i\/flow\/login)/i.test(pathname)) {
+    if (/\/(login|signin|sign-in|passport|sso|i\/flow\/login|account\/login|web\/user\/login)/i.test(pathname)) {
       return true;
     }
-    if (/^(登录|请登录|Sign in|Log in|会员登录|用户登录|小红书登录)/i.test(title)) {
+    if (/^(登录|请登录|Sign in|Log in|会员登录|用户登录|小红书登录|扫码登录)/i.test(title)) {
       return true;
     }
     const pwd = document.querySelector('input[type="password"]');
     if (pwd && isVisible(pwd)) {
       return true;
     }
-    // Check prominent QR/SMS login gates on Goofish / Xiaohongshu / Zhihu when not signed in
+    // Check prominent QR/SMS login gates on Goofish / Xiaohongshu / Zhihu / BOSS / Zhaopin when not signed in
     if (
-      bodyText.length < 900 &&
-      /(扫码登录|手机验证码登录|登录后查看|请先登录|Sign in to X|Log in to Reddit)/i.test(bodyText)
+      bodyText.length < 1100 &&
+      /(扫码登录|手机验证码登录|登录后查看|请先登录|微信扫码登录|APP扫码登录|Sign in to X|Log in to Reddit)/i.test(bodyText)
     ) {
       return true;
     }
@@ -58,6 +63,8 @@
       '[class*="message-item" i]',
       '[class*="notification-item" i]',
       '[class*="msg-content" i]',
+      '[class*="friend-content" i]',
+      '[class*="last-msg" i]',
       '[data-testid="notification"]',
       '[data-testid="conversation"]',
     ];
@@ -68,7 +75,7 @@
       } catch {
         continue;
       }
-      for (const r of rows.slice(0, 4)) {
+      for (const r of rows.slice(0, 5)) {
         if (!isVisible(r)) continue;
         const txt = (r.innerText || "").replace(/\s+/g, " ").trim();
         if (txt.length >= 4 && txt.length <= 220) {
@@ -84,6 +91,7 @@
     const origSet = navigator.setAppBadge.bind(navigator);
     navigator.setAppBadge = function (contents) {
       const n = typeof contents === "number" ? contents : 1;
+      consecutiveAuthHits = 0;
       postPassive({
         event: "badge",
         authExpired: false,
@@ -106,6 +114,7 @@
     const OrigNotification = window.Notification;
     const WrappedNotification = function (title, options = {}) {
       const body = options && options.body ? String(options.body) : "";
+      consecutiveAuthHits = 0;
       postPassive({
         event: "notification",
         authExpired: false,
@@ -124,26 +133,48 @@
     window.Notification = WrappedNotification;
   }
 
-  // 3. Passive Title + Visible Red-Dot Badge + Auth Gate Observer
+  // 3. Passive Title + Visible Red-Dot Badge + Anti-False-Positive Auth Gate Observer
   let debounceTimer = null;
   let lastSentKey = "";
 
-  const BADGE_SELECTORS = [
+  const NUMERIC_BADGE_SELECTORS = [
     '[class*="unread-count" i]',
     '[class*="unreadCount"]',
+    '[class*="unread-num" i]',
+    '[class*="unreadNum"]',
     '[class*="msg-count" i]',
+    '[class*="msg-num" i]',
     '[class*="message-badge" i]',
     '[class*="notif-badge" i]',
+    '[class*="notice-badge" i]',
+    '[class*="badge-count" i]',
     '[class*="ant-badge-count"]',
+    '[class*="el-badge__content"]',
+    '[class*="van-badge"]',
     '[class*="reds-badge"]',
     '[class*="im-unread"]',
+    '[class*="chat-unread"]',
     'a[href*="/notifications"] [class*="badge" i]',
     'a[href*="/notifications"] [class*="unread" i]',
     'a[href*="/message"] [class*="badge" i]',
+    'a[href*="/chat"] [class*="badge" i]',
     '[data-testid="AppTabBar_Notifications_Link"] [aria-label]',
     '[aria-label*="未读"]',
     '[aria-label*="unread" i]',
     '[data-unread]',
+  ];
+
+  // Numberless pure red-dot badges (GitHub .mail-status.unread, XHS/Maimai/Bilibili/Eleduck dot)
+  const DOT_ONLY_SELECTORS = [
+    ".mail-status.unread",
+    'a[href*="/notifications"] [class*="red-dot" i]',
+    'a[href*="/notifications"] [class*="unread-dot" i]',
+    'a[href*="/message"] [class*="red-dot" i]',
+    'a[href*="/message"] [class*="unread-dot" i]',
+    'a[href*="/im"] [class*="red-dot" i]',
+    '[class*="nav" i] [class*="unread-dot" i]',
+    '[class*="header" i] [class*="unread-dot" i]',
+    '[class*="chat-item" i] [class*="unread-dot" i]',
   ];
 
   function inspectTitleAndBadges() {
@@ -152,6 +183,11 @@
 
     const authExpired = detectAuthOrChallengeGate();
     if (authExpired) {
+      // Anti-false-positive: SPAs/SSOs often flash a login shell for 2-4s while redirecting with cookies!
+      consecutiveAuthHits += 1;
+      if (Date.now() - INSTALLED_AT < 4500 || consecutiveAuthHits < 2) {
+        return;
+      }
       const authKey = `AUTH_EXPIRED:${location.host}`;
       if (authKey !== lastSentKey) {
         lastSentKey = authKey;
@@ -160,19 +196,22 @@
       return;
     }
 
+    consecutiveAuthHits = 0;
+
     let count = 0;
     const pats = [
       /^\(\s*(\d{1,4})\s*\)/,
       /^\[\s*(\d{1,4})\s*\]/,
       /[【\[]\s*(\d{1,4})\s*条?(?:新消息|未读|私信)/i,
       /(\d{1,4})\s*(?:unread|new notifications?|条未读|条新消息)/i,
+      /(?:您有|收到)\s*(\d{1,4})\s*条?(?:新消息|未读|私信)/i,
     ];
     for (const p of pats) {
       const m = title.match(p);
       if (m && m[1]) count = Math.max(count, parseInt(m[1], 10) || 0);
     }
 
-    for (const sel of BADGE_SELECTORS) {
+    for (const sel of NUMERIC_BADGE_SELECTORS) {
       let nodes = [];
       try {
         nodes = Array.from(document.querySelectorAll(sel));
@@ -183,11 +222,30 @@
         if (!isVisible(el) || el.closest("article, pre, code, footer")) continue;
         const txt = (el.textContent || "").trim();
         const aria = el.getAttribute("aria-label") || "";
+        const dataUnread = el.getAttribute("data-unread") || el.getAttribute("data-count") || "";
         if (/^\d{1,3}\+?$/.test(txt)) {
-          count = Math.max(count, parseInt(txt, 10) || 0);
+          const n = parseInt(txt, 10) || 0;
+          if (n > 0) count = Math.max(count, n);
+        } else if (/^\d{1,3}$/.test(dataUnread)) {
+          const n = parseInt(dataUnread, 10) || 0;
+          if (n > 0) count = Math.max(count, n);
         } else {
           const am = aria.match(/(\d{1,3})\s*(?:条?未读|unread|new)/i);
           if (am) count = Math.max(count, parseInt(am[1], 10) || 0);
+        }
+      }
+    }
+
+    if (count === 0) {
+      for (const sel of DOT_ONLY_SELECTORS) {
+        try {
+          const dots = Array.from(document.querySelectorAll(sel));
+          if (dots.some((d) => isVisible(d) && !d.closest("article, pre, code, footer"))) {
+            count = 1;
+            break;
+          }
+        } catch {
+          // ignore
         }
       }
     }
@@ -200,11 +258,27 @@
     }
   }
 
+  // Gentle same-origin daytime keep-alive hook (invoked only by native app for logged-in sessions; zero reload)
+  window.__TABPULSE_KEEPALIVE_PING__ = function () {
+    try {
+      if (detectAuthOrChallengeGate()) return { ok: false, authExpired: true };
+      fetch(location.origin + "/favicon.ico", { method: "HEAD", credentials: "include", cache: "no-store" }).catch(
+        () => {}
+      );
+      return { ok: true, ts: Date.now() };
+    } catch {
+      return { ok: false };
+    }
+  };
+
   function startObserver() {
-    setTimeout(inspectTitleAndBadges, 2200);
+    setTimeout(inspectTitleAndBadges, 2600);
+    setTimeout(inspectTitleAndBadges, 6800);
+    // Lightweight in-memory passive check every 12s (0 network requests, catches title/JS badge updates reliably)
+    setInterval(inspectTitleAndBadges, 12000);
     const obs = new MutationObserver(() => {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(inspectTitleAndBadges, 2000);
+      debounceTimer = setTimeout(inspectTitleAndBadges, 1800);
     });
     if (document.documentElement) {
       obs.observe(document.documentElement, { subtree: true, childList: true, characterData: true });

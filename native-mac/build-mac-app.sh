@@ -79,13 +79,19 @@ UNIVERSAL_MAS="$BIN_TMP/MasExec"
 /usr/bin/lipo -create "$BIN_TMP/mas-arm64" "$BIN_TMP/mas-x86_64" -output "$UNIVERSAL_MAS"
 
 PRESETS_TMP="$BIN_TMP/presets.json"
+CATALOG_TMP="$BIN_TMP/catalog.json"
 /usr/local/bin/node -e '
 import("./seed/preset-packs.mjs").then((m) => {
   import("node:fs").then((fs) => {
     fs.writeFileSync(process.argv[1], JSON.stringify(m.PRESET_PACKS, null, 2));
   });
 });
-' "$PRESETS_TMP"
+import("./seed/platform-catalog.mjs").then((m) => {
+  import("node:fs").then((fs) => {
+    fs.writeFileSync(process.argv[2], JSON.stringify({ categories: m.PLATFORM_CATALOG_CATEGORIES, platforms: m.PLATFORM_CATALOG }, null, 2));
+  });
+});
+' "$PRESETS_TMP" "$CATALOG_TMP"
 
 populate_bundle() {
   local app_dir="$1"
@@ -106,6 +112,7 @@ populate_bundle() {
   cp "$PROJECT_ROOT/extension/passive-observer.js" "$app_dir/Contents/Resources/passive-observer.js"
   cp "$PROJECT_ROOT/docs/cold-reply-playbook.html" "$app_dir/Contents/Resources/cold-reply-playbook.html"
   cp "$PRESETS_TMP" "$app_dir/Contents/Resources/presets.json"
+  cp "$CATALOG_TMP" "$app_dir/Contents/Resources/catalog.json"
 
   printf '"CFBundleDisplayName" = "消息总管";\n"CFBundleName" = "消息总管";\n' > "$app_dir/Contents/Resources/zh-Hans.lproj/InfoPlist.strings"
   printf '"CFBundleDisplayName" = "ReplyRadar";\n"CFBundleName" = "ReplyRadar";\n' > "$app_dir/Contents/Resources/en.lproj/InfoPlist.strings"
@@ -178,11 +185,11 @@ if security find-identity -v -p codesigning | grep -q "Apple Development: Yang H
 fi
 
 echo "[3/6] Assembling Direct CN (消息总管.app) & Direct EN (ReplyRadar.app)..."
-populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.5.0" "10"
+populate_bundle "$DIST_DIR/消息总管.app" "消息总管" "XiaoXiZongGuan" "com.shuchuang.xiaoxizongguan" "zh_CN" "$UNIVERSAL_DIRECT" "5.6.0" "11"
 bundle_embedded_server "$DIST_DIR/消息总管.app"
 /usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/消息总管.app"
 
-populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.5.0" "10"
+populate_bundle "$DIST_DIR/ReplyRadar.app" "ReplyRadar" "ReplyRadar" "com.shuchuang.replyradar" "en" "$UNIVERSAL_DIRECT" "5.6.0" "11"
 bundle_embedded_server "$DIST_DIR/ReplyRadar.app"
 /usr/bin/codesign --force --deep --sign "$SIGN_IDENTITY" "$DIST_DIR/ReplyRadar.app"
 

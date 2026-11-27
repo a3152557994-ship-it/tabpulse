@@ -2,6 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { PLATFORM_CATALOG, PLATFORM_CATALOG_CATEGORIES } from "../seed/platform-catalog.mjs";
 import { PRESET_PACKS } from "../seed/preset-packs.mjs";
 import { aiButler } from "./ai-butler.mjs";
 import { aiInbox } from "./ai-inbox.mjs";
@@ -15,7 +16,13 @@ import {
   isLocalDesktopTrusted,
   tunnelManager,
 } from "./mobile-bridge.mjs";
-import { notifyAgentAlert, notifyAuthExpired, notifyUnread, sendCustomerWebhook } from "./notifier.mjs";
+import {
+  notifyAgentAlert,
+  notifyAuthExpired,
+  notifyUnread,
+  sendCustomerWebhook,
+  sendEmailPushNotification,
+} from "./notifier.mjs";
 import { scanBuyerLeads } from "./scanner.mjs";
 import {
   activateLicenseKey,
@@ -33,6 +40,7 @@ import {
   savePushSubscription,
   saveQuickReplies,
   saveReplyDraft,
+  unbindWatch,
   updateSettings,
   upsertWatch,
 } from "./store.mjs";
@@ -122,9 +130,11 @@ function currentMobileLink(localPort) {
   return info.primaryUrl;
 }
 
-function renderPairGateHtml(errorMsg = "") {
+function renderPairGateHtml(errorMsg = "", boxPrefix = "") {
   const safeErr = escapeHtmlServer(errorMsg);
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="referrer" content="no-referrer"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/><title>消息总管 · 手机安全配对</title><style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#0f172a;color:#f8fafc;display:grid;place-items:center;min-height:100vh;padding:20px}form{background:#1e293b;border:1px solid #334155;border-radius:18px;padding:24px;width:100%;max-width:360px;box-sizing:border-box}h1{font-size:19px;margin:0 0 8px}p{font-size:13px;color:#94a3b8;line-height:1.5;margin:0 0 16px}input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:14px;margin-bottom:12px}button{width:100%;padding:12px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:15px}</style></head><body><form method="GET" action="/m"><h1>🔒 消息总管 · 手机随身端</h1><p>请在电脑端打开《消息总管》点击左下角「📲 手机随身收件箱」直接扫码进入，或在下方粘贴配对密钥：</p>${safeErr ? `<p style="color:#f87171">${safeErr}</p>` : ""}<input name="t" placeholder="粘贴电脑端配对密钥..." required /><button type="submit">验证并进入手机工作台</button></form></body></html>`;
+  const cleanPrefix = /^\/box\/bx_[a-zA-Z0-9]{10,36}$/.test(String(boxPrefix || "")) ? String(boxPrefix) : "";
+  const formAction = `${cleanPrefix}/m`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="referrer" content="no-referrer"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/><title>消息总管 · 手机安全配对</title><style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#0f172a;color:#f8fafc;display:grid;place-items:center;min-height:100vh;padding:20px}form{background:#1e293b;border:1px solid #334155;border-radius:18px;padding:24px;width:100%;max-width:360px;box-sizing:border-box}h1{font-size:19px;margin:0 0 8px}p{font-size:13px;color:#94a3b8;line-height:1.5;margin:0 0 16px}input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:14px;margin-bottom:12px}button{width:100%;padding:12px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-weight:700;font-size:15px}</style></head><body><form method="GET" action="${formAction}"><h1>🔒 消息总管 · 手机随身端</h1><p>请在电脑端打开《消息总管》点击左下角「📲 手机随身收件箱」直接扫码进入，或在下方粘贴配对密钥：</p>${safeErr ? `<p style="color:#f87171">${safeErr}</p>` : ""}<input name="t" placeholder="粘贴电脑端配对密钥..." required /><button type="submit">验证并进入手机工作台</button></form></body></html>`;
 }
 
 export function createHubServer(options = {}) {
@@ -286,7 +296,7 @@ export function createHubServer(options = {}) {
     try {
       // Public lightweight endpoints
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, version: "5.5.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
+        sendJson(res, 200, { ok: true, version: "5.6.0", desktopBridge: desktopRelay.isDesktopConnected() }, corsOrigin);
         return;
       }
       if (req.method === "GET" && pathname === "/sw.js") {
@@ -328,7 +338,8 @@ export function createHubServer(options = {}) {
         const auth = checkMobileAuth(req, reqUrl, expectedTok);
         if (!auth.ok) {
           if (pathname === "/" || pathname === "/m") {
-            sendText(res, auth.locked ? 429 : 401, "text/html; charset=utf-8", renderPairGateHtml(auth.error));
+            const boxPrefix = String(req.headers["x-tabpulse-box-prefix"] || "");
+            sendText(res, auth.locked ? 429 : 401, "text/html; charset=utf-8", renderPairGateHtml(auth.error, boxPrefix));
           } else {
             sendJson(res, auth.locked ? 429 : 401, { ok: false, error: auth.error }, corsOrigin);
           }
@@ -337,7 +348,7 @@ export function createHubServer(options = {}) {
         if (auth.fromQuery) {
           const isHttps = req.headers["x-forwarded-proto"] === "https" || Boolean(req.headers["cf-ray"]);
           authCookieHeader = {
-            "Set-Cookie": `tp_mob_tok=${encodeURIComponent(expectedTok)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${isHttps ? "; Secure" : ""}`,
+            "Set-Cookie": `tp_mob_tok=${encodeURIComponent(expectedTok)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${isHttps ? "; Secure" : ""}`,
           };
         }
       }
@@ -381,8 +392,8 @@ export function createHubServer(options = {}) {
         return;
       }
 
-      // Desktop-only management routes (never exposed over tunnel)
-      if (pathname.startsWith("/api/mobile/")) {
+      // Desktop-only mobile pairing management routes (never exposed over tunnel)
+      if (pathname === "/api/mobile/info" || pathname === "/api/mobile/tunnel") {
         if (!localTrusted) {
           sendJson(res, 403, { ok: false, error: "desktop only" }, corsOrigin);
           return;
@@ -453,7 +464,16 @@ export function createHubServer(options = {}) {
           sendJson(res, 403, { ok: false }, "");
           return;
         }
-        sendJson(res, 200, { ok: true, commands: desktopRelay.pollNextCommands() }, corsOrigin);
+        sendJson(
+          res,
+          200,
+          {
+            ok: true,
+            commands: desktopRelay.pollNextCommands(),
+            notices: desktopRelay.drainNativeNotices(),
+          },
+          corsOrigin
+        );
         return;
       }
       if (pathname === "/api/bridge/result" && req.method === "POST") {
@@ -678,14 +698,24 @@ export function createHubServer(options = {}) {
         } catch {}
         const st = loadState();
         const link = currentMobileLink(serverPortRef.port);
-        const title = "🔔 消息总管手机提醒测试";
-        const summary = "提醒已打通！来消息时手机直接响铃，点进对应红点就能看消息并回复。";
+        const title = "🔔 消息总管通知全链路测试";
+        const summary = "提醒已打通！电脑弹窗与手机消息推送均正常，点进红点就能直接看消息并回复。";
+        desktopRelay.pushNativeNotice({ title, body: summary, targetKey: "" });
         const pushOut = await broadcastMobileWebPush({ title, body: summary, targetKey: "" });
         const explicitTarget = typeof body.webhookUrl === "string" ? body.webhookUrl.trim() : "";
         const targetToUse = explicitTarget || st.settings?.webhookUrl || "";
         let webhookOut = null;
         if (targetToUse) {
           webhookOut = await sendCustomerWebhook(targetToUse, title, summary, link);
+        }
+        let emailOut = null;
+        const emailCfg = body.emailPush || st.settings?.emailPush;
+        if (emailCfg && emailCfg.enabled && emailCfg.user && emailCfg.pass) {
+          emailOut = await sendEmailPushNotification(
+            emailCfg,
+            title,
+            link ? `${summary}\n\n📱 手机随身收件箱直达：${link}` : summary
+          );
         }
         if (explicitTarget) {
           sendJson(
@@ -695,8 +725,10 @@ export function createHubServer(options = {}) {
               ok: Boolean(webhookOut?.ok),
               channel: webhookOut?.channel || "",
               error: webhookOut?.error || "",
+              desktopNoticeQueued: desktopRelay.isDesktopConnected(),
               webPush: pushOut,
               webhook: webhookOut,
+              email: emailOut,
             },
             corsOrigin
           );
@@ -707,9 +739,11 @@ export function createHubServer(options = {}) {
           200,
           {
             ok: true,
-            channel: webhookOut?.channel || (pushOut?.sent > 0 ? "WebPush" : ""),
+            channel: webhookOut?.channel || (emailOut?.ok ? "Email" : pushOut?.sent > 0 ? "WebPush" : "Local"),
+            desktopNoticeQueued: desktopRelay.isDesktopConnected(),
             webPush: pushOut,
             webhook: webhookOut,
+            email: emailOut,
           },
           corsOrigin
         );
@@ -779,7 +813,52 @@ export function createHubServer(options = {}) {
         return;
       }
 
-      // Remote Tab Live Snapshot & Fixed-IP Reply Injection routes
+      // Remote Tab Live Snapshot, Mobile Direct Login, Unbind & Fixed-IP Reply Injection routes
+      const loginStateMatch = pathname.match(/^\/api\/remote\/tab\/([^/]+)\/login-state$/);
+      if (loginStateMatch && req.method === "GET") {
+        const wid = decodeURIComponent(loginStateMatch[1]);
+        const watch = loadState().watches.find((w) => w.id === wid);
+        if (!watch) {
+          sendJson(res, 404, { ok: false, error: "watch not found" }, corsOrigin);
+          return;
+        }
+        const out = await desktopRelay.enqueueCommand(
+          {
+            type: "loginState",
+            watchId: wid,
+            url: watch.url,
+            name: watch.name,
+            profileUuid: watch.profileUuid || "",
+          },
+          12000
+        );
+        sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+
+      const tabUnbindMatch = pathname.match(/^\/api\/remote\/tab\/([^/]+)\/unbind$/);
+      if (tabUnbindMatch && req.method === "POST") {
+        const wid = decodeURIComponent(tabUnbindMatch[1]);
+        const watch = loadState().watches.find((w) => w.id === wid);
+        if (!watch) {
+          sendJson(res, 404, { ok: false, error: "watch not found" }, corsOrigin);
+          return;
+        }
+        const relayOut = await desktopRelay.enqueueCommand(
+          {
+            type: "unbind",
+            watchId: wid,
+            url: watch.url,
+            name: watch.name,
+            profileUuid: watch.profileUuid || "",
+          },
+          8000
+        );
+        const updated = unbindWatch(wid);
+        sendJson(res, 200, { ok: true, watch: updated, relay: relayOut }, corsOrigin);
+        return;
+      }
+
       const snapMatch = pathname.match(/^\/api\/remote\/tab\/([^/]+)\/snapshot$/);
       if (snapMatch && req.method === "GET") {
         const wid = decodeURIComponent(snapMatch[1]);
@@ -820,10 +899,67 @@ export function createHubServer(options = {}) {
             xRatio: Number(body.xRatio) || 0.5,
             yRatio: Number(body.yRatio) || 0.5,
             dy: Number(body.dy) || 0,
+            fields: Array.isArray(body.fields) ? body.fields : undefined,
+            clickButtonText: body.clickButtonText || "",
+            fieldIdx: body.fieldIdx !== undefined ? Number(body.fieldIdx) : undefined,
           },
-          10000
+          12000
         );
         sendJson(res, 200, out, corsOrigin);
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/catalog") {
+        sendJson(
+          res,
+          200,
+          {
+            ok: true,
+            categories: PLATFORM_CATALOG_CATEGORIES,
+            platforms: PLATFORM_CATALOG,
+          },
+          corsOrigin,
+          authCookieHeader
+        );
+        return;
+      }
+
+      // Single-request mobile polling bundle (5x fewer Cloudflare Worker requests & faster phone sync!)
+      if (req.method === "GET" && pathname === "/api/mobile/bundle") {
+        const sum = getPublicSummary();
+        if (!localTrusted && sum.settings) {
+          sum.settings = {
+            ...sum.settings,
+            webhookConfigured: Boolean(sum.settings.webhookUrl),
+            emailConfigured: Boolean(sum.settings.emailPush?.enabled && sum.settings.emailPush?.user),
+            webhookUrl: sum.settings.webhookUrl ? "••••••••" : "",
+            emailPush: sum.settings.emailPush
+              ? { ...sum.settings.emailPush, pass: sum.settings.emailPush.pass ? "••••••••" : "" }
+              : { enabled: false },
+            aiButlerApiKey: sum.settings.aiButlerApiKey ? "••••••••" : "",
+            aiButlerWebhookUrl: sum.settings.aiButlerWebhookUrl ? "••••••••" : "",
+          };
+        }
+        const desktop = await desktopMonitor.getDesktopState().catch(() => ({ windows: [], badges: [], recentAlerts: [], installedApps: [] }));
+        const st = loadState();
+        sendJson(
+          res,
+          200,
+          {
+            ok: true,
+            state: { ...sum, desktopBridgeConnected: desktopRelay.isDesktopConnected() },
+            desktop,
+            cc: { ok: true, ...agentEngine.listState(serverPortRef.port) },
+            aiInbox: { ok: true, channels: aiInbox.listChannels() },
+            aiButler: {
+              ...aiButler.getEventsSince(0),
+              enabled: Boolean(st.settings?.aiButlerEnabled),
+              provider: st.settings?.aiButlerProvider || "codex",
+            },
+          },
+          corsOrigin,
+          authCookieHeader
+        );
         return;
       }
 
@@ -836,12 +972,16 @@ export function createHubServer(options = {}) {
 
       if (req.method === "GET" && pathname === "/api/state") {
         const sum = getPublicSummary();
-        // Mask raw webhook URL on mobile view for privacy while showing whether push is active
+        // Mask raw secrets on mobile view for privacy while showing whether push is active
         if (!localTrusted && sum.settings) {
           sum.settings = {
             ...sum.settings,
             webhookConfigured: Boolean(sum.settings.webhookUrl),
+            emailConfigured: Boolean(sum.settings.emailPush?.enabled && sum.settings.emailPush?.user),
             webhookUrl: sum.settings.webhookUrl ? "••••••••" : "",
+            emailPush: sum.settings.emailPush
+              ? { ...sum.settings.emailPush, pass: sum.settings.emailPush.pass ? "••••••••" : "" }
+              : { enabled: false },
             aiButlerApiKey: sum.settings.aiButlerApiKey ? "••••••••" : "",
             aiButlerWebhookUrl: sum.settings.aiButlerWebhookUrl ? "••••••••" : "",
           };
@@ -996,9 +1136,51 @@ export function createHubServer(options = {}) {
         return;
       }
 
+      const unbindMatch = pathname.match(/^\/api\/watches\/([^/]+)\/unbind$/);
+      if (req.method === "POST" && unbindMatch) {
+        const id = decodeURIComponent(unbindMatch[1]);
+        const watch = loadState().watches.find((w) => w.id === id);
+        if (!watch) {
+          sendJson(res, 404, { ok: false, error: "watch not found" }, corsOrigin);
+          return;
+        }
+        if (desktopRelay.isDesktopConnected()) {
+          await desktopRelay
+            .enqueueCommand(
+              {
+                type: "unbind",
+                watchId: id,
+                url: watch.url,
+                name: watch.name,
+                profileUuid: watch.profileUuid || "",
+              },
+              6000
+            )
+            .catch(() => null);
+        }
+        const updated = unbindWatch(id);
+        sendJson(res, 200, { ok: true, watch: updated }, corsOrigin);
+        return;
+      }
+
       const deleteMatch = pathname.match(/^\/api\/watches\/([^/]+)$/);
       if (req.method === "DELETE" && deleteMatch) {
         const id = decodeURIComponent(deleteMatch[1]);
+        const existing = loadState().watches.find((w) => w.id === id);
+        if (existing && desktopRelay.isDesktopConnected()) {
+          await desktopRelay
+            .enqueueCommand(
+              {
+                type: "unbind",
+                watchId: id,
+                url: existing.url,
+                name: existing.name,
+                profileUuid: existing.profileUuid || "",
+              },
+              3500
+            )
+            .catch(() => null);
+        }
         const deleted = deleteWatch(id);
         if (!deleted) {
           sendJson(res, 404, { ok: false, error: "watch not found" }, corsOrigin);
@@ -1081,6 +1263,6 @@ if (isDirectEntrypoint()) {
   const port = Number(process.env.TABPULSE_PORT || 17890);
   const server = createHubServer({ port });
   server.listen(port, host, () => {
-    console.log(`TabPulse Hub v5.5.0 listening securely on http://${host}:${port}`);
+    console.log(`TabPulse Hub v5.6.0 listening securely on http://${host}:${port}`);
   });
 }

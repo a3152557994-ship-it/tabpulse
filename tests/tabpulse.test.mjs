@@ -134,7 +134,7 @@ test("HTTP hub v0.2.0 serves UI, presets, playbook, CORS, watch CRUD, settings, 
 
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
     assert.equal(health.ok, true);
-    assert.equal(health.version, "5.5.0");
+    assert.equal(health.version, "5.6.0");
 
     const badCors = await fetch(`${baseUrl}/api/health`, {
       headers: { Origin: "https://evil.example.com" },
@@ -243,7 +243,7 @@ test("MCP stdio server v0.2.0 exposes 5 tools and completes roundtrip", async ()
       method: "initialize",
       params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1.0" } },
     });
-    assert.equal(init.result.serverInfo.version, "5.5.0");
+    assert.equal(init.result.serverInfo.version, "5.6.0");
 
     const resList = await sendAndWait({ jsonrpc: "2.0", id: 99, method: "resources/list", params: {} });
     assert.equal(resList.result.resources[0].uri, "replyradar://events/live");
@@ -568,6 +568,99 @@ test("Mobile Pocket App auth guard, QR SVG pairing, and CC remote task runner wo
     assert.equal(wClone.created, true);
     assert.notEqual(wClone.watch.id, w1.watch.id);
     assert.notEqual(wClone.watch.profileUuid, w1.watch.profileUuid);
+
+    // 13. v5.6.0: Shared 75+ popular & niche platform catalog, single-call mobile bundle, remote login relay, unbind & Telegram/ntfy push
+    const catRes = await (
+      await fetch(`${baseUrl}/api/catalog`, {
+        headers: { "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+      })
+    ).json();
+    assert.equal(catRes.ok, true);
+    assert.ok(catRes.platforms.length >= 65);
+    assert.ok(catRes.categories.some((c) => c.id === "hot"));
+    assert.ok(catRes.categories.some((c) => c.id === "niche"));
+    assert.ok(catRes.platforms.some((p) => p.niche === true && p.zh.includes("汇博")));
+
+    // Secret masking on /api/mobile/bundle
+    await fetch(`${baseUrl}/api/settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        emailPush: { enabled: true, user: "demo@qq.com", pass: "secret_smtp_code", to: "demo@qq.com" },
+        keepAliveEnabled: true,
+      }),
+    });
+    const bundleRes = await (
+      await fetch(`${baseUrl}/api/mobile/bundle`, {
+        headers: { "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+      })
+    ).json();
+    assert.equal(bundleRes.ok, true);
+    assert.ok(Array.isArray(bundleRes.state.watches));
+    assert.equal(bundleRes.state.settings.emailConfigured, true);
+    assert.equal(bundleRes.state.settings.emailPush.pass, "••••••••");
+
+    // Telegram & ntfy push target normalization
+    const tgNorm = normalizeCustomerPushTarget("tg://123456:ABC_TOKEN@987654321");
+    assert.equal(tgNorm.kind, "telegram");
+    assert.equal(tgNorm.chatId, "987654321");
+    const ntfyNorm = normalizeCustomerPushTarget("ntfy://my-inbox-topic");
+    assert.equal(ntfyNorm.kind, "ntfy");
+    assert.equal(ntfyNorm.url, "https://ntfy.sh/my-inbox-topic");
+
+    // Mobile remote login relay (login-state) + native notice delivery over /api/bridge/poll
+    await fetch(`${baseUrl}/api/push/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const loginPromise = fetch(`${baseUrl}/api/remote/tab/${encodeURIComponent(w1.watch.id)}/login-state`, {
+      headers: { "cf-connecting-ip": "203.0.113.9", "X-TabPulse-Token": tok },
+    }).then((r) => r.json());
+    await new Promise((r) => setTimeout(r, 40));
+    const pollBridge = await (await fetch(`${baseUrl}/api/bridge/poll`)).json();
+    assert.equal(pollBridge.ok, true);
+    assert.ok(pollBridge.notices.length >= 1);
+    const loginCmd = pollBridge.commands.find((c) => c.type === "loginState" && c.watchId === w1.watch.id);
+    assert.ok(loginCmd);
+    await fetch(`${baseUrl}/api/bridge/result`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId: loginCmd.taskId,
+        watchId: w1.watch.id,
+        authRequired: true,
+        fields: [{ idx: 0, type: "account", placeholder: "手机号" }],
+        buttons: [{ text: "获取验证码", xRatio: 0.6, yRatio: 0.5 }],
+      }),
+    });
+    const loginOut = await loginPromise;
+    assert.equal(loginOut.ok, true);
+    assert.equal(loginOut.authRequired, true);
+    assert.equal(loginOut.fields.length, 1);
+
+    // Explicit unbind resets login status cleanly
+    const unbindPromise = fetch(`${baseUrl}/api/watches/${encodeURIComponent(w1.watch.id)}/unbind`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).then((r) => r.json());
+    await new Promise((r) => setTimeout(r, 40));
+    const pollUnbind = await (await fetch(`${baseUrl}/api/bridge/poll`)).json();
+    const unbindCmd = pollUnbind.commands.find((c) => c.type === "unbind" && c.watchId === w1.watch.id);
+    if (unbindCmd) {
+      await fetch(`${baseUrl}/api/bridge/result`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId: unbindCmd.taskId, watchId: w1.watch.id, unbound: true }),
+      });
+    }
+    const unbindOut = await unbindPromise;
+    assert.equal(unbindOut.ok, true);
+    assert.equal(unbindOut.watch.status, "auth_expired");
+
+    // Verify permanent /box/:boxId/ reverse proxy exists in worker & mobile.html supports BASE_PREFIX + remote login
+    const workerSrc = fs.readFileSync(path.join(PROJECT_ROOT, "worker", "index.mjs"), "utf-8");
+    assert.ok(workerSrc.includes("/box/${boxId}/m"));
+    assert.ok(mobHtml.includes("BASE_PREFIX"));
+    assert.ok(mobHtml.includes("mob-login-box"));
+    assert.ok(mobHtml.includes("常用与小众平台"));
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

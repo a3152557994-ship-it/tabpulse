@@ -332,6 +332,9 @@
       <button class="ftab active" data-filter="all" onclick="setFilter('all', this)">
         全部消息 <span class="mini-dot" id="dot-all" style="display:none">0</span>
       </button>
+      <button class="ftab" data-filter="catalog" onclick="setFilter('catalog', this)">
+        🌐 常用平台
+      </button>
       <button class="ftab" data-filter="web" onclick="setFilter('web', this)">
         网页平台 <span class="mini-dot" id="dot-web" style="display:none">0</span>
       </button>
@@ -349,14 +352,33 @@
 
   <!-- Main Unified Red-Dot Channel List -->
   <div class="inbox-wrap" id="inbox-wrap">
+    <div id="push-status-tip" style="display:none;background:rgba(37,99,235,0.14);border:1px solid rgba(96,165,250,0.35);border-radius:12px;padding:9px 12px;margin-bottom:8px;font-size:12px;line-height:1.5;color:#cbd5e1;"></div>
     <div class="section-toolbar">
-      <span id="conn-hint">🟢 已连家里电脑 · 来消息自动亮红点</span>
+      <span id="conn-hint">🟢 已连家里电脑 · 持久保活在线</span>
       <div style="display:flex;gap:6px">
-        <button class="btn" style="padding:4px 9px;font-size:11.5px" onclick="openAddSheet()">＋ 添加监控/软件</button>
+        <button class="btn primary" style="padding:4px 10px;font-size:11.5px" onclick="setFilter('catalog', document.querySelector('[data-filter=catalog]'))">＋ 常用/小众平台</button>
       </div>
     </div>
     <div class="channel-list" id="channel-list">
       <div class="empty-state">正在同步各平台与电脑软件消息...</div>
+    </div>
+  </div>
+
+  <!-- Mobile Popular & Niche Platform Directory (常用与小众平台广场) -->
+  <div class="tools-wrap" id="catalog-wrap">
+    <div class="card" style="padding:12px;">
+      <div style="font-size:15px;font-weight:800;margin-bottom:4px;">🌐 常用与小众平台一键添加</div>
+      <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">支持 79+ 常用高频与小众宝藏平台；添加后可<strong>直接在手机上登录</strong>，持久保活不掉线。</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <input class="field" id="mob-cat-search" style="margin-bottom:0;flex:1;" oninput="renderMobileCatalog()" placeholder="🔍 搜平台名/拼音（如 闲鱼、xy、汇博、电鸭）或粘贴网址..." />
+        <button class="btn primary" onclick="mobCatalogAddCustomUrl()">加网址</button>
+      </div>
+      <div id="mob-cat-tabs" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;"></div>
+    </div>
+    <div id="mob-cat-list" style="display:grid;gap:8px;margin-bottom:14px;"></div>
+    <div class="card" style="padding:12px;">
+      <div style="font-size:13px;font-weight:700;color:#34d399;margin-bottom:8px;">💻 远程唤醒家里电脑软件</div>
+      <div id="mob-cat-apps" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
     </div>
   </div>
 
@@ -390,11 +412,13 @@
         <div class="chat-nav-sub" id="chat-sub">纯文字同步 · 电脑固定网络代发</div>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0;">
+        <button class="btn" id="btn-mob-login" onclick="toggleMobileLoginPanel()" style="display:none;" title="在手机上直接扫码或输验证码登录">🔑 登录</button>
         <button class="btn" id="btn-peek-img" onclick="peekActiveChatImage()" title="买家发了图片？点此按需查看当前会话画面">🖼️ 看图</button>
         <button class="btn" onclick="refreshActiveChannel(true)">刷新</button>
       </div>
     </div>
 
+    <div id="mob-login-box" style="display:none;background:#0f172a;border-bottom:1px solid var(--border);padding:12px;max-height:76vh;overflow-y:auto;"></div>
     <div id="peek-img-box" style="display:none;background:#0f172a;border-bottom:1px solid var(--border);padding:10px 12px;"></div>
 
     <!-- Clickable Conversation / Contact Threads inside this Platform/App -->
@@ -453,11 +477,34 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    const BASE_PREFIX = (location.pathname.match(/^(\/box\/bx_[a-zA-Z0-9]+)/) || [])[1] || "";
+    let storedMobileToken = "";
+    try {
+      const qTok = new URLSearchParams(location.search).get("t");
+      if (qTok) {
+        localStorage.setItem("tp_mob_tok", qTok);
+        storedMobileToken = qTok;
+      } else {
+        storedMobileToken = localStorage.getItem("tp_mob_tok") || "";
+      }
+      if (BASE_PREFIX) {
+        const mfLink = document.querySelector('link[rel="manifest"]');
+        if (mfLink) mfLink.href = `${BASE_PREFIX}/manifest.webmanifest`;
+        const iconLink = document.querySelector('link[rel="apple-touch-icon"]');
+        if (iconLink) iconLink.href = `${BASE_PREFIX}/mobile-icon.svg`;
+      }
+    } catch {}
+
     let hubState = { watches: [], quickReplies: [], stats: {} };
     let desktopState = { windows: [], badges: [], recentAlerts: [], installedApps: [] };
     let ccState = { sessions: [], hookEvents: [], agents: [] };
     let aiInboxState = { channels: [] };
     let aiButlerState = { suggestions: {}, events: [] };
+    let mobCatalog = { categories: [], platforms: [] };
+    let mobCatalogActiveCat = "hot";
+    let mobileLoginOpen = false;
+    let mobileLoginPollTimer = null;
+    let lastLoginState = null;
 
     let currentFilter = "all";
     let unifiedChannels = [];
@@ -563,10 +610,17 @@
       return (String(name || "信").trim()[0] || "信").toUpperCase();
     }
 
+    function withBase(u) {
+      if (!u || /^https?:\/\//i.test(u)) return u;
+      return BASE_PREFIX + (u.startsWith("/") ? u : "/" + u);
+    }
+
     async function api(url, opts = {}) {
-      const res = await fetch(url, {
-        headers: { "Content-Type": "application/json" },
+      const hdrs = { "Content-Type": "application/json", ...(opts.headers || {}) };
+      if (storedMobileToken) hdrs["X-TabPulse-Token"] = storedMobileToken;
+      const res = await fetch(withBase(url), {
         ...opts,
+        headers: hdrs,
       });
       return res.json();
     }
@@ -584,7 +638,9 @@
     async function initServiceWorkerAndPushStatus() {
       if (!("serviceWorker" in navigator)) return;
       try {
-        swReg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        const swUrl = withBase("/sw.js");
+        const swScope = BASE_PREFIX ? `${BASE_PREFIX}/` : "/";
+        swReg = await navigator.serviceWorker.register(swUrl, { scope: swScope });
         navigator.serviceWorker.addEventListener("message", (ev) => {
           if (ev.data?.action === "openChannel" && ev.data.targetKey) {
             openChannelByKey(ev.data.targetKey);
@@ -599,6 +655,27 @@
       } catch {}
     }
 
+    function updatePushGuidanceTip() {
+      const tip = document.getElementById("push-status-tip");
+      if (!tip) return;
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const isStandalonePwa = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone;
+      const hasServerPush = Boolean(hubState.settings?.webhookConfigured || hubState.settings?.emailConfigured);
+      if (hasServerPush) {
+        tip.style.display = "none";
+        return;
+      }
+      if (isIOS && !isStandalonePwa) {
+        tip.style.display = "block";
+        tip.innerHTML = `🔔 <strong>iPhone 锁屏必达提示：</strong>点 Safari 底部 <strong>分享 ⬆️ → 添加到主屏幕</strong>，从桌面「消息总管」图标打开再点右上角「开启提醒」，即可免翻墙收 Apple 原生锁屏推送（重启永不失效）！`;
+      } else if (!isIOS) {
+        tip.style.display = "block";
+        tip.innerHTML = `🔔 <strong>安卓息屏必达提示：</strong>前台亮红点响铃已开启；如需手机锁屏/关浏览器后照常弹窗，请在电脑端「⚙️ 设置」绑定免费微信 PushPlus 或 QQ 邮箱（30 秒搞定）。`;
+      } else {
+        tip.style.display = "none";
+      }
+    }
+
     function markPushEnabledUI() {
       const btn = document.getElementById("btn-push");
       btn.textContent = "✅ 提醒已开";
@@ -608,7 +685,6 @@
     async function enablePhonePush() {
       unlockAudio();
       playAlertChime();
-      // Request WakeLock on Android / Chrome so mobile inbox stays instant without screen sleep
       try {
         if ("wakeLock" in navigator && navigator.wakeLock?.request) {
           window.__tpWakeLock = await navigator.wakeLock.request("screen");
@@ -623,7 +699,9 @@
           }
         }
         if ("serviceWorker" in navigator && window.isSecureContext) {
-          swReg = swReg || (await navigator.serviceWorker.register("/sw.js", { scope: "/" }));
+          const swUrl = withBase("/sw.js");
+          const swScope = BASE_PREFIX ? `${BASE_PREFIX}/` : "/";
+          swReg = swReg || (await navigator.serviceWorker.register(swUrl, { scope: swScope }));
           await navigator.serviceWorker.ready;
           if (swReg && swReg.pushManager) {
             const keyRes = await api("/api/push/vapid-public-key");
@@ -640,27 +718,26 @@
                 body: JSON.stringify({ subscription: sub }),
               });
               markPushEnabledUI();
-              showToast("✅ 实时红点推送与响铃震动已开启！");
+              showToast("✅ 永久主屏锁屏推送、响铃与震动已全部开启！");
               return;
             }
           }
         }
       } catch {}
 
-      // Works 100% in mainland China on Android (Honor/Xiaomi/Huawei) & LAN HTTP without Google FCM!
       markPushEnabledUI();
-      showToast("✅ 免翻墙毫秒级实时响铃、震动与红点提醒已开启！");
+      showToast("✅ 实时响铃、震动与红点提醒已开启！");
     }
 
     async function testPhoneAlert() {
       unlockAudio();
       playAlertChime();
-      triggerLocalBanner("🔔 消息总管测试提醒", "来新消息时这里会响铃亮红点，点一下直接进对应平台看内容！", unifiedChannels[0]?.key || "");
+      triggerLocalBanner("🔔 消息总管测试提醒", "来新消息时手机和电脑都会响铃弹窗，点一下直接进对应平台！", unifiedChannels[0]?.key || "");
       const res = await api("/api/push/test", { method: "POST", body: "{}" }).catch(() => ({}));
-      if (res.webPush?.sent > 0 || res.webhook?.ok) {
-        showToast("🔔 系统推送已下发到手机！");
+      if (res.webPush?.sent > 0 || res.webhook?.ok || res.email?.ok) {
+        showToast("🔔 电脑弹窗 + 手机后台推送均已下发！");
       } else {
-        showToast("🔔 手机提醒音效与横幅已触发！");
+        showToast("🔔 电脑弹窗 + 手机提醒音效已触发！");
       }
     }
 
@@ -702,14 +779,14 @@
         list.push({
           key: `web:${w.id}`,
           kind: "web",
-          tag: authWarn ? "需登录" : "网页平台",
+          tag: authWarn ? "待登录" : "持久在线",
           id: w.id,
           title: w.name,
           unreadCount: unread,
           authWarn,
           snippet: authWarn
-            ? "⚠️ 电脑端登录已过期，请在电脑端刷新一次登录"
-            : w.snippet || w.contextSummary || "暂无新未读消息，点击直接查看最近会话",
+            ? "🔑 未登录或已过期，点此可直接用手机扫码/验证码登录！"
+            : w.snippet || w.contextSummary || "持久保活在线 · 点击直接查看会话并回复",
           updatedAt: w.lastUnreadAt || w.lastCheckedAt || "",
           icon: pickIcon(w.name, "web"),
         });
@@ -925,19 +1002,149 @@
 
       const inbox = document.getElementById("inbox-wrap");
       const tools = document.getElementById("tools-wrap");
+      const catWrap = document.getElementById("catalog-wrap");
+      inbox.style.display = "none";
+      tools.classList.remove("active");
+      if (catWrap) catWrap.classList.remove("active");
+
       if (f === "tools") {
-        inbox.style.display = "none";
         tools.classList.add("active");
         renderQuickRepliesManage();
+      } else if (f === "catalog") {
+        if (catWrap) catWrap.classList.add("active");
+        loadAndRenderMobileCatalog();
       } else {
-        tools.classList.remove("active");
         inbox.style.display = "block";
         renderChannelList();
       }
     }
 
+    async function loadAndRenderMobileCatalog() {
+      if (!mobCatalog.platforms.length) {
+        const res = await api("/api/catalog").catch(() => null);
+        if (res && Array.isArray(res.platforms)) {
+          mobCatalog = { categories: res.categories || [], platforms: res.platforms };
+        }
+      }
+      renderMobileCatalog();
+    }
+
+    function setMobCatalogCat(cid) {
+      mobCatalogActiveCat = cid;
+      renderMobileCatalog();
+    }
+
+    function renderMobileCatalog() {
+      const tabsEl = document.getElementById("mob-cat-tabs");
+      const listEl = document.getElementById("mob-cat-list");
+      const appsEl = document.getElementById("mob-cat-apps");
+      if (!tabsEl || !listEl) return;
+
+      const cats = mobCatalog.categories.length ? mobCatalog.categories : [
+        { id: "hot", labelZh: "🔥 常用高频" },
+        { id: "niche", labelZh: "🧩 小众宝藏" },
+        { id: "shop", labelZh: "🛒 电商" },
+        { id: "job", labelZh: "💼 招聘接单" },
+        { id: "social", labelZh: "📺 社区" },
+        { id: "im", labelZh: "💬 聊天" },
+        { id: "mail", labelZh: "✉️ 邮箱AI" },
+        { id: "all", labelZh: "全部" },
+      ];
+      tabsEl.innerHTML = cats.map((c) => `
+        <button class="btn ${mobCatalogActiveCat === c.id ? "primary" : ""}" style="flex-shrink:0;padding:5px 10px;font-size:12px;" onclick="setMobCatalogCat('${esc(c.id)}')">${esc(c.labelZh || c.id)}</button>
+      `).join("");
+
+      const q = (document.getElementById("mob-cat-search")?.value || "").trim().toLowerCase();
+      const existing = hubState.watches || [];
+      const filtered = (mobCatalog.platforms || []).filter((p) => {
+        if (q) return `${p.zh || ""} ${p.en || ""} ${p.kw || ""} ${p.url || ""} ${p.loginHint || ""}`.toLowerCase().includes(q);
+        if (mobCatalogActiveCat === "hot") return Boolean(p.hot);
+        if (mobCatalogActiveCat === "niche") return Boolean(p.niche);
+        if (mobCatalogActiveCat === "all") return true;
+        return p.g === mobCatalogActiveCat;
+      });
+
+      if (!filtered.length) {
+        listEl.innerHTML = `<div class="card" style="text-align:center;font-size:12.5px;color:var(--sub);">没搜到「${esc(q)}」？直接点上方「加网址」即可作为小众自定义平台添加并手机登录！</div>`;
+      } else {
+        listEl.innerHTML = filtered.slice(0, 60).map((p) => {
+          const matches = existing.filter((w) => w.url === p.url);
+          const added = matches[0];
+          const nicheTag = p.niche ? `<span class="ch-tag" style="background:rgba(124,58,237,0.22);color:#c4b5fd;">小众</span>` : "";
+          return `
+            <div class="card" style="margin-bottom:0;padding:11px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+              <div style="min-width:0;flex:1;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <strong style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(pickIcon(p.zh, "web"))} ${esc(p.zh)}</strong>
+                  ${nicheTag}
+                  ${matches.length > 0 ? `<span class="ch-tag" style="background:rgba(16,185,129,0.2);color:#34d399;">已加${matches.length}</span>` : ""}
+                </div>
+                <div style="font-size:11.5px;color:var(--sub);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(p.loginHint || p.url)}</div>
+              </div>
+              <div style="display:flex;gap:5px;flex-shrink:0;">
+                ${added
+                  ? `<button class="btn green" style="padding:5px 9px;font-size:12px;" data-key="web:${esc(added.id)}" onclick="openChannelByKey(this.dataset.key, true)">🔑 登录</button>
+                     <button class="btn" style="padding:5px 8px;font-size:12px;" data-url="${esc(p.url)}" onclick="mobCatalogAddPlatform(this.dataset.url, false)">＋副号</button>`
+                  : `<button class="btn primary" style="padding:5px 10px;font-size:12px;" data-url="${esc(p.url)}" onclick="mobCatalogAddPlatform(this.dataset.url, true)">＋ 添加登录</button>`
+                }
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      if (appsEl) {
+        const apps = desktopState.installedApps || [];
+        appsEl.innerHTML = apps.length
+          ? apps.slice(0, 14).map((a) => `<button class="btn" style="font-size:12px" data-path="${esc(a.path)}" data-name="${esc(a.name)}" onclick="launchDesktopApp(this.dataset.path, this.dataset.name)">💻 ${esc(a.name)}</button>`).join("")
+          : `<span style="font-size:12px;color:var(--sub)">电脑端微信/千牛/飞书等软件打开后会自动同步显示</span>`;
+      }
+    }
+
+    async function mobCatalogAddPlatform(url, openLoginNow = true) {
+      const item = (mobCatalog.platforms || []).find((x) => x.url === url);
+      if (!item) return;
+      const sameCnt = (hubState.watches || []).filter((w) => w.url === item.url).length;
+      const finalName = sameCnt > 0 ? `${item.zh}（${sameCnt + 1}号仓）` : item.zh;
+      const res = await api("/api/watches", {
+        method: "POST",
+        body: JSON.stringify({
+          name: finalName,
+          url: item.url,
+          category: item.cat || "主力阵地",
+          publishTier: item.tier || "red",
+          baseIntervalMinutes: 60,
+          isolatedProfile: true,
+          allowDuplicateUrl: sameCnt > 0,
+          contextSummary: item.loginHint || "手机端添加 · 持久保活",
+        }),
+      });
+      showToast(`✅ 已添加「${finalName}」`);
+      await pollAll();
+      renderMobileCatalog();
+      if (openLoginNow && res?.watch?.id) {
+        openChannelByKey(`web:${res.watch.id}`, true);
+      }
+    }
+
+    async function mobCatalogAddCustomUrl() {
+      const raw = (document.getElementById("mob-cat-search")?.value || "").trim();
+      if (!raw || !raw.includes(".")) return showToast("请输入小众网站域名或完整网址（如 example.com）");
+      const urlWithProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+      let hostName = raw;
+      try { hostName = new URL(urlWithProto).hostname.replace(/^www\./, ""); } catch {}
+      const res = await api("/api/watches", {
+        method: "POST",
+        body: JSON.stringify({ name: hostName, url: urlWithProto, publishTier: "red", baseIntervalMinutes: 60, isolatedProfile: true }),
+      });
+      document.getElementById("mob-cat-search").value = "";
+      showToast(`✅ 已添加小众平台「${hostName}」`);
+      await pollAll();
+      if (res?.watch?.id) openChannelByKey(`web:${res.watch.id}`, true);
+    }
+
     /* ---------------- Open Pure-Text Platform Chat Page ---------------- */
-    async function openChannelByKey(targetKey) {
+    async function openChannelByKey(targetKey, forceOpenLogin = false) {
       if (!targetKey) return;
       let ch = unifiedChannels.find(
         (c) => c.key === targetKey || c.appMatchKey === targetKey || (targetKey === "cc:latest" && c.kind === "cc")
@@ -955,10 +1162,11 @@
 
       activeChannel = ch;
       activeThreadIdx = -1;
+      closeMobileLoginPanel();
       document.getElementById("chat-title").textContent = ch.title;
       document.getElementById("chat-sub").textContent =
         ch.kind === "web"
-          ? "网页平台纯文字同步 · 家里电脑固定IP代发"
+          ? "纯文字同步 · 电脑隔离仓持久保活"
           : ch.kind === "app"
             ? "电脑原生软件纯文字提取 · 直接回复"
             : "电脑本地 AI 终端 · 实时文字交互";
@@ -968,6 +1176,8 @@
       if (peekBox) { peekBox.style.display = "none"; peekBox.innerHTML = ""; }
       const peekBtn = document.getElementById("btn-peek-img");
       if (peekBtn) peekBtn.style.display = ch.kind === "cc" ? "none" : "inline-flex";
+      const loginBtn = document.getElementById("btn-mob-login");
+      if (loginBtn) loginBtn.style.display = ch.kind === "web" ? "inline-flex" : "none";
       document.getElementById("msg-stream").innerHTML = `<div class="empty-state">⏳ 正在读取「${esc(ch.title)}」的最新文字消息...</div>`;
       renderButlerDraftBar(ch);
       renderChatQuickReplyChips();
@@ -1007,10 +1217,15 @@
       checkIncomingAlertsAndBadges(unifiedChannels);
       renderChannelList();
 
-      await refreshActiveChannel(false);
+      if (forceOpenLogin && ch.kind === "web") {
+        await openMobileLoginPanel();
+      } else {
+        await refreshActiveChannel(false);
+      }
     }
 
     function closeChatPage() {
+      closeMobileLoginPanel();
       activeChannel = null;
       const peekBox = document.getElementById("peek-img-box");
       if (peekBox) { peekBox.style.display = "none"; peekBox.innerHTML = ""; }
@@ -1018,6 +1233,216 @@
         history.replaceState(null, "", location.pathname + location.search);
       }
       document.getElementById("chat-page").classList.remove("open");
+      pollAll();
+    }
+
+    /* ---------------- Mobile Direct Remote Login Panel (手机直接扫码/短信/账密登录平台!) ---------------- */
+    function closeMobileLoginPanel() {
+      mobileLoginOpen = false;
+      clearInterval(mobileLoginPollTimer);
+      mobileLoginPollTimer = null;
+      const box = document.getElementById("mob-login-box");
+      if (box) { box.style.display = "none"; box.innerHTML = ""; }
+    }
+
+    function toggleMobileLoginPanel() {
+      if (mobileLoginOpen) closeMobileLoginPanel();
+      else openMobileLoginPanel();
+    }
+
+    async function openMobileLoginPanel() {
+      if (!activeChannel || activeChannel.kind !== "web") return;
+      mobileLoginOpen = true;
+      const box = document.getElementById("mob-login-box");
+      if (!box) return;
+      box.style.display = "block";
+      box.innerHTML = `<div style="font-size:13px;color:#93c5fd;padding:8px 0;">⏳ 正在拉取「${esc(activeChannel.title)}」实时登录画面（支持手机直接扫码/输手机号验证码登录）...</div>`;
+      await refreshMobileLoginState(false);
+      clearInterval(mobileLoginPollTimer);
+      mobileLoginPollTimer = setInterval(() => {
+        if (mobileLoginOpen && activeChannel?.kind === "web" && document.visibilityState === "visible") {
+          refreshMobileLoginState(true);
+        }
+      }, 4500);
+    }
+
+    async function refreshMobileLoginState(silentPoll = false) {
+      if (!activeChannel || activeChannel.kind !== "web") return;
+      const res = await api(`/api/remote/tab/${encodeURIComponent(activeChannel.id)}/login-state`).catch(() => null);
+      if (!res || !res.ok) {
+        if (!silentPoll) {
+          const box = document.getElementById("mob-login-box");
+          if (box) box.innerHTML = `<div style="font-size:12.5px;color:#fca5a5;">⚠️ ${esc(res?.error || "电脑端窗口暂未响应，请确认家里电脑《消息总管》正在运行")}</div>`;
+        }
+        return;
+      }
+      lastLoginState = res;
+      if (silentPoll && !res.authRequired) {
+        closeMobileLoginPanel();
+        playAlertChime();
+        showToast("✅ 登录成功！已开启持久保活，正在进入消息...");
+        await refreshActiveChannel(false);
+        pollAll();
+        return;
+      }
+      renderMobileLoginPanel(res);
+    }
+
+    function renderMobileLoginPanel(data) {
+      const box = document.getElementById("mob-login-box");
+      if (!box) return;
+      box.innerHTML = "";
+
+      const head = document.createElement("div");
+      head.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;";
+      head.innerHTML = `<span style="font-size:13px;font-weight:800;color:${data.authRequired ? "#fbbf24" : "#34d399"};">${data.authRequired ? "📱 手机快捷登录（登录后自动持久保活）" : "🟢 当前已登录 · 持久保活中"}</span>`;
+
+      const rightBtns = document.createElement("div");
+      rightBtns.style.cssText = "display:flex;gap:5px;";
+      const bReload = document.createElement("button");
+      bReload.className = "btn";
+      bReload.style.cssText = "padding:4px 8px;font-size:11.5px;";
+      bReload.textContent = "↻ 刷新页";
+      bReload.onclick = () => mobileLoginReload();
+
+      const bUnbind = document.createElement("button");
+      bUnbind.className = "btn";
+      bUnbind.style.cssText = "padding:4px 8px;font-size:11.5px;color:#fca5a5;border-color:rgba(239,68,68,0.4);";
+      bUnbind.textContent = "🔌 解绑";
+      bUnbind.onclick = () => mobileUnbindActiveChannel();
+
+      const bClose = document.createElement("button");
+      bClose.className = "btn";
+      bClose.style.cssText = "padding:4px 8px;font-size:11.5px;";
+      bClose.textContent = "收起";
+      bClose.onclick = () => closeMobileLoginPanel();
+
+      rightBtns.appendChild(bReload);
+      rightBtns.appendChild(bUnbind);
+      rightBtns.appendChild(bClose);
+      head.appendChild(rightBtns);
+      box.appendChild(head);
+
+      // 1. Live Interactive Login Screen (tap anywhere to click exact position on desktop WebView!)
+      if (data.screenshotDataUrl) {
+        const hint = document.createElement("div");
+        hint.style.cssText = "font-size:11.5px;color:#94a3b8;margin-bottom:6px;";
+        hint.textContent = "👆 直接点画面可切换扫码/短信页或勾协议；长按图片可保存二维码到相册用 App 扫一扫：";
+        box.appendChild(hint);
+
+        const pic = document.createElement("im" + "g");
+        pic.src = data.screenshotDataUrl;
+        pic.style.cssText = "width:100%;max-height:38vh;object-fit:contain;border-radius:10px;border:1px solid #334155;background:#020617;cursor:crosshair;display:block;";
+        pic.onclick = async (ev) => {
+          const rect = pic.getBoundingClientRect();
+          const xRatio = Math.max(0.02, Math.min(0.98, (ev.clientX - rect.left) / Math.max(1, rect.width)));
+          const yRatio = Math.max(0.02, Math.min(0.98, (ev.clientY - rect.top) / Math.max(1, rect.height)));
+          showToast("👆 已点击登录页对应位置...");
+          await api(`/api/remote/tab/${encodeURIComponent(activeChannel.id)}/action`, {
+            method: "POST",
+            body: JSON.stringify({ type: "click", xRatio, yRatio }),
+          });
+          setTimeout(() => refreshMobileLoginState(false), 600);
+        };
+        box.appendChild(pic);
+      }
+
+      // 2. Thumb-friendly extracted login buttons (切换扫码/短信/获取验证码/同意协议)
+      const btns = Array.isArray(data.buttons) ? data.buttons : [];
+      if (btns.length > 0) {
+        const btnWrap = document.createElement("div");
+        btnWrap.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;";
+        for (const b of btns) {
+          const el = document.createElement("button");
+          el.className = "btn";
+          el.style.cssText = "padding:6px 10px;font-size:12px;";
+          el.textContent = "👆 " + b.text;
+          el.onclick = () => mobileLoginSubmit(b.text);
+          btnWrap.appendChild(el);
+        }
+        box.appendChild(btnWrap);
+      }
+
+      // 3. Clean native mobile inputs for Phone / SMS Code / Password login (no squinting!)
+      const fields = Array.isArray(data.fields) ? data.fields : [];
+      if (fields.length > 0) {
+        const formWrap = document.createElement("div");
+        formWrap.style.cssText = "margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);";
+        for (const f of fields) {
+          const inp = document.createElement("input");
+          inp.className = "field";
+          inp.style.marginBottom = "7px";
+          inp.dataset.fieldIdx = String(f.idx);
+          inp.type = f.type === "password" ? "password" : f.type === "code" ? "tel" : "text";
+          inp.placeholder = f.placeholder || "请输入";
+          formWrap.appendChild(inp);
+        }
+        const actRow = document.createElement("div");
+        actRow.style.cssText = "display:flex;gap:7px;flex-wrap:wrap;";
+        const codeBtn = btns.find((x) => /(获取验证码|发送验证码|Send code)/i.test(x.text));
+        if (codeBtn) {
+          const bCode = document.createElement("button");
+          bCode.className = "btn";
+          bCode.style.cssText = "flex:1;justify-content:center;padding:9px;";
+          bCode.textContent = "📩 填手机号并" + codeBtn.text;
+          bCode.onclick = () => mobileLoginSubmit(codeBtn.text);
+          actRow.appendChild(bCode);
+        }
+        const loginBtnMeta = btns.find((x) => /(登录|登 录|Sign in|Log in|下一步|Continue)/i.test(x.text));
+        const bGo = document.createElement("button");
+        bGo.className = "btn primary";
+        bGo.style.cssText = "flex:1;justify-content:center;padding:9px;";
+        bGo.textContent = "🚀 一键填入并登录";
+        bGo.onclick = () => mobileLoginSubmit(loginBtnMeta ? loginBtnMeta.text : "登录");
+        actRow.appendChild(bGo);
+        formWrap.appendChild(actRow);
+        box.appendChild(formWrap);
+      }
+    }
+
+    async function mobileLoginSubmit(clickButtonText = "") {
+      if (!activeChannel || activeChannel.kind !== "web") return;
+      const inputs = Array.from(document.querySelectorAll("#mob-login-box input[data-field-idx]"));
+      const fields = inputs
+        .filter((el) => el.value.length > 0)
+        .map((el) => ({ idx: Number(el.dataset.fieldIdx), value: el.value }));
+      showToast(clickButtonText ? `⏳ 正在执行「${clickButtonText}」...` : "⏳ 正在提交登录...");
+      const res = await api(`/api/remote/tab/${encodeURIComponent(activeChannel.id)}/action`, {
+        method: "POST",
+        body: JSON.stringify({ type: "loginFill", fields, clickButtonText }),
+      }).catch(() => null);
+      if (res && res.ok) {
+        if (res.authRequired === false) {
+          closeMobileLoginPanel();
+          playAlertChime();
+          showToast("✅ 登录成功！已开启持久保活");
+          await refreshActiveChannel(false);
+          pollAll();
+        } else {
+          renderMobileLoginPanel(res);
+          showToast("已更新登录画面");
+        }
+      } else {
+        await refreshMobileLoginState(false);
+      }
+    }
+
+    async function mobileLoginReload() {
+      if (!activeChannel || activeChannel.kind !== "web") return;
+      showToast("↻ 正在刷新登录页/二维码...");
+      await api(`/api/remote/tab/${encodeURIComponent(activeChannel.id)}/action`, {
+        method: "POST",
+        body: JSON.stringify({ type: "reload" }),
+      });
+      await refreshMobileLoginState(false);
+    }
+
+    async function mobileUnbindActiveChannel() {
+      if (!activeChannel || activeChannel.kind !== "web") return;
+      if (!confirm(`确认解绑「${activeChannel.title}」？\n\n解绑后将清除电脑端该平台的持久登录态，下次需重新登录。`)) return;
+      await api(`/api/remote/tab/${encodeURIComponent(activeChannel.id)}/unbind`, { method: "POST", body: "{}" });
+      showToast("🔌 已解绑并清除该平台登录态");
+      await refreshMobileLoginState(false);
       pollAll();
     }
 
@@ -1171,9 +1596,13 @@
       if (authRequired) {
         stream.innerHTML = `
           <div class="empty-state">
-            🟠 该平台当前处于未登录状态。<br/>
-            请在家里电脑打开《消息总管》扫码登录一次，后续手机即可随时看文字消息并直接回复。
+            🟠 该平台当前尚未登录（或已主动解绑）。<br/>
+            无需回电脑，点击下方按钮即可<strong>直接用手机扫码、短信验证码或账密登录</strong>，登录后自动持久保活！<br/><br/>
+            <button class="btn primary" style="padding:10px 18px;font-size:14px;" onclick="openMobileLoginPanel()">📱 立即在手机上登录</button>
           </div>`;
+        if (!mobileLoginOpen && activeChannel?.kind === "web") {
+          openMobileLoginPanel();
+        }
         return;
       }
 
@@ -1517,14 +1946,6 @@
       setTimeout(pollAll, 1200);
     }
 
-    async function createCcSession() {
-      const cwd = document.getElementById("add-cc-cwd").value.trim();
-      const res = await api("/api/cc/sessions", { method: "POST", body: JSON.stringify({ cwd }) });
-      closeAddSheet();
-      await pollAll();
-      if (res.session?.id) openChannelByKey(`cc:${res.session.id}`);
-    }
-
     /* ---------------- Background Sync Loop & Hash Deep-Link ---------------- */
     async function pollCcOnly() {
       const c = await api("/api/cc/state").catch(() => null);
@@ -1533,14 +1954,25 @@
 
     async function pollAll() {
       try {
-        const [s, d, c, ai, bt] = await Promise.all([
-          api("/api/state").catch(() => null),
-          api("/api/desktop/state").catch(() => null),
-          api("/api/cc/state").catch(() => null),
-          api("/api/ai-inbox/state").catch(() => null),
-          api("/api/ai-butler/state").catch(() => null),
-        ]);
-        if (s && s.watches) hubState = s;
+        const bundle = await api("/api/mobile/bundle").catch(() => null);
+        let s = bundle?.state || null;
+        let d = bundle?.desktop || null;
+        let c = bundle?.cc || null;
+        let ai = bundle?.aiInbox || null;
+        let bt = bundle?.aiButler || null;
+        if (!bundle || !bundle.ok) {
+          [s, d, c, ai, bt] = await Promise.all([
+            api("/api/state").catch(() => null),
+            api("/api/desktop/state").catch(() => null),
+            api("/api/cc/state").catch(() => null),
+            api("/api/ai-inbox/state").catch(() => null),
+            api("/api/ai-butler/state").catch(() => null),
+          ]);
+        }
+        if (s && s.watches) {
+          hubState = s;
+          updatePushGuidanceTip();
+        }
         if (d && (d.windows || d.badges)) desktopState = d;
         if (ai && ai.channels) aiInboxState = ai;
         if (bt && bt.suggestions) {
@@ -1548,7 +1980,6 @@
           if (activeChannel) renderButlerDraftBar(activeChannel);
         }
         if (c && c.ok) {
-          // Mark finished CC sessions unread if they transitioned from running -> done
           for (const ns of c.sessions || []) {
             const old = (ccState.sessions || []).find((o) => o.id === ns.id);
             if (old && old.status === "running" && ns.status !== "running") {
@@ -1562,7 +1993,6 @@
         checkIncomingAlertsAndBadges(unifiedChannels);
         renderChannelList();
 
-        // Keep open CC running output live-updated
         if (activeChannel && activeChannel.kind === "cc") {
           const sObj = (ccState.sessions || []).find((x) => x.id === activeChannel.sessionId);
           if (sObj && sObj.status === "running") {
@@ -1582,9 +2012,10 @@
     window.addEventListener("hashchange", checkHashDeepLink);
 
     function connectLiveEventStream() {
-      if (!("EventSource" in window)) return;
+      // Skip long-lived SSE over Cloudflare Worker edge proxy to stay well within free-tier request budget; direct LAN/tunnel uses SSE!
+      if (BASE_PREFIX || !("EventSource" in window)) return;
       try {
-        const es = new EventSource("/api/events-stream");
+        const es = new EventSource(withBase("/api/events-stream"));
         es.onmessage = (ev) => {
           try {
             const data = JSON.parse(ev.data || "{}");
@@ -1597,10 +2028,16 @@
         };
         es.onerror = () => {
           try { es.close(); } catch {}
-          setTimeout(connectLiveEventStream, 4000);
+          setTimeout(connectLiveEventStream, 4500);
         };
       } catch {}
     }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        pollAll();
+      }
+    });
 
     (async function boot() {
       // Immediately scrub ?t= secret pairing token from browser URL bar to prevent screenshot/shoulder-surfing leaks!
@@ -1614,7 +2051,9 @@
       await pollAll();
       checkHashDeepLink();
       connectLiveEventStream();
-      setInterval(pollAll, 3500);
+      setInterval(() => {
+        if (document.visibilityState === "visible") pollAll();
+      }, BASE_PREFIX ? 7500 : 4000);
     })();
   </script>
 </body>

@@ -711,6 +711,10 @@
           <span class="nav-left"><span class="nav-ico">📬</span><span id="nav-txt-inbox">平台消息</span></span>
           <span class="nav-cnt" id="badge-nav-inbox">0</span>
         </button>
+        <button class="nav-item" id="tab-catalog" onclick="switchTab('catalog')">
+          <span class="nav-left"><span class="nav-ico">🌐</span><span id="nav-txt-catalog">常用平台</span></span>
+          <span class="nav-cnt" id="badge-nav-catalog">79</span>
+        </button>
         <button class="nav-item" id="tab-desktop" onclick="switchTab('desktop')">
           <span class="nav-left"><span class="nav-ico">🖥️</span><span id="nav-txt-desktop">电脑软件</span></span>
           <span class="nav-cnt" id="badge-nav-desktop" style="display:none;">0</span>
@@ -751,16 +755,42 @@
             <div class="seg-bar" id="cat-filter-bar"></div>
           </div>
           <div class="pane-actions">
-            <input class="search-mini" id="watch-search" oninput="renderGrid()" placeholder="🔍 搜索平台..." />
+            <input class="search-mini" id="watch-search" oninput="renderGrid()" placeholder="🔍 搜索已加平台..." />
             <button class="sm" onclick="openPacksModal()" id="btn-packs">📦 模板包</button>
-            <button class="primary sm" onclick="openAddModal()" id="btn-add">+ 添加平台</button>
+            <button class="primary sm" onclick="switchTab('catalog')" id="btn-add">+ 添加平台</button>
           </div>
         </header>
 
         <div class="pane-body">
+          <div id="health-status-strip"></div>
           <div id="empty-packs-guide"></div>
           <div id="alerts-section"></div>
           <div id="categories-section"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 1B: POPULAR & NICHE PLATFORM DIRECTORY (常用与小众平台广场) -->
+      <section id="view-catalog" style="display:none;">
+        <header class="pane-header">
+          <div class="pane-title-wrap">
+            <h2 class="pane-title" id="hdr-cat-title">常用与小众平台广场</h2>
+            <span style="font-size:12px;color:var(--muted);" id="hdr-cat-sub">点一下立即添加（可连续多选），支持常用大平台 + 小众垂类 + 任意网址直连</span>
+          </div>
+          <div class="pane-actions">
+            <button class="sm soft-primary" onclick="startBatchLoginFlow()" id="btn-cat-batch-login">⚡ 一键连登未登录平台</button>
+            <button class="sm" onclick="switchTab('inbox')">← 返回消息总览</button>
+          </div>
+        </header>
+        <div class="pane-body">
+          <div class="panel-card" style="padding:14px 16px;border-color:#bfdbfe;background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);">
+            <div style="display:grid;grid-template-columns:1.5fr 1fr auto;gap:8px;align-items:center;">
+              <input id="cat-search-input" oninput="renderCatalogView()" onkeydown="if(event.key==='Enter')catalogSmartEnter()" placeholder="🔍 搜平台名/拼音（如 闲鱼、xy、小红书、汇博、鱼泡、电鸭、tg）或直接粘贴任意小众网址..." style="padding:9px 12px;border:1.5px solid #93c5fd;border-radius:9px;font-size:13px;background:#fff;" />
+              <input id="cat-custom-name" placeholder="自定义网址备注名（选填）" style="padding:9px 11px;border:1px solid #cbd5e1;border-radius:9px;font-size:13px;background:#fff;" />
+              <button class="primary" onclick="catalogAddCustomUrl()">＋ 直接添加网址</button>
+            </div>
+            <div class="seg-bar" id="catalog-cat-tabs" style="margin-top:10px;width:100%;justify-content:flex-start;"></div>
+          </div>
+          <div id="catalog-grid" class="cards-grid"></div>
         </div>
       </section>
 
@@ -1084,18 +1114,38 @@
         解决手机浏览器锁屏休眠漏信：任选下方一种方式填入免费口令，来新消息直接弹微信/系统锁屏通知。
       </p>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-        <button type="button" class="sm soft-primary" id="pwiz-wx" onclick="selectPushWizardPreset('wx')">💬 微信提醒 (PushPlus/Server酱·安卓苹果通用)</button>
+        <button type="button" class="sm soft-primary" id="pwiz-wx" onclick="selectPushWizardPreset('wx')">💬 微信(PushPlus/Server酱)</button>
         <button type="button" class="sm" id="pwiz-bark" onclick="selectPushWizardPreset('bark')"> iPhone Bark</button>
-        <button type="button" class="sm" id="pwiz-im" onclick="selectPushWizardPreset('im')">🏢 飞书 / 企微 / 钉钉</button>
+        <button type="button" class="sm" id="pwiz-im" onclick="selectPushWizardPreset('im')">🏢 飞书/企微/钉钉</button>
+        <button type="button" class="sm" id="pwiz-tg" onclick="selectPushWizardPreset('tg')">✈️ Telegram / ntfy</button>
+        <button type="button" class="sm" id="pwiz-mail" onclick="selectPushWizardPreset('mail')">📧 QQ/163/Gmail邮箱</button>
       </div>
       <div id="pwiz-guide" style="font-size:12px;color:#334155;background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">
         微信搜公众号「<strong>pushplus推送加</strong>」点「一对一推送」复制 32 位 Token（或「Server酱」SCT 开头 SendKey），<strong>直接粘贴到下方即可，无需拼写复杂网址</strong>。
       </div>
       <div class="form-row">
         <label id="lbl-hook">手机强提醒口令或 Webhook 链接</label>
-        <input id="s-webhook" placeholder="直接粘贴 32 位 PushPlus Token / SCT... / Bark Key / https://..." />
+        <input id="s-webhook" placeholder="直接粘贴 32 位 PushPlus Token / SCT... / Bark Key / tg://Token@ChatId / ntfy://主题 / https://..." />
+      </div>
+      <div id="email-push-box" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1e3a8a;margin-bottom:8px;cursor:pointer;">
+          <input type="checkbox" id="s-email-enabled" />
+          <span>启用邮箱实时提醒（QQ邮箱 / 163 / Gmail，免翻墙直推手机邮箱 App）</span>
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">
+          <input id="s-email-user" placeholder="发件邮箱（如 3152557994@qq.com）" style="padding:7px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:12.5px;" />
+          <input id="s-email-pass" type="password" placeholder="SMTP 授权码（非登录密码）" style="padding:7px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:12.5px;" />
+        </div>
+        <input id="s-email-to" placeholder="接收提醒的邮箱（留空默认发给自己）" style="width:100%;padding:7px 9px;border:1px solid #cbd5e1;border-radius:7px;font-size:12.5px;" />
       </div>
       <div id="push-test-msg" style="font-size:12px;min-height:18px;margin-top:4px;color:var(--muted);"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;margin:8px 0;gap:8px;flex-wrap:wrap;">
+        <div style="font-size:12.5px;color:#1e3a8a;">🔒 <strong>登录态持久保活引擎</strong>（跨重启自动恢复登录态，除非主动解绑）</div>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#1d4ed8;cursor:pointer;">
+          <input type="checkbox" id="s-keep-alive" checked onchange="toggleKeepAliveSetting(this.checked)" />
+          <span>持久保活已开</span>
+        </label>
+      </div>
       <div id="row-prevent-sleep" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin:8px 0;gap:8px;flex-wrap:wrap;">
         <div style="font-size:12.5px;color:#166534;">☕ <strong>防止电脑息屏/睡眠断联</strong>（出门随身看护建议开启）</div>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#15803d;cursor:pointer;">
@@ -1111,7 +1161,7 @@
         </div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap;">
-        <button type="button" class="sm soft-primary" onclick="testLockScreenPushSettings()" id="btn-test-push">🔔 保存并发一条测试提醒</button>
+        <button type="button" class="sm soft-primary" onclick="testLockScreenPushSettings()" id="btn-test-push">🔔 保存并实测电脑+手机提醒</button>
         <div style="display:flex;gap:8px;">
           <button onclick="closeModals()" id="btn-cancel-set">取消</button>
           <button class="primary" onclick="saveWebhookSettings()" id="btn-save-set">保存设置</button>
@@ -1219,8 +1269,12 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    let appState = { watches: [], stats: {}, license: { valid: false, plan: "free" }, settings: { lang: "zh", webhookUrl: "" } };
+    let appState = { watches: [], stats: {}, license: { valid: false, plan: "free" }, settings: { lang: "zh", webhookUrl: "", keepAliveEnabled: true, emailPush: { enabled: false } } };
     let presetPacks = [];
+    let catalogCategories = [];
+    let catalogPlatforms = [];
+    let catalogActiveCat = "hot";
+    let macNotifyPerm = { checked: false, authorized: true, status: "unknown" };
     let currentLang = (navigator.language || "zh").toLowerCase().startsWith("zh") ? "zh" : "en";
     let activeCatFilter = "all";
     let openMenuWatchId = null;
@@ -1356,6 +1410,8 @@
       document.getElementById("lbl-side-quick").textContent = en ? "DIRECT CHANNELS" : "直达会话";
 
       document.getElementById("nav-txt-inbox").textContent = en ? "Inboxes" : "平台消息";
+      const navCat = document.getElementById("nav-txt-catalog");
+      if (navCat) navCat.textContent = en ? "Platforms" : "常用平台";
       document.getElementById("nav-txt-desktop").textContent = en ? "Desktop Apps" : "电脑软件";
       document.getElementById("nav-txt-cc").textContent = en ? "AI Assistant" : "AI 个人助理";
       document.getElementById("nav-txt-replies").textContent = en ? "Quick Replies" : "快捷话术库";
@@ -1418,12 +1474,30 @@
 
     async function refreshState() {
       try {
-        const [st, pr] = await Promise.all([
+        const [st, pr, cat] = await Promise.all([
           apiCall("GET", "/api/state"),
           presetPacks.length ? Promise.resolve({ packs: presetPacks }) : apiCall("GET", "/api/presets"),
+          catalogPlatforms.length ? Promise.resolve(null) : apiCall("GET", "/api/catalog").catch(() => null),
         ]);
         if (st && Array.isArray(st.watches)) appState = st;
         if (pr && Array.isArray(pr.packs)) presetPacks = pr.packs;
+        if (cat && Array.isArray(cat.platforms) && cat.platforms.length) {
+          catalogPlatforms = cat.platforms;
+          catalogCategories = cat.categories || [];
+        } else if (!catalogPlatforms.length) {
+          catalogPlatforms = QUICK_PLATFORM_CATALOG;
+          catalogCategories = [
+            { id: "hot", labelZh: "🔥 常用高频", labelEn: "🔥 Popular" },
+            { id: "niche", labelZh: "🧩 小众宝藏", labelEn: "🧩 Niche" },
+            { id: "shop", labelZh: "🛒 电商卖货", labelEn: "🛒 E-Commerce" },
+            { id: "job", labelZh: "💼 招聘接单", labelEn: "💼 Jobs" },
+            { id: "social", labelZh: "📺 自媒体社区", labelEn: "📺 Social" },
+            { id: "mail", labelZh: "✉️ 邮箱与 AI", labelEn: "✉️ Mail & AI" },
+            { id: "all", labelZh: "全部平台", labelEn: "All" },
+          ];
+        }
+        const badgeCat = document.getElementById("badge-nav-catalog");
+        if (badgeCat) badgeCat.textContent = String(catalogPlatforms.length);
         if (!appState.settings || !appState.settings.termsAcceptedAt) {
           document.getElementById("modal-consent").classList.add("open");
         }
@@ -1432,6 +1506,12 @@
         console.error(e);
       }
     }
+
+    window.__onNotifyPermStatus = function(info) {
+      if (!info) return;
+      macNotifyPerm = { checked: true, authorized: Boolean(info.authorized), status: info.status || "unknown" };
+      renderHealthStrip();
+    };
 
     function isProUnlocked() {
       if (window.__TABPULSE_MAS_MODE) return true;
@@ -1466,10 +1546,80 @@
 
       renderSidebarQuickChannels();
       renderCatFilterBar();
+      renderHealthStrip();
       renderEmptyGuide();
       renderAlerts();
       renderGrid();
+      if (document.getElementById("view-catalog")?.style.display === "block") {
+        renderCatalogView();
+      }
       renderQuickReplies();
+    }
+
+    function renderHealthStrip() {
+      const box = document.getElementById("health-status-strip");
+      if (!box) return;
+      const en = currentLang === "en";
+      const watches = appState.watches || [];
+      const pendingLoginCnt = watches.filter((w) => w.status === "auth_expired" || (w.status !== "paused" && !w.lastCheckedAt && !w.lastLoginVerifiedAt)).length;
+      const hasWebhook = Boolean(appState.settings?.webhookUrl);
+      const hasEmail = Boolean(appState.settings?.emailPush?.enabled && appState.settings?.emailPush?.user);
+      const hasWebPush = Number(appState.pushSubscribersCount || 0) > 0;
+      const phonePushReady = hasWebhook || hasEmail || hasWebPush;
+      const deskDenied = macNotifyPerm.checked && !macNotifyPerm.authorized;
+
+      box.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid var(--border);border-radius:11px;padding:8px 13px;margin-bottom:12px;box-shadow:var(--shadow-sm);font-size:12px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            ${deskDenied
+              ? `<span style="color:var(--red);font-weight:700;">⚠️ 电脑系统通知已关闭</span><button class="sm danger" onclick="nativePost('openSystemNotifySettings',{})">去系统设置开启</button>`
+              : `<span style="color:var(--green);font-weight:700;">🔔 电脑通知：已就绪</span>`
+            }
+            <span style="color:#cbd5e1;">|</span>
+            ${phonePushReady
+              ? `<span style="color:var(--green);font-weight:700;">📱 手机通知：已打通${hasWebhook ? " (推送口令)" : ""}${hasEmail ? " (邮箱)" : ""}${hasWebPush ? " (主屏推送)" : ""}</span>`
+              : `<span style="color:var(--amber);font-weight:700;">📱 手机后台锁屏通知未配置</span><button class="sm" onclick="openSettingsModal()">30秒开启 ›</button>`
+            }
+            <span style="color:#cbd5e1;">|</span>
+            <span style="color:#1d4ed8;font-weight:600;">🔒 持久保活：已开启（除非主动解绑）</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            ${pendingLoginCnt > 0
+              ? `<button class="sm primary" onclick="startBatchLoginFlow()">⚡ 一键连登 (${pendingLoginCnt})</button>`
+              : ""
+            }
+            <button class="sm soft-primary" onclick="testDualEndNotifications()">🔔 测电脑+手机通知</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function startBatchLoginFlow() {
+      const watches = appState.watches || [];
+      const target = watches.find((w) => w.status === "auth_expired")
+        || watches.find((w) => w.status !== "paused" && !w.lastCheckedAt && !w.lastLoginVerifiedAt);
+      if (!target) {
+        showToast("✅ 所有已添加平台均已处于在线保活状态！");
+        return;
+      }
+      showToast(`🔓 正在打开「${target.name}」登录，登完点右上角「下一个待登录」即可连登！`);
+      openSiteLogin(target.url, target.name, target.id, target.profileUuid || "", true);
+    }
+
+    async function testDualEndNotifications() {
+      showToast("🔔 正在同时触发电脑弹窗与手机通知测试...");
+      if (isNativeApp) {
+        nativePost("testDesktopNotification", {});
+      }
+      const res = await apiCall("POST", "/api/push/test", {}).catch(() => null);
+      const parts = ["电脑通知已弹出"];
+      if (res?.webhook?.ok) parts.push(`${res.webhook.channel || "外部推送"} ✅`);
+      if (res?.email?.ok) parts.push("邮箱提醒 ✅");
+      if (res?.webPush?.sent > 0) parts.push(`手机主屏推送 (${res.webPush.sent}台) ✅`);
+      if (parts.length === 1) {
+        parts.push("手机息屏强推可在「⚙️ 设置」绑定微信/Bark/QQ邮箱");
+      }
+      showToast("🔔 " + parts.join(" · "));
     }
 
     function renderSidebarQuickChannels() {
@@ -1821,6 +1971,10 @@
           ? (en ? "Portal Check" : "常规后台看护")
           : (en ? "Gentle Check" : "温和低频看护");
 
+      const persistTag = w.status === "auth_expired"
+        ? `<span class="micro-tag" style="color:var(--amber);border-color:var(--amber-border);background:var(--amber-bg);">🟠 待登录</span>`
+        : `<span class="micro-tag" style="color:var(--green);border-color:var(--green-border);background:var(--green-bg);">🔒 ${en ? "Persistent" : "持久保活中"}</span>`;
+
       return `
         <div class="p-card ${cls}">
           <div>
@@ -1838,14 +1992,14 @@
               ${escapeHtml(w.contextSummary || (en ? "Isolated unread message listener" : "独立防串号消息静默看护"))}
             </div>
             <div class="p-meta-tags" style="margin-top:7px;">
-              ${w.isolatedProfile !== false ? `<span class="micro-tag">🔒 ${en ? "Isolated" : "独立隔离仓"}</span>` : ""}
+              ${persistTag}
               <span class="micro-tag">${tierLabel}</span>
             </div>
           </div>
 
           <div class="p-foot">
             <button class="sm soft-primary main-act" onclick="openSiteLogin('${escapeAttr(w.url)}', '${escapeAttr(w.name)}', '${escapeAttr(w.id)}', '${escapeAttr(w.profileUuid || "")}', true)">
-              💬 ${isNativeApp ? (en ? "Open Chat" : "打开会话") : (en ? "Open Site" : "打开网页")}
+              ${w.status === "auth_expired" ? (en ? "🔓 Sign In" : "🔓 快捷登录") : (isNativeApp ? (en ? "💬 Open Chat" : "💬 打开会话") : (en ? "💬 Open Site" : "💬 打开网页"))}
             </button>
             <button class="sm" onclick="cloneMultiAccount('${escapeAttr(w.id)}')" title="${en ? "Add 2nd isolated account" : "同平台多开第二个独立账号"}">
               ➕ ${en ? "Clone" : "多开"}
@@ -1859,12 +2013,21 @@
                   ? `<button class="more-item" onclick="resolveItem('${escapeAttr(w.id)}','resume')">▶ ${en ? "Resume" : "恢复看护"}</button>`
                   : `<button class="more-item" onclick="resolveItem('${escapeAttr(w.id)}','pause')">⏸ ${en ? "Pause" : "暂停看护"}</button>`
                 }
-                <button class="more-item danger-item" onclick="removeWatch('${escapeAttr(w.id)}')">🗑️ ${en ? "Remove" : "移除平台"}</button>
+                <button class="more-item" data-id="${escapeAttr(w.id)}" data-name="${escapeAttr(w.name)}" onclick="unbindPlatform(this.dataset.id, this.dataset.name)">🔌 ${en ? "Unbind Login" : "解绑退出登录"}</button>
+                <button class="more-item danger-item" data-id="${escapeAttr(w.id)}" onclick="removeWatch(this.dataset.id)">🗑️ ${en ? "Remove" : "移除平台"}</button>
               </div>
             </div>
           </div>
         </div>
       `;
+    }
+
+    async function unbindPlatform(id, name) {
+      openMenuWatchId = null;
+      if (!confirm(`确认解绑「${name}」？\n\n解绑后将清除该平台保存在本机的持久登录态，下次使用需要重新扫码/登录（不影响其他平台）。`)) return;
+      await apiCall("POST", `/api/watches/${encodeURIComponent(id)}/unbind`, {});
+      await refreshState();
+      showToast(`🔌 已解绑「${name}」并清除本地登录态`);
     }
 
     async function resolveItem(id, action) {
@@ -1898,10 +2061,14 @@
       if (window.__TABPULSE_MAS_MODE && (tab === "desktop" || tab === "cc")) {
         tab = "inbox";
       }
-      for (const k of ["inbox", "desktop", "cc", "replies", "scanner"]) {
+      for (const k of ["inbox", "catalog", "desktop", "cc", "replies", "scanner"]) {
         document.getElementById("tab-" + k)?.classList.toggle("active", tab === k);
         const v = document.getElementById("view-" + k);
         if (v) v.style.display = tab === k ? "block" : "none";
+      }
+      if (tab === "catalog") {
+        renderCatalogView();
+        setTimeout(() => document.getElementById("cat-search-input")?.focus(), 40);
       }
       if (tab === "desktop") refreshDesktopMonitorView();
       if (tab === "cc") {
@@ -1912,6 +2079,172 @@
       if (tab === "scanner" && !window.__scannedOnce) {
         window.__scannedOnce = true;
         runLeadScan();
+      }
+    }
+
+    function setCatalogCategory(catId) {
+      catalogActiveCat = catId;
+      renderCatalogView();
+    }
+
+    function renderCatalogView() {
+      const en = currentLang === "en";
+      const tabsEl = document.getElementById("catalog-cat-tabs");
+      const gridEl = document.getElementById("catalog-grid");
+      if (!tabsEl || !gridEl) return;
+
+      const list = catalogPlatforms.length ? catalogPlatforms : QUICK_PLATFORM_CATALOG;
+      const cats = catalogCategories.length ? catalogCategories : [
+        { id: "hot", labelZh: "🔥 常用高频", labelEn: "🔥 Popular" },
+        { id: "niche", labelZh: "🧩 小众宝藏", labelEn: "🧩 Niche" },
+        { id: "shop", labelZh: "🛒 电商卖货", labelEn: "🛒 E-Commerce" },
+        { id: "job", labelZh: "💼 招聘接单", labelEn: "💼 Jobs" },
+        { id: "social", labelZh: "📺 自媒体社区", labelEn: "📺 Social" },
+        { id: "im", labelZh: "💬 聊天与协作", labelEn: "💬 Messaging" },
+        { id: "mail", labelZh: "✉️ 邮箱与 AI", labelEn: "✉️ Mail & AI" },
+        { id: "all", labelZh: `全部 (${list.length})`, labelEn: `All (${list.length})` },
+      ];
+
+      tabsEl.innerHTML = cats.map((c) => {
+        const lbl = c.id === "all"
+          ? (en ? `All (${list.length})` : `全部 (${list.length})`)
+          : (en ? (c.labelEn || c.labelZh) : c.labelZh);
+        return `<button type="button" class="seg-btn ${catalogActiveCat === c.id ? "active" : ""}" onclick="setCatalogCategory('${escapeAttr(c.id)}')">${escapeHtml(lbl)}</button>`;
+      }).join("");
+
+      const q = (document.getElementById("cat-search-input")?.value || "").trim().toLowerCase();
+      const existingWatches = appState.watches || [];
+      const filtered = list.filter((p) => {
+        if (q) {
+          return `${p.zh || ""} ${p.en || ""} ${p.kw || ""} ${p.url || ""} ${p.loginHint || ""}`.toLowerCase().includes(q);
+        }
+        if (catalogActiveCat === "hot") return Boolean(p.hot);
+        if (catalogActiveCat === "niche") return Boolean(p.niche);
+        if (catalogActiveCat === "all") return true;
+        return p.g === catalogActiveCat;
+      });
+
+      const looksLikeUrl = /^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(q.replace(/^https?:\/\//i, ""));
+      let extraHtml = "";
+      if (q && (looksLikeUrl || filtered.length === 0)) {
+        extraHtml = `
+          <div class="p-card" style="grid-column:1/-1;border-color:#93c5fd;background:#eff6ff;flex-direction:row;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-weight:800;font-size:14px;color:#1e3a8a;">🌐 没找到「${escapeHtml(q)}」？直接作为小众自定义平台添加！</div>
+              <div style="font-size:12px;color:#334155;margin-top:2px;">支持任意带网页版的网站（输入域名如 example.com 或粘贴完整链接，自动分配独立防串号隔离仓）。</div>
+            </div>
+            <button class="primary sm" onclick="catalogAddCustomUrl()">＋ 立即添加并打开登录</button>
+          </div>
+        `;
+      }
+
+      gridEl.innerHTML = extraHtml + filtered.map((p) => {
+        const b = getBrandStyle(p.zh, p.url);
+        const matches = existingWatches.filter((w) => w.url === p.url);
+        const addedCnt = matches.length;
+        const firstMatch = matches[0];
+        const label = en ? (p.en || p.zh) : p.zh;
+        const nicheBadge = p.niche ? `<span class="micro-tag" style="color:#6d28d9;background:#f5f3ff;border-color:#ddd6fe;">🧩 小众</span>` : "";
+        return `
+          <div class="p-card" style="${addedCnt > 0 ? "border-color:#93c5fd;background:#f8fbff;" : ""}">
+            <div>
+              <div class="p-head">
+                <div class="p-id">
+                  <div class="p-ava" style="background:${b.bg};">${escapeHtml(b.ico)}</div>
+                  <div class="p-titles">
+                    <h3 class="p-name">${escapeHtml(label)}</h3>
+                    <div class="p-host">${escapeHtml(cleanHostname(p.url))}</div>
+                  </div>
+                </div>
+                ${addedCnt > 0 ? `<span class="status-pill st-ok">✓ 已加 ${addedCnt}个</span>` : nicheBadge}
+              </div>
+              <div class="p-desc" style="margin-top:8px;">${escapeHtml(p.loginHint || "独立隔离仓 · 零刷页持久保活")}</div>
+            </div>
+            <div class="p-foot">
+              ${addedCnt === 0
+                ? `<button class="sm primary main-act" data-url="${escapeAttr(p.url)}" onclick="catalogAddWatch(this.dataset.url, false)">＋ 加入工作台</button>
+                   <button class="sm soft-primary" data-url="${escapeAttr(p.url)}" onclick="catalogAddWatch(this.dataset.url, true)">🔓 添加并登录</button>`
+                : `<button class="sm soft-primary main-act" data-url="${escapeAttr(firstMatch.url)}" data-name="${escapeAttr(firstMatch.name)}" data-id="${escapeAttr(firstMatch.id)}" data-puuid="${escapeAttr(firstMatch.profileUuid || "")}" onclick="openSiteLogin(this.dataset.url, this.dataset.name, this.dataset.id, this.dataset.puuid, true)">🔓 打开登录/会话</button>
+                   <button class="sm" data-url="${escapeAttr(p.url)}" onclick="catalogAddWatch(this.dataset.url, true)" title="再开一个独立防串号副号">➕ 副号</button>`
+              }
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function catalogSmartEnter() {
+      const q = (document.getElementById("cat-search-input")?.value || "").trim();
+      if (!q) return;
+      if (/^(https?:\/\/)?[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(q)) {
+        catalogAddCustomUrl();
+      }
+    }
+
+    async function catalogAddWatch(targetUrl, openLoginNow = false) {
+      const en = currentLang === "en";
+      const list = catalogPlatforms.length ? catalogPlatforms : QUICK_PLATFORM_CATALOG;
+      const item = list.find((x) => x.url === targetUrl);
+      if (!item) return;
+      if (!isProUnlocked() && (appState.watches || []).length >= 2) {
+        openPaywallModal(
+          en
+            ? "Free tier watches up to 2 accounts. Unlock Pro ($14.99 Lifetime) for unlimited accounts!"
+            : "免费版支持同时看护 2 个账号。升级专业版（¥39 永久买断）即可解锁无限平台与同站无限多开！"
+        );
+        return;
+      }
+      const sameCount = (appState.watches || []).filter((w) => w.url === item.url).length;
+      const baseName = en ? (item.en || item.zh) : item.zh;
+      const finalName = sameCount === 0 ? baseName : (en ? `${baseName} (#${sameCount + 1})` : `${baseName}（${sameCount + 1}号独立仓）`);
+      const res = await apiCall("POST", "/api/watches", {
+        name: finalName,
+        url: item.url,
+        category: item.cat || "主力阵地",
+        baseIntervalMinutes: 60,
+        publishTier: item.tier || "red",
+        isolatedProfile: true,
+        allowDuplicateUrl: sameCount > 0,
+        contextSummary: item.loginHint || "零刷页持久保活看护",
+      });
+      await refreshState();
+      renderCatalogView();
+      if (openLoginNow && res && res.watch) {
+        showToast(`✅ 已添加「${finalName}」，正在打开快捷登录...`);
+        openSiteLogin(res.watch.url, res.watch.name, res.watch.id, res.watch.profileUuid || "", true);
+      } else {
+        showToast(`✅ 已加入工作台：「${finalName}」（可继续多选，或点右上角一键连登）`);
+      }
+    }
+
+    async function catalogAddCustomUrl() {
+      const rawUrl = (document.getElementById("cat-search-input")?.value || "").trim();
+      const customName = (document.getElementById("cat-custom-name")?.value || "").trim();
+      if (!rawUrl || !rawUrl.includes(".")) {
+        showToast("请输入有效的网站域名或链接（如 example.com）");
+        return;
+      }
+      if (!isProUnlocked() && (appState.watches || []).length >= 2) {
+        openPaywallModal("免费版支持同时看护 2 个平台，升级专业版可添加无限个小众自定义网站！");
+        return;
+      }
+      const urlWithProto = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+      const res = await apiCall("POST", "/api/watches", {
+        name: customName || cleanHostname(urlWithProto),
+        url: urlWithProto,
+        category: "长尾蹲守",
+        baseIntervalMinutes: 60,
+        publishTier: "red",
+        isolatedProfile: true,
+        contextSummary: "自定义小众平台 · 独立隔离仓持久保活",
+      });
+      document.getElementById("cat-search-input").value = "";
+      document.getElementById("cat-custom-name").value = "";
+      await refreshState();
+      renderCatalogView();
+      showToast("✅ 已添加自定义网站，正在打开登录...");
+      if (res && res.watch) {
+        openSiteLogin(res.watch.url, res.watch.name, res.watch.id, res.watch.profileUuid || "", true);
       }
     }
 
@@ -2773,11 +3106,28 @@
       const preventSleepRow = document.getElementById("row-prevent-sleep");
       if (preventSleepRow) preventSleepRow.style.display = isMas ? "none" : "flex";
       document.getElementById("s-webhook").value = appState.settings?.webhookUrl || "";
+      const em = appState.settings?.emailPush || {};
+      const emEn = document.getElementById("s-email-enabled");
+      if (emEn) emEn.checked = Boolean(em.enabled);
+      const emU = document.getElementById("s-email-user");
+      if (emU) emU.value = em.user || "";
+      const emP = document.getElementById("s-email-pass");
+      if (emP) emP.value = em.pass || "";
+      const emT = document.getElementById("s-email-to");
+      if (emT) emT.value = em.to || "";
+      const kaChk = document.getElementById("s-keep-alive");
+      if (kaChk) kaChk.checked = appState.settings?.keepAliveEnabled !== false;
       const sleepChk = document.getElementById("s-prevent-sleep");
       if (sleepChk) sleepChk.checked = Boolean(appState.settings?.preventSleep);
       const msg = document.getElementById("push-test-msg");
       if (msg) msg.textContent = "";
       document.getElementById("modal-settings").classList.add("open");
+    }
+
+    async function toggleKeepAliveSetting(enabled) {
+      await apiCall("POST", "/api/settings", { keepAliveEnabled: Boolean(enabled) });
+      if (appState.settings) appState.settings.keepAliveEnabled = Boolean(enabled);
+      showToast(enabled ? "🔒 已开启登录态持久保活引擎（重启自动恢复登录）" : "已关闭自动会话保活");
     }
 
     async function togglePreventSleep(enabled) {
@@ -2792,13 +3142,15 @@
     }
 
     function selectPushWizardPreset(preset) {
-      const ids = { wx: "pwiz-wx", bark: "pwiz-bark", im: "pwiz-im" };
+      const ids = { wx: "pwiz-wx", bark: "pwiz-bark", im: "pwiz-im", tg: "pwiz-tg", mail: "pwiz-mail" };
       Object.entries(ids).forEach(([k, id]) => {
         const el = document.getElementById(id);
         if (el) el.classList.toggle("soft-primary", k === preset);
       });
       const guide = document.getElementById("pwiz-guide");
       const inp = document.getElementById("s-webhook");
+      const emailBox = document.getElementById("email-push-box");
+      if (emailBox) emailBox.style.display = preset === "mail" ? "block" : "none";
       if (!guide || !inp) return;
       if (preset === "bark") {
         guide.innerHTML = 'iPhone 在 App Store 下载免费「<strong>Bark</strong>」，打开 App 复制专属推送码（或 <code>https://api.day.app/你的码</code>）粘贴到下方即可锁屏强响铃。';
@@ -2806,6 +3158,13 @@
       } else if (preset === "im") {
         guide.innerHTML = '在飞书群 / 企业微信群 / 钉钉群添加「<strong>自定义群机器人</strong>」，复制生成的 Webhook 链接粘贴到下方即可秒推群消息。';
         inp.placeholder = "https://open.feishu.cn/... 或 https://qyapi.weixin.qq.com/...";
+      } else if (preset === "tg") {
+        guide.innerHTML = '支持 <strong>Telegram 机器人</strong>（格式 <code>tg://BotToken@ChatId</code>）或免注册 <strong>ntfy.sh</strong>（格式 <code>ntfy://你的私密主题名</code>），安卓/苹果海外直连秒达。';
+        inp.placeholder = "tg://123456:ABC...@987654321 或 ntfy://my-secret-inbox";
+      } else if (preset === "mail") {
+        guide.innerHTML = '支持 <strong>QQ邮箱 / 163 / Gmail</strong> 直推：手机装个邮箱 App 即可 <strong>100% 免翻墙收锁屏通知</strong>（填入邮箱与 SMTP 授权码即可自动识别服务器）。';
+        document.getElementById("s-email-user")?.focus();
+        return;
       } else {
         guide.innerHTML = '微信搜公众号「<strong>pushplus推送加</strong>」点「一对一推送」复制 32 位 Token（或「Server酱」SCT 开头 SendKey），<strong>直接粘贴到下方即可，无需拼写复杂网址</strong>。';
         inp.placeholder = "直接粘贴 32 位 PushPlus Token / SCT... / Bark Key / https://...";
@@ -2813,9 +3172,20 @@
       inp.focus();
     }
 
+    function collectEmailPushPayload() {
+      return {
+        enabled: Boolean(document.getElementById("s-email-enabled")?.checked),
+        user: (document.getElementById("s-email-user")?.value || "").trim(),
+        pass: (document.getElementById("s-email-pass")?.value || "").trim(),
+        to: (document.getElementById("s-email-to")?.value || "").trim(),
+      };
+    }
+
     async function saveWebhookSettings() {
       const webhookUrl = document.getElementById("s-webhook").value.trim();
-      await apiCall("POST", "/api/settings", { webhookUrl });
+      const emailPush = collectEmailPushPayload();
+      const keepAliveEnabled = Boolean(document.getElementById("s-keep-alive")?.checked);
+      await apiCall("POST", "/api/settings", { webhookUrl, emailPush, keepAliveEnabled });
       closeModals();
       await refreshState();
       showToast("✅ 设置已保存");
@@ -2823,31 +3193,39 @@
 
     async function testLockScreenPushSettings() {
       const webhookUrl = document.getElementById("s-webhook").value.trim();
+      const emailPush = collectEmailPushPayload();
       const msgEl = document.getElementById("push-test-msg");
-      if (!webhookUrl) {
+      if (isNativeApp) {
+        nativePost("testDesktopNotification", {});
+      }
+      if (!webhookUrl && !(emailPush.enabled && emailPush.user && emailPush.pass)) {
         if (msgEl) {
-          msgEl.style.color = "var(--red)";
-          msgEl.textContent = "⚠️ 请先在上方粘贴 PushPlus 口令、Bark 码或群机器人链接";
+          msgEl.style.color = "var(--green)";
+          msgEl.textContent = "✅ 电脑原生弹窗已触发！如需手机息屏强推，请顺手粘贴 PushPlus/Bark 口令或开启上方邮箱提醒。";
         }
         return;
       }
       if (msgEl) {
         msgEl.style.color = "var(--muted)";
-        msgEl.textContent = "⏳ 正在保存并发出手机测试提醒...";
+        msgEl.textContent = "⏳ 正在保存并发出电脑+手机测试提醒...";
       }
-      await apiCall("POST", "/api/settings", { webhookUrl });
-      const res = await apiCall("POST", "/api/push/test", { webhookUrl });
+      await apiCall("POST", "/api/settings", { webhookUrl, emailPush });
+      const res = await apiCall("POST", "/api/push/test", { webhookUrl, emailPush });
       await refreshState();
-      if (res && res.ok) {
+      const okAny = Boolean(res?.ok || res?.webhook?.ok || res?.email?.ok);
+      if (okAny) {
+        const chs = [];
+        if (res?.webhook?.ok) chs.push(res.webhook.channel || "推送通道");
+        if (res?.email?.ok) chs.push("邮箱提醒");
         if (msgEl) {
           msgEl.style.color = "var(--green)";
-          msgEl.textContent = `✅ 已通过「${res.channel || "推送通道"}」发出测试通知，请看一眼手机！`;
+          msgEl.textContent = `✅ 电脑弹窗 + 手机「${chs.join(" + ") || "通道"}」均已发出测试通知，请看一眼手机！`;
         }
-        showToast("🎉 测试提醒已发出，请查看手机！");
+        showToast("🎉 电脑+手机测试提醒已发出！");
       } else {
         if (msgEl) {
           msgEl.style.color = "var(--red)";
-          msgEl.textContent = "⚠️ 发送失败：" + ((res && res.error) || "请核对口令或网络连接");
+          msgEl.textContent = "⚠️ 手机通道发送失败：" + ((res?.email?.error || res?.webhook?.error || res?.error) || "请核对口令/授权码或网络连接");
         }
       }
     }
@@ -3015,6 +3393,7 @@
     }
 
     applyStaticLanguage();
+    if (isMacNative) nativePost("checkNotifyPerm", {});
     refreshState();
     setInterval(refreshState, 20000);
   </script>

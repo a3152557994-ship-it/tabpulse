@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>消息总管 · 手机版</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --surface: #111827;
+      --card: #162033;
+      --card-border: #24324a;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --blue: #3b82f6;
+      --blue-deep: #2563eb;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "MiSans", "HarmonyOS Sans", "Segoe UI", sans-serif;
+      font-size: 14px; line-height: 1.45;
+      height: 100%; overflow: hidden;
+    }
+    .shell { display: flex; flex-direction: column; height: 100vh; }
+    .topbar {
+      flex-shrink: 0; background: rgba(17, 24, 39, 0.96);
+      border-bottom: 1px solid var(--card-border);
+      padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .brand { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+    .brand-icon {
+      width: 30px; height: 30px; border-radius: 9px;
+      background: linear-gradient(135deg, #2563eb, #1e3a8a);
+      display: grid; place-items: center; font-size: 16px; position: relative; flex-shrink: 0;
+    }
+    .brand-dot {
+      position: absolute; top: -2px; right: -2px; width: 10px; height: 10px;
+      border-radius: 50%; background: var(--red); border: 2px solid #111827; display: none;
+    }
+    .brand-dot.show { display: block; }
+    .brand-title { font-weight: 800; font-size: 16px; white-space: nowrap; }
+    .brand-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pill-btn {
+      border: 1px solid var(--card-border); background: #1e293b; color: var(--text);
+      border-radius: 9px; padding: 6px 10px; font-size: 12px; font-weight: 700;
+      cursor: pointer; white-space: nowrap;
+    }
+    .pill-btn.primary { background: var(--blue-deep); border-color: var(--blue); color: #fff; }
+    .pill-btn.warn { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.45); color: #fde68a; }
+    .pill-btn.ok { background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.4); color: #6ee7b7; }
+    .pill-btn.danger { background: rgba(239, 68, 68, 0.14); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
+    .pill-btn:active { opacity: 0.78; }
+
+    .main {
+      flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding: 12px 13px 24px;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .banner {
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(15, 23, 42, 0.9));
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      border-radius: 14px; padding: 12px 13px; margin-bottom: 12px;
+    }
+    .banner.warn {
+      background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.42);
+    }
+    .banner-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .banner-title { font-weight: 800; font-size: 13.5px; }
+    .banner-sub { font-size: 12px; color: #cbd5e1; margin-top: 3px; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--card-border);
+      border-radius: 14px; padding: 13px; margin-bottom: 10px;
+    }
+    .card.unread { border-color: rgba(239, 68, 68, 0.65); box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2); }
+    .card.auth { border-color: rgba(245, 158, 11, 0.55); }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .card-name { font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap;
+    }
+    .badge.red { background: var(--red); color: #fff; }
+    .badge.green { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge.amber { background: rgba(245, 158, 11, 0.18); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.35); }
+    .badge.slate { background: #1e293b; color: var(--muted); border: 1px solid #334155; }
+    .card-snippet {
+      font-size: 12.5px; color: #cbd5e1; margin: 7px 0 10px;
+      word-break: break-word;
+    }
+    .card-meta { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+    .card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+    .card-actions .pill-btn { flex: 1; text-align: center; padding: 8px 10px; }
+    .card-actions .pill-btn.compact { flex: 0 0 auto; }
+
+    .section-title {
+      font-size: 12.5px; font-weight: 800; color: var(--muted);
+      letter-spacing: 0.4px; margin: 14px 2px 8px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    .search-box {
+      width: 100%; background: #0f172a; border: 1px solid var(--card-border);
+      color: var(--text); border-radius: 11px; padding: 10px 12px; font-size: 14px;
+      outline: none; margin-bottom: 10px;
+    }
+    .search-box:focus { border-color: var(--blue); }
+
+    .chips {
+      display: flex; gap: 7px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 8px;
+      scrollbar-width: none;
+    }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip {
+      flex-shrink: 0; border: 1px solid var(--card-border); background: #111827;
+      color: #cbd5e1; border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 700;
+      cursor: pointer;
+    }
+    .chip.active { background: var(--blue-deep); border-color: var(--blue); color: #fff; }
+
+    .cat-item {
+      background: var(--card); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 11px 12px; margin-bottom: 8px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .cat-info { min-width: 0; flex: 1; }
+    .cat-title { font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .cat-hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+    .tag-mini { font-size: 10px; padding: 1px 6px; border-radius: 6px; font-weight: 700; }
+    .tag-mini.hot { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+    .tag-mini.niche { background: rgba(139, 92, 246, 0.22); color: #c4b5fd; }
+
+    .quick-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0;
+    }
+    .quick-tile {
+      background: #1e293b; border: 1px solid #334155; border-radius: 11px;
+      padding: 10px; color: #f8fafc; font-weight: 700; font-size: 13px;
+      text-align: left; cursor: pointer;
+    }
+    .quick-tile span { display: block; font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+
+    .feed-item {
+      background: #111827; border: 1px solid var(--card-border); border-radius: 11px;
+      padding: 10px 12px; margin-bottom: 7px; cursor: pointer;
+    }
+    .feed-top { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 700; }
+    .feed-time { font-size: 11px; color: var(--muted); font-weight: 500; }
+    .feed-body { font-size: 12px; color: #cbd5e1; margin-top: 4px; }
+
+    .field-label { display: block; font-size: 12px; color: #cbd5e1; font-weight: 700; margin: 8px 0 4px; }
+    .row-setting {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+    }
+    .row-setting:last-child { border-bottom: none; }
+    .row-title { font-weight: 700; font-size: 13.5px; }
+    .row-desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+    select.sel {
+      background: #0f172a; color: var(--text); border: 1px solid var(--card-border);
+      border-radius: 8px; padding: 6px 8px; font-size: 13px;
+    }
+    input[type="checkbox"].toggle {
+      width: 20px; height: 20px; accent-color: var(--blue); flex-shrink: 0;
+    }
+
+    .bottom-nav {
+      flex-shrink: 0; background: #111827; border-top: 1px solid var(--card-border);
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      padding: 6px 4px 8px;
+    }
+    .nav-btn {
+      background: none; border: none; color: var(--muted);
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      font-size: 11px; font-weight: 700; cursor: pointer; position: relative; padding: 4px 0;
+    }
+    .nav-btn .ico { font-size: 18px; line-height: 1.1; }
+    .nav-btn.active { color: #60a5fa; }
+    .nav-badge {
+      position: absolute; top: 0; right: 20%;
+      background: var(--red); color: #fff; font-size: 10px; font-weight: 800;
+      padding: 1px 5px; border-radius: 999px; display: none;
+    }
+    .nav-badge.show { display: inline-block; }
+
+    .toast-bar {
+      position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.96); border: 1px solid var(--blue);
+      color: #fff; padding: 9px 14px; border-radius: 10px; font-size: 12.5px; font-weight: 700;
+      display: none; z-index: 99; max-width: 90%; text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon">🔔<span id="brandDot" class="brand-dot"></span></div>
+      <div style="min-width:0">
+        <div class="brand-title">消息总管</div>
+        <div id="brandSub" class="brand-sub">手机独立版 · 无需电脑</div>
+      </div>
+    </div>
+    <button class="pill-btn" id="btnTopTestNotif">🔔 测通知</button>
+    <button class="pill-btn primary" id="btnTopAdd">＋ 加平台</button>
+  </header>
+
+  <main class="main">
+    <!-- TAB 1: INBOX -->
+    <section id="tab-inbox" class="tab-panel active">
+      <div id="guardianBanner"></div>
+      <div id="nextLoginBanner"></div>
+      <div id="watchListContainer"></div>
+      <div id="feedContainer"></div>
+    </section>
+
+    <!-- TAB 2: CATALOG (86 POPULAR + NICHE) -->
+    <section id="tab-catalog" class="tab-panel">
+      <div class="card" style="padding:11px 12px;margin-bottom:10px">
+        <div style="font-weight:800;font-size:13.5px;margin-bottom:6px">➕ 添加任意小众网站 / 内部后台</div>
+        <div style="display:flex;gap:7px;margin-bottom:7px">
+          <input id="customName" class="search-box" style="margin:0;flex:0.85" placeholder="平台名（如 独立站客服）" />
+          <input id="customUrl" class="search-box" style="margin:0;flex:1.15" placeholder="网址（如 https://...）" />
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1">
+            <input id="customDesktopUa" type="checkbox" class="toggle" checked />
+            默认电脑网页版（防强制跳App）
+          </label>
+          <button id="btnAddCustom" class="pill-btn primary">添加并登录</button>
+        </div>
+      </div>
+
+      <input id="catalogSearch" class="search-box" placeholder="🔍 搜 86 个常用 & 小众平台（支持拼音：xy / xhs / boss / 电鸭）" />
+      <div id="categoryChips" class="chips"></div>
+      <div id="catalogList"></div>
+    </section>
+
+    <!-- TAB 3: OPTIONAL PC COMPANION -->
+    <section id="tab-pc" class="tab-panel">
+      <div class="banner">
+        <div class="banner-title">💡 没有电脑？完全不需要管这一页！</div>
+        <div class="banner-sub">本软件在手机上就能独立添加平台、登录保活、来消息发手机通知。只有当您家里电脑也开了《消息总管》（想看微信/千牛/多开账号）时，才需要填下面的链接。</div>
+      </div>
+      <div class="card">
+        <div class="row-title">🖥️ 连接家里电脑的《消息总管》</div>
+        <div class="row-desc" style="margin-bottom:10px">把电脑端《消息总管》里的「永久手机随身链接」（<code>https://replyradar-edge.../box/...</code>）粘贴到下面，保存后随时一键直连。</div>
+        <input id="companionUrlInput" class="search-box" placeholder="https://replyradar-edge.a3152557994.workers.dev/box/..." />
+        <div style="display:flex;gap:8px">
+          <button id="btnOpenCompanion" class="pill-btn primary" style="flex:1;padding:10px">🚀 保存并打开电脑随身版</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: SETTINGS & KEEP-ALIVE -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="card">
+        <div class="row-title" style="margin-bottom:6px">🛡️ 通知与后台防杀体检（确保来消息必响！）</div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">手机横幅弹窗通知</div>
+            <div id="setNotifStatus" class="row-desc">检测中…</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button id="btnSetTestNotif" class="pill-btn primary">测试</button>
+            <button id="btnSetOpenNotif" class="pill-btn">设置</button>
+          </div>
+        </div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">防系统杀后台（电池白名单）</div>
+            <div id="setBatteryStatus" class="row-desc">检测中…</div>
+          </div>
+          <button id="btnSetBattery" class="pill-btn warn">一键放行</button>
+        </div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">开启后台持续守护</div>
+            <div class="row-desc">状态栏保留静默守护条，切后台/息屏仍监听新消息</div>
+          </div>
+          <input id="chkGuardian" type="checkbox" class="toggle" />
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row-title" style="margin-bottom:4px">📱 国产安卓保活 3 步必做（华为/荣耀/小米/OPPO/vivo）</div>
+        <div class="row-desc" style="line-height:1.65;color:#cbd5e1">
+          1. 点上方「一键放行」，允许消息总管忽略电池优化；<br/>
+          2. 手机「设置 → 应用启动管理/自启动」里打开消息总管的「允许自启动 + 允许后台活动」；<br/>
+          3. 在手机多任务卡片界面，把消息总管下拉或点右上角「🔒 锁定」，系统就不会清掉它！
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row-title" style="margin-bottom:4px">⚙️ 监听与持久登录偏好</div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">后台巡检频率</div>
+            <div class="row-desc">活跃平台实时推送，多平台轮巡间隔</div>
+          </div>
+          <select id="selPollSec" class="sel">
+            <option value="25">25秒（极速）</option>
+            <option value="45">45秒（推荐）</option>
+            <option value="90">90秒（省电）</option>
+            <option value="180">3分钟（超省电）</option>
+          </select>
+        </div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">后台同时驻留平台数</div>
+            <div class="row-desc">超出此数量的平台会自动轮巡检查，不占内存</div>
+          </div>
+          <select id="selMaxLive" class="sel">
+            <option value="3">3 个（省电）</option>
+            <option value="5">5 个（推荐）</option>
+            <option value="8">8 个（多开重度）</option>
+          </select>
+        </div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">新增平台默认用电脑网页版</div>
+            <div class="row-desc">强烈推荐开启：防止闲鱼/小红书/BOSS强制跳去下载官方App</div>
+          </div>
+          <input id="chkDesktopDefault" type="checkbox" class="toggle" />
+        </div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">夜间免打扰（23:00–07:00）</div>
+            <div class="row-desc">深夜静音不弹窗，消息照样记录在列表里</div>
+          </div>
+          <input id="chkNightQuiet" type="checkbox" class="toggle" />
+        </div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">平台登录失效时提醒我</div>
+            <div class="row-desc">若某平台官方主动踢下线，通知我一键续登</div>
+          </div>
+          <input id="chkNotifyAuth" type="checkbox" class="toggle" />
+        </div>
+      </div>
+
+      <div style="text-align:center;color:var(--muted);font-size:11.5px;padding:6px 0 12px">
+        消息总管 Android 独立版 v5.6.0 · 所有账号 Cookie 仅加密保存在您自己手机本地
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-tab="inbox">
+      <span class="ico">📬</span><span>消息</span>
+      <span id="navUnreadBadge" class="nav-badge"></span>
+    </button>
+    <button class="nav-btn" data-tab="catalog">
+      <span class="ico">🌐</span><span>常用平台</span>
+    </button>
+    <button class="nav-btn" data-tab="pc">
+      <span class="ico">🖥️</span><span>连电脑</span>
+    </button>
+    <button class="nav-btn" data-tab="settings">
+      <span class="ico">⚙️</span><span>守护设置</span>
+    </button>
+  </nav>
+</div>
+
+<div id="toastBar" class="toast-bar"></div>
+
+<script>
+(() => {
+  const Bridge = window.TabPulseAppUI || null;
+  let state = {
+    version: "5.6.0",
+    guardianRunning: false,
+    notificationsGranted: true,
+    batteryWhitelisted: false,
+    totalUnread: 0,
+    settings: {
+      guardianEnabled: true,
+      pollIntervalSec: 45,
+      desktopUaDefault: true,
+      nightQuietEnabled: false,
+      notifyOnAuthExpired: true,
+      maxLiveTabs: 5,
+      companionUrl: ""
+    },
+    watches: [],
+    messages: []
+  };
+  let catalog = { categories: [], platforms: [] };
+  let activeTab = "inbox";
+  let activeCat = "hot";
+  let searchQuery = "";
+  let toastTimer = null;
+
+  function esc(s) {
+    return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function showToast(msg) {
+    const el = document.getElementById("toastBar");
+    el.textContent = msg;
+    el.style.display = "block";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.style.display = "none"; }, 2400);
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return "";
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+
+  function canonicalUrl(raw) {
+    try {
+      const u = new URL(raw);
+      return u.hostname.toLowerCase().replace(/^www\./, "") + u.pathname.replace(/\/+$/, "");
+    } catch {
+      return String(raw || "").trim().toLowerCase();
+    }
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll(".tab-panel").forEach((p) => {
+      p.classList.toggle("active", p.id === `tab-${tab}`);
+    });
+    document.querySelectorAll(".nav-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.tab === tab);
+    });
+    if (tab === "catalog") renderCatalog();
+    if (tab === "settings") renderSettings();
+  }
+
+  function renderTopAndNav() {
+    const unread = Number(state.totalUnread || 0);
+    const dot = document.getElementById("brandDot");
+    dot.classList.toggle("show", unread > 0);
+
+    const badge = document.getElementById("navUnreadBadge");
+    if (unread > 0) {
+      badge.textContent = unread > 99 ? "99+" : String(unread);
+      badge.classList.add("show");
+    } else {
+      badge.classList.remove("show");
+    }
+
+    const sub = document.getElementById("brandSub");
+    const n = (state.watches || []).length;
+    sub.textContent = state.guardianRunning
+      ? `🟢 守护中 · ${n} 个平台 · 无需电脑`
+      : `⚪ 未守护 · 已加 ${n} 个平台`;
+  }
+
+  function renderInbox() {
+    const gBox = document.getElementById("guardianBanner");
+    const warnings = [];
+    if (!state.notificationsGranted) {
+      warnings.push(`<button class="pill-btn danger" data-action="test-notif">⚠️ 点此开启通知权限</button>`);
+    }
+    if (!state.batteryWhitelisted) {
+      warnings.push(`<button class="pill-btn warn" data-action="battery">⚡ 开启防杀后台</button>`);
+    }
+    gBox.innerHTML = `
+      <div class="banner ${warnings.length ? "warn" : ""}">
+        <div class="banner-row">
+          <div>
+            <div class="banner-title">${state.guardianRunning ? "🟢 后台消息守护运行中" : "⏸️ 后台守护已暂停"}</div>
+            <div class="banner-sub">${warnings.length ? "开启通知与防杀后，息屏锁屏也能秒收平台消息" : "登录 Cookie 已自动持久保存，除非手动点「解绑」"}</div>
+          </div>
+          <button class="pill-btn ${state.guardianRunning ? "ok" : "primary"}" data-action="sync-all">↻ 刷一下</button>
+        </div>
+        ${warnings.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">${warnings.join("")}</div>` : ""}
+      </div>
+    `;
+
+    const watches = (state.watches || []).slice().sort((a, b) => {
+      if ((b.unreadCount || 0) !== (a.unreadCount || 0)) return (b.unreadCount || 0) - (a.unreadCount || 0);
+      const aNeed = (a.status === "auth_expired" || a.status === "idle") ? 1 : 0;
+      const bNeed = (b.status === "auth_expired" || b.status === "idle") ? 1 : 0;
+      if (bNeed !== aNeed) return bNeed - aNeed;
+      return (b.lastEventAt || 0) - (a.lastEventAt || 0);
+    });
+
+    const pendingLogin = watches.filter((w) => w.status === "auth_expired" || (w.status === "idle" && !w.hasSavedCookie));
+    const nlBox = document.getElementById("nextLoginBanner");
+    if (pendingLogin.length > 0) {
+      const first = pendingLogin[0];
+      nlBox.innerHTML = `
+        <div class="banner" style="padding:10px 12px">
+          <div class="banner-row">
+            <div>
+              <div class="banner-title">⚡ 还有 ${pendingLogin.length} 个平台待登录</div>
+              <div class="banner-sub">下一个：${esc(first.name)}（支持点右上角「📷存码」相册扫码秒登）</div>
+            </div>
+            <button class="pill-btn primary" data-action="open-watch" data-id="${esc(first.id)}">立即去登</button>
+          </div>
+        </div>
+      `;
+    } else {
+      nlBox.innerHTML = "";
+    }
+
+    const listEl = document.getElementById("watchListContainer");
+    if (watches.length === 0) {
+      listEl.innerHTML = `
+        <div class="card" style="text-align:center;padding:20px 14px">
+          <div style="font-size:32px;margin-bottom:6px">📬</div>
+          <div style="font-weight:800;font-size:16px">手机独立收全网平台消息</div>
+          <div style="color:var(--muted);font-size:12.5px;margin:6px 0 12px">
+            不需要电脑！点下方常用平台一键添加，登录一次自动持久保活，来消息直接手机弹窗提醒。
+          </div>
+          <div class="quick-grid">
+            <button class="quick-tile" data-action="quick-add" data-pid="goofish-im">🐟 闲鱼买家消息<span>扫码/短信登录</span></button>
+            <button class="quick-tile" data-action="quick-add" data-pid="xhs-creator-home">📕 小红书创作者<span>私信与商单提醒</span></button>
+            <button class="quick-tile" data-action="quick-add" data-pid="taobao-qianniu">🛒 淘宝千牛卖家<span>旺旺买家咨询</span></button>
+            <button class="quick-tile" data-action="quick-add" data-pid="boss-zhipin">💼 BOSS直聘消息<span>求职/招聘秒回</span></button>
+            <button class="quick-tile" data-action="quick-add" data-pid="pdd-merchant">🍊 拼多多商家<span>客服消息不漏</span></button>
+            <button class="quick-tile" data-action="quick-add" data-pid="github-notif">🐙 GitHub 通知<span>Issue/PR实时提醒</span></button>
+          </div>
+          <button class="pill-btn primary" style="width:100%;padding:11px;font-size:14px" data-action="go-catalog">
+            🌐 逛全部 86 个常用 + 小众宝藏平台 →
+          </button>
+        </div>
+      `;
+    } else {
+      listEl.innerHTML = `<div class="section-title"><span>我的监听平台（${watches.length}）</span><span>点平台可回复/存码</span></div>` +
+        watches.map((w) => {
+          const unread = Number(w.unreadCount || 0);
+          const isAuth = w.status === "auth_expired";
+          const isOk = w.status === "ok" || w.status === "unread" || w.hasSavedCookie;
+          let statusBadge = `<span class="badge slate">⚪ 待打开登录</span>`;
+          if (unread > 0) statusBadge = `<span class="badge red">🔴 ${unread} 条未读</span>`;
+          else if (isAuth) statusBadge = `<span class="badge amber">🟠 待登录</span>`;
+          else if (isOk) statusBadge = `<span class="badge green">🟢 持久在线</span>`;
+
+          const cardClass = unread > 0 ? "card unread" : (isAuth ? "card auth" : "card");
+          const desc = w.snippet
+            ? esc(w.snippet)
+            : (isAuth || !isOk ? esc(w.loginHint || "点「去登录」扫码或验证码登录，之后持久保持") : "暂无新未读 · 后台持续静默监听中");
+          const timeText = w.lastCheckedAt ? `上次检测 ${fmtTime(w.lastCheckedAt)}` : "刚添加";
+          return `
+            <div class="${cardClass}">
+              <div class="card-head">
+                <div class="card-name">
+                  <span>${esc(w.name)}</span>
+                  ${w.muted ? `<span class="badge slate">🔕静音</span>` : ""}
+                </div>
+                ${statusBadge}
+              </div>
+              <div class="card-snippet">${desc}</div>
+              <div class="card-meta">${w.desktopUa ? "💻电脑网页模式" : "📱手机网页模式"} · ${timeText}</div>
+              <div class="card-actions">
+                <button class="pill-btn primary" data-action="open-watch" data-id="${esc(w.id)}">
+                  ${unread > 0 ? "💬 立即查看回复" : (isAuth || !isOk ? "🔑 去登录" : "📂 打开页面")}
+                </button>
+                <button class="pill-btn compact" data-action="unbind-watch" data-id="${esc(w.id)}">🔌 解绑</button>
+                <button class="pill-btn compact danger" data-action="delete-watch" data-id="${esc(w.id)}">🗑️</button>
+              </div>
+            </div>
+          `;
+        }).join("");
+    }
+
+    const feedEl = document.getElementById("feedContainer");
+    const msgs = state.messages || [];
+    if (msgs.length > 0) {
+      feedEl.innerHTML = `
+        <div class="section-title">
+          <span>🔔 最近收到的消息提醒（${msgs.length}）</span>
+          <button class="pill-btn" style="padding:3px 8px;font-size:11px" data-action="clear-feed">清空</button>
+        </div>
+      ` + msgs.slice(0, 15).map((m) => `
+        <div class="feed-item" data-action="open-watch" data-id="${esc(m.watchId)}">
+          <div class="feed-top">
+            <span>${m.kind === "auth" ? "🟠" : "🔴"} ${esc(m.watchName)}${m.unreadCount > 0 ? ` (${m.unreadCount}条)` : ""}</span>
+            <span class="feed-time">${fmtTime(m.timestamp)}</span>
+          </div>
+          <div class="feed-body">${esc(m.snippet)}</div>
+        </div>
+      `).join("");
+    } else {
+      feedEl.innerHTML = "";
+    }
+  }
+
+  function renderCatalog() {
+    const chipsEl = document.getElementById("categoryChips");
+    const cats = catalog.categories || [];
+    chipsEl.innerHTML = cats.map((c) => `
+      <button class="chip ${activeCat === c.id ? "active" : ""}" data-cat="${esc(c.id)}">${esc(c.labelZh)}</button>
+    `).join("");
+
+    const existingMap = new Map();
+    (state.watches || []).forEach((w) => existingMap.set(canonicalUrl(w.url), w.id));
+
+    const q = searchQuery.trim().toLowerCase();
+    const list = (catalog.platforms || []).filter((p) => {
+      if (q) {
+        const hay = `${p.zh} ${p.en} ${p.kw} ${p.cat} ${p.url}`.toLowerCase();
+        return hay.includes(q);
+      }
+      if (activeCat === "all") return true;
+      if (activeCat === "hot") return Boolean(p.hot);
+      if (activeCat === "niche") return Boolean(p.niche);
+      return p.g === activeCat;
+    });
+
+    const listEl = document.getElementById("catalogList");
+    if (list.length === 0) {
+      listEl.innerHTML = `<div class="card" style="text-align:center;color:var(--muted)">没搜到「${esc(q)}」？直接在上方输入任意网址就能添加！</div>`;
+      return;
+    }
+
+    listEl.innerHTML = `<div class="section-title"><span>共找到 ${list.length} 个平台（可连续点添加）</span></div>` +
+      list.map((p) => {
+        const addedWatchId = existingMap.get(canonicalUrl(p.url));
+        const tag = p.niche
+          ? `<span class="tag-mini niche">小众宝藏</span>`
+          : (p.hot ? `<span class="tag-mini hot">热门</span>` : "");
+        return `
+          <div class="cat-item">
+            <div class="cat-info">
+              <div class="cat-title">${esc(p.zh)} ${tag}</div>
+              <div class="cat-hint">${esc(p.loginHint || p.url)}</div>
+            </div>
+            ${addedWatchId
+              ? `<button class="pill-btn ok" data-action="open-watch" data-id="${esc(addedWatchId)}">✓ 打开</button>`
+              : `<button class="pill-btn primary" data-action="add-catalog" data-pid="${esc(p.id)}">＋ 添加</button>`
+            }
+          </div>
+        `;
+      }).join("");
+  }
+
+  function renderSettings() {
+    const s = state.settings || {};
+    document.getElementById("setNotifStatus").textContent = state.notificationsGranted
+      ? "✅ 已开启！有新消息会弹出横幅并响铃"
+      : "⚠️ 尚未授权，点右侧按钮立即开启";
+    document.getElementById("setBatteryStatus").textContent = state.batteryWhitelisted
+      ? "✅ 已加入电池白名单，后台更稳不断线"
+      : "⚠️ 强烈建议开启，防止国产安卓息屏杀后台";
+    document.getElementById("chkGuardian").checked = Boolean(s.guardianEnabled);
+    document.getElementById("selPollSec").value = String(s.pollIntervalSec || 45);
+    document.getElementById("selMaxLive").value = String(s.maxLiveTabs || 5);
+    document.getElementById("chkDesktopDefault").checked = Boolean(s.desktopUaDefault);
+    document.getElementById("chkNightQuiet").checked = Boolean(s.nightQuietEnabled);
+    document.getElementById("chkNotifyAuth").checked = Boolean(s.notifyOnAuthExpired);
+    const compInput = document.getElementById("companionUrlInput");
+    if (document.activeElement !== compInput) {
+      compInput.value = s.companionUrl || "";
+    }
+  }
+
+  function renderAll() {
+    renderTopAndNav();
+    renderInbox();
+    if (activeTab === "catalog") renderCatalog();
+    if (activeTab === "settings") renderSettings();
+  }
+
+  window.__onAppState = function (nextState) {
+    if (!nextState) return;
+    state = nextState;
+    renderAll();
+  };
+
+  function pushSettingsUpdate() {
+    if (!Bridge) return;
+    const payload = {
+      pollIntervalSec: Number(document.getElementById("selPollSec").value) || 45,
+      maxLiveTabs: Number(document.getElementById("selMaxLive").value) || 5,
+      desktopUaDefault: document.getElementById("chkDesktopDefault").checked,
+      nightQuietEnabled: document.getElementById("chkNightQuiet").checked,
+      notifyOnAuthExpired: document.getElementById("chkNotifyAuth").checked
+    };
+    Bridge.updateSettingsJson(JSON.stringify(payload));
+    showToast("设置已保存");
+  }
+
+  // Event bindings
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+  document.getElementById("btnTopAdd").addEventListener("click", () => switchTab("catalog"));
+  document.getElementById("btnTopTestNotif").addEventListener("click", () => Bridge && Bridge.sendTestNotification());
+  document.getElementById("btnSetTestNotif").addEventListener("click", () => Bridge && Bridge.sendTestNotification());
+  document.getElementById("btnSetOpenNotif").addEventListener("click", () => Bridge && Bridge.openNotificationSettings());
+  document.getElementById("btnSetBattery").addEventListener("click", () => Bridge && Bridge.requestBatteryWhitelist());
+  document.getElementById("chkGuardian").addEventListener("change", (e) => {
+    if (Bridge) Bridge.setGuardianEnabled(Boolean(e.target.checked));
+  });
+  ["selPollSec", "selMaxLive", "chkDesktopDefault", "chkNightQuiet", "chkNotifyAuth"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", pushSettingsUpdate);
+  });
+
+  document.getElementById("catalogSearch").addEventListener("input", (e) => {
+    searchQuery = e.target.value || "";
+    renderCatalog();
+  });
+
+  document.getElementById("btnAddCustom").addEventListener("click", () => {
+    const name = (document.getElementById("customName").value || "").trim();
+    const url = (document.getElementById("customUrl").value || "").trim();
+    const desktopUa = document.getElementById("customDesktopUa").checked;
+    if (!url) { showToast("请先输入平台网址"); return; }
+    if (!Bridge) return;
+    const res = JSON.parse(Bridge.addCustomPlatform(name, url, desktopUa));
+    if (!res.ok) { showToast(res.error || "网址格式不正确"); return; }
+    document.getElementById("customName").value = "";
+    document.getElementById("customUrl").value = "";
+    showToast("已添加！正在打开登录…");
+    Bridge.openWatch(res.id);
+  });
+
+  document.getElementById("btnOpenCompanion").addEventListener("click", () => {
+    const raw = (document.getElementById("companionUrlInput").value || "").trim();
+    if (!raw) { showToast("请先粘贴电脑端生成的固定随身链接"); return; }
+    if (Bridge) Bridge.openCompanionUrl(raw);
+  });
+
+  document.body.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-cat]");
+    if (chip) {
+      activeCat = chip.dataset.cat;
+      searchQuery = "";
+      document.getElementById("catalogSearch").value = "";
+      renderCatalog();
+      return;
+    }
+    const actEl = e.target.closest("[data-action]");
+    if (!actEl) return;
+    const action = actEl.dataset.action;
+    const id = actEl.dataset.id || "";
+    const pid = actEl.dataset.pid || "";
+
+    if (action === "open-watch" && Bridge && id) Bridge.openWatch(id);
+    else if (action === "unbind-watch" && Bridge && id) Bridge.unbindWatch(id);
+    else if (action === "delete-watch" && Bridge && id) Bridge.deleteWatch(id);
+    else if (action === "go-catalog") switchTab("catalog");
+    else if (action === "test-notif" && Bridge) Bridge.sendTestNotification();
+    else if (action === "battery" && Bridge) Bridge.requestBatteryWhitelist();
+    else if (action === "sync-all" && Bridge) Bridge.syncAllNow();
+    else if (action === "clear-feed" && Bridge) Bridge.clearMessages();
+    else if (action === "add-catalog" && Bridge && pid) {
+      const res = JSON.parse(Bridge.addCatalogPlatform(pid));
+      if (res.ok) {
+        showToast(res.created ? `✅ 已添加「${res.name}」，可继续选或点打开登录` : `「${res.name}」已在列表中`);
+        renderCatalog();
+      }
+    } else if (action === "quick-add" && Bridge && pid) {
+      const res = JSON.parse(Bridge.addCatalogPlatform(pid));
+      if (res.ok) {
+        showToast(`✅ 已添加「${res.name}」，正在打开登录…`);
+        Bridge.openWatch(res.id);
+      }
+    }
+  });
+
+  // Initial load from native Kotlin bridge
+  if (Bridge) {
+    try { catalog = JSON.parse(Bridge.getCatalogJson()); } catch {}
+    try { state = JSON.parse(Bridge.getStateJson()); } catch {}
+  }
+  renderAll();
+})();
+</script>
+</body>
+</html>

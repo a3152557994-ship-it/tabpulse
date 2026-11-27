@@ -165,7 +165,7 @@ class CloudflaredManager {
   configureBoxCredentials(creds) {
     if (creds && creds.boxId && creds.writeKey) {
       this.boxCreds = creds;
-      this.permanentBaseUrl = `${EDGE_GATEWAY_ORIGIN}/go/${creds.boxId}`;
+      this.permanentBaseUrl = `${EDGE_GATEWAY_ORIGIN}/box/${creds.boxId}/m`;
     }
   }
 
@@ -183,8 +183,8 @@ class CloudflaredManager {
         }),
       });
       const data = await res.json().catch(() => null);
-      if (data?.ok && data.permanentUrl) {
-        this.permanentBaseUrl = data.permanentUrl;
+      if (data?.ok) {
+        this.permanentBaseUrl = `${EDGE_GATEWAY_ORIGIN}/box/${this.boxCreds.boxId}/m`;
       }
       return data;
     } catch {
@@ -722,10 +722,11 @@ class AgentSessionEngine {
 
 export const agentEngine = new AgentSessionEngine();
 
-// MARK: - Desktop Native WebView Relay Queue (Snapshot + Remote Click + Fixed-IP Reply)
+// MARK: - Desktop Native WebView Relay Queue (Snapshot + Remote Login + Fixed-IP Reply + Native Notices)
 class DesktopWebRelay {
   constructor() {
     this.pendingTasks = [];
+    this.pendingNotices = [];
     this.waiters = new Map();
     this.lastSnapshots = new Map();
     this.lastBridgeSeenAt = 0;
@@ -733,6 +734,25 @@ class DesktopWebRelay {
 
   isDesktopConnected() {
     return Date.now() - this.lastBridgeSeenAt < 12000;
+  }
+
+  pushNativeNotice(notice = {}) {
+    if (!notice || (!notice.title && !notice.body)) return;
+    this.pendingNotices.push({
+      id: `nt_${Date.now().toString(36)}_${crypto.randomBytes(2).toString("hex")}`,
+      title: String(notice.title || "消息总管新消息").slice(0, 80),
+      body: String(notice.body || "").slice(0, 180),
+      watchId: String(notice.watchId || ""),
+      targetKey: String(notice.targetKey || ""),
+      createdAt: Date.now(),
+    });
+    if (this.pendingNotices.length > 30) {
+      this.pendingNotices.splice(0, this.pendingNotices.length - 30);
+    }
+  }
+
+  drainNativeNotices() {
+    return this.pendingNotices.splice(0, 10);
   }
 
   enqueueCommand(cmd, timeoutMs = 8000) {
