@@ -45,7 +45,9 @@ class MonitorForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            isRunning = false
             TabPulseApp.instance.repository.updateSettings { it.copy(guardianEnabled = false) }
+            TabPulseApp.instance.repository.notifyExternalStateChanged()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -64,6 +66,7 @@ class MonitorForegroundService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         )
         isRunning = true
+        app.repository.notifyExternalStateChanged()
 
         mainHandler.removeCallbacks(tickRunnable)
         mainHandler.postDelayed(tickRunnable, 1500L)
@@ -88,6 +91,7 @@ class MonitorForegroundService : Service() {
         mainHandler.removeCallbacks(tickRunnable)
         TabPulseApp.instance.repository.removeListener(repoListener)
         TabPulseApp.instance.monitorPool.snapshotAllCookies()
+        TabPulseApp.instance.repository.notifyExternalStateChanged()
         super.onDestroy()
     }
 

@@ -43,6 +43,10 @@ class WatchRepository(
         }
     }
 
+    fun notifyExternalStateChanged() {
+        notifyChanged()
+    }
+
     fun getWatches(): List<WatchItem> = synchronized(lock) { watches.toList() }
 
     fun getWatch(id: String): WatchItem? = synchronized(lock) { watches.firstOrNull { it.id == id } }
@@ -107,7 +111,7 @@ class WatchRepository(
         return Pair(created, isNew)
     }
 
-    fun removeWatch(watchId: String): WatchItem? {
+    fun removeWatch(watchId: String, extraUrl: String = ""): WatchItem? {
         val removed = synchronized(lock) {
             val idx = watches.indexOfFirst { it.id == watchId }
             if (idx < 0) return null
@@ -115,13 +119,13 @@ class WatchRepository(
             persistLocked()
             item
         }
-        cookieVault.clearForWatch(removed.url)
+        cookieVault.clearForWatch(removed.url, extraUrl)
         NotificationHelper.cancelWatchNotification(context, watchId)
         notifyChanged()
         return removed
     }
 
-    fun unbindWatch(watchId: String): WatchItem? {
+    fun unbindWatch(watchId: String, extraUrl: String = ""): WatchItem? {
         val updated = synchronized(lock) {
             val idx = watches.indexOfFirst { it.id == watchId }
             if (idx < 0) return null
@@ -137,7 +141,7 @@ class WatchRepository(
             persistLocked()
             next
         }
-        cookieVault.clearForWatch(updated.url)
+        cookieVault.clearForWatch(updated.url, extraUrl)
         NotificationHelper.cancelWatchNotification(context, watchId)
         notifyChanged()
         return updated

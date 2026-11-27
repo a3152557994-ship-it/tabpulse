@@ -471,13 +471,13 @@ class MainActivity : AppCompatActivity(), PlatformWebHostCallbacks {
         pushStateToDashboard()
     }
 
-    private fun closePlatformOverlay() {
+    private fun closePlatformOverlay(snapshotCookies: Boolean = true) {
         val wid = activeWatchId
         activeWatchId = null
         pendingExternalUrl = null
         externalBanner.visibility = View.GONE
         platformWebContainer.removeAllViews()
-        TabPulseApp.instance.monitorPool.detachFromActivity(wid)
+        TabPulseApp.instance.monitorPool.detachFromActivity(wid, snapshotCookies = snapshotCookies)
         platformOverlay.visibility = View.GONE
         pushStateToDashboard()
     }
@@ -549,9 +549,10 @@ class MainActivity : AppCompatActivity(), PlatformWebHostCallbacks {
             .setTitle("解绑「${watch.name}」？")
             .setMessage("解绑后将彻底清除本平台在手机上的登录 Cookie 和缓存，需要重新扫码/登录才会继续收消息。")
             .setPositiveButton("确认解绑") { _, _ ->
+                val curUrl = TabPulseApp.instance.monitorPool.getCurrentUrl(watch.id)
+                if (activeWatchId == watch.id) closePlatformOverlay(snapshotCookies = false)
                 TabPulseApp.instance.monitorPool.destroyWatchView(watch.id, clearCache = true)
-                TabPulseApp.instance.repository.unbindWatch(watch.id)
-                if (activeWatchId == watch.id) closePlatformOverlay()
+                TabPulseApp.instance.repository.unbindWatch(watch.id, extraUrl = curUrl)
                 toast("已解绑「${watch.name}」并清除登录信息")
             }
             .setNegativeButton("取消", null)
@@ -563,9 +564,10 @@ class MainActivity : AppCompatActivity(), PlatformWebHostCallbacks {
             .setTitle("删除「${watch.name}」？")
             .setMessage("会同时清除此平台的登录状态并从列表移除。")
             .setPositiveButton("确认删除") { _, _ ->
+                val curUrl = TabPulseApp.instance.monitorPool.getCurrentUrl(watch.id)
+                if (activeWatchId == watch.id) closePlatformOverlay(snapshotCookies = false)
                 TabPulseApp.instance.monitorPool.destroyWatchView(watch.id, clearCache = true)
-                TabPulseApp.instance.repository.removeWatch(watch.id)
-                if (activeWatchId == watch.id) closePlatformOverlay()
+                TabPulseApp.instance.repository.removeWatch(watch.id, extraUrl = curUrl)
                 toast("已删除「${watch.name}」")
             }
             .setNegativeButton("取消", null)
@@ -615,9 +617,15 @@ class MainActivity : AppCompatActivity(), PlatformWebHostCallbacks {
     private fun launchExternalUri(rawUrl: String) {
         runCatching {
             val intent = if (rawUrl.startsWith("intent://", ignoreCase = true)) {
-                Intent.parseUri(rawUrl, Intent.URI_INTENT_SCHEME)
+                Intent.parseUri(rawUrl, Intent.URI_INTENT_SCHEME).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                    component = null
+                    selector = null
+                }
             } else {
-                Intent(Intent.ACTION_VIEW, Uri.parse(rawUrl))
+                Intent(Intent.ACTION_VIEW, Uri.parse(rawUrl)).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                }
             }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)

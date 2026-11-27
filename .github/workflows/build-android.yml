@@ -4,13 +4,6 @@ on:
   push:
     tags:
       - "v*"
-    branches:
-      - main
-    paths:
-      - "android-app/**"
-      - "seed/platform-catalog.mjs"
-      - "extension/passive-observer.js"
-      - ".github/workflows/build-android.yml"
   workflow_dispatch:
     inputs:
       tag:
@@ -20,6 +13,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: android-apk-build
+  cancel-in-progress: false
 
 jobs:
   build-android:

@@ -305,6 +305,18 @@ object UrlHelpers {
         return sb.toString()
     }
 
+    fun buildExpiredCookieHeader(name: String, rootDomain: String?, secure: Boolean): String {
+        val sb = StringBuilder()
+        sb.append(name).append("=; Path=/; Max-Age=0")
+        if (!rootDomain.isNullOrBlank()) {
+            sb.append("; Domain=.").append(rootDomain)
+        }
+        if (secure || name.startsWith("__Secure-") || name.startsWith("__Host-")) {
+            sb.append("; Secure")
+        }
+        return sb.toString()
+    }
+
     fun parseCookiePairs(cookieHeader: String?): Map<String, String> {
         if (cookieHeader.isNullOrBlank()) return emptyMap()
         val result = LinkedHashMap<String, String>()

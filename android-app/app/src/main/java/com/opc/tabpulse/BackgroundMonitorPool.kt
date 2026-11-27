@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -99,13 +100,15 @@ class BackgroundMonitorPool(
         return wv
     }
 
-    fun detachFromActivity(watchId: String?) {
+    fun detachFromActivity(watchId: String?, snapshotCookies: Boolean = true) {
         val id = watchId ?: attachedWatchId ?: return
         val wv = liveViews[id]
         if (wv != null) {
             detachViewFromParent(wv)
             (wv.context as? MutableContextWrapper)?.baseContext = appContext
-            cookieVault.snapshotForUrl(currentUrls[id] ?: repository.getWatch(id)?.url.orEmpty())
+            if (snapshotCookies) {
+                cookieVault.snapshotForUrl(currentUrls[id] ?: repository.getWatch(id)?.url.orEmpty())
+            }
             // Keep WebView alive for background passive monitoring
             wv.onResume()
         }
@@ -119,7 +122,6 @@ class BackgroundMonitorPool(
             val watch = repository.getWatch(watchId) ?: return@post
             val wv = liveViews[watchId] ?: return@post
             applyUserAgent(wv, watch.desktopUa)
-            cookieVault.restoreForUrl(watch.url)
             if (resetToHome) {
                 wv.loadUrl(watch.url)
             } else {
@@ -133,8 +135,8 @@ class BackgroundMonitorPool(
     }
 
     fun destroyWatchView(watchId: String, clearCache: Boolean = false) {
-        mainHandler.post {
-            val wv = liveViews.remove(watchId) ?: return@post
+        val task = Runnable {
+            val wv = liveViews.remove(watchId) ?: return@Runnable
             currentUrls.remove(watchId)
             if (attachedWatchId == watchId) attachedWatchId = null
             detachViewFromParent(wv)
@@ -150,18 +152,28 @@ class BackgroundMonitorPool(
                 wv.destroy()
             }
         }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            task.run()
+        } else {
+            mainHandler.post(task)
+        }
     }
 
     /**
-     * Ensures active watches are warmed up in background and cycles overflow watches gently.
+     * Ensures logged-in watches stay warmed up in background and cycles overflow watches gently.
+     * Skips explicitly unbound / auth_expired or never-opened idle watches so they never resurrect.
      */
     fun warmUpWatches(runKeepAlivePing: Boolean = false) {
         mainHandler.post {
-            val watches = repository.getWatches()
+            val watches = repository.getWatches().filter { w ->
+                w.id == attachedWatchId ||
+                    w.status == "ok" ||
+                    w.status == "unread" ||
+                    (w.status == "idle" && cookieVault.hasSavedSession(w.url))
+            }
             if (watches.isEmpty()) return@post
             val limit = repository.getSettings().maxLiveTabs.coerceIn(2, 8)
 
-            // 1. Warm up priority watches up to limit
             val toWarm = if (watches.size <= limit) {
                 watches
             } else {
@@ -184,7 +196,7 @@ class BackgroundMonitorPool(
             for (w in toWarm) {
                 val wv = getOrCreateWebView(w)
                 injectPassiveObserver(wv)
-                if (runKeepAlivePing && w.status != "auth_expired" && !repository.isQuietHourNow(repository.getSettings().nightQuietEnabled)) {
+                if (runKeepAlivePing && !repository.isQuietHourNow(repository.getSettings().nightQuietEnabled)) {
                     runCatching {
                         wv.evaluateJavascript(
                             "if (window.__TABPULSE_KEEPALIVE_PING__) window.__TABPULSE_KEEPALIVE_PING__();",
@@ -200,7 +212,10 @@ class BackgroundMonitorPool(
     fun snapshotAllCookies() {
         mainHandler.post {
             for (w in repository.getWatches()) {
-                cookieVault.snapshotForUrl(currentUrls[w.id] ?: w.url)
+                if (w.status == "auth_expired") continue
+                if (liveViews.containsKey(w.id)) {
+                    cookieVault.snapshotForUrl(currentUrls[w.id] ?: w.url)
+                }
             }
             runCatching { CookieManager.getInstance().flush() }
         }
@@ -400,6 +415,15 @@ class BackgroundMonitorPool(
                 return super.onJsPrompt(view, url, message, defaultValue, result)
             }
         }
+
+        // Pre-measure & layout offscreen WebView so passive-observer.js getBoundingClientRect() works even in background!
+        val offscreenW = if (watch.desktopUa) 1280 else 390
+        val offscreenH = if (watch.desktopUa) 900 else 844
+        wv.measure(
+            View.MeasureSpec.makeMeasureSpec(offscreenW, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(offscreenH, View.MeasureSpec.EXACTLY)
+        )
+        wv.layout(0, 0, offscreenW, offscreenH)
 
         return wv
     }

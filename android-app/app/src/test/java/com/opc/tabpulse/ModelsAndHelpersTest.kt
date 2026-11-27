@@ -55,6 +55,19 @@ class ModelsAndHelpersTest {
     }
 
     @Test
+    fun buildExpiredCookieHeader_includesSecureForPrefixedCookies() {
+        val h1 = UrlHelpers.buildExpiredCookieHeader("__Secure-sid", "github.com", false)
+        assertTrue(h1.contains("Max-Age=0"))
+        assertTrue(h1.contains("Secure"))
+        assertTrue(h1.contains("Domain=.github.com"))
+
+        val h2 = UrlHelpers.buildExpiredCookieHeader("__Host-token", null, false)
+        assertTrue(h2.contains("Max-Age=0"))
+        assertTrue(h2.contains("Secure"))
+        assertFalse(h2.contains("Domain="))
+    }
+
+    @Test
     fun passiveEvent_parsesValidPayload() {
         val evt = PassiveEvent.fromJsonString("""{"event":"mutation","authExpired":false,"unreadCount":3,"snippet":"买家问在吗","pageTitle":"闲鱼"}""")
         assertEquals(3, evt?.unreadCount)
