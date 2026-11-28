@@ -23,13 +23,14 @@ class MonitorForegroundService : Service() {
         override fun run() {
             val app = TabPulseApp.instance
             val settings = app.repository.getSettings()
-            if (!settings.guardianEnabled) {
+            if (!settings.guardianEnabled || !settings.privacyAccepted) {
                 stopSelf()
                 return
             }
             tickCount += 1
             val runKeepAlive = (tickCount % 6 == 0)
             app.monitorPool.warmUpWatches(runKeepAlivePing = runKeepAlive)
+            app.repository.pollRemoteRelayOnce()
             updateGuardianNotification()
 
             val delayMs = (settings.pollIntervalSec.coerceIn(20, 300) * 1000L)

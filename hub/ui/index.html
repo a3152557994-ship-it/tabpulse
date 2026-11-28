@@ -783,10 +783,14 @@
         </header>
         <div class="pane-body">
           <div class="panel-card" style="padding:14px 16px;border-color:#bfdbfe;background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);">
-            <div style="display:grid;grid-template-columns:1.5fr 1fr auto;gap:8px;align-items:center;">
-              <input id="cat-search-input" oninput="renderCatalogView()" onkeydown="if(event.key==='Enter')catalogSmartEnter()" placeholder="🔍 搜平台名/拼音（如 闲鱼、xy、小红书、汇博、鱼泡、电鸭、tg）或直接粘贴任意小众网址..." style="padding:9px 12px;border:1.5px solid #93c5fd;border-radius:9px;font-size:13px;background:#fff;" />
-              <input id="cat-custom-name" placeholder="自定义网址备注名（选填）" style="padding:9px 11px;border:1px solid #cbd5e1;border-radius:9px;font-size:13px;background:#fff;" />
-              <button class="primary" onclick="catalogAddCustomUrl()">＋ 直接添加网址</button>
+            <div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:8px 12px;border-radius:9px;font-size:12px;margin-bottom:10px;line-height:1.5;">
+              🛡️ <b>防互踢与防封号提醒</b>：闲鱼、千牛、拼多多、抖店、小红书、BOSS直聘等风控较严的平台，<b>请固定只在「电脑」或「手机」其中一端登录网页</b>，切勿两端同时单独登录同一个账号；登录国内平台请关闭海外代理（VPN）。
+            </div>
+            <div style="display:grid;grid-template-columns:1.6fr 0.9fr auto auto;gap:8px;align-items:center;">
+              <input id="cat-search-input" oninput="renderCatalogView()" onkeydown="if(event.key==='Enter')catalogSmartEnter()" placeholder="🔍 不懂网址也能加！直接输中文名字（如 转转、得物商家、猪八戒）或拼音..." style="padding:9px 12px;border:1.5px solid #93c5fd;border-radius:9px;font-size:13px;background:#fff;" />
+              <input id="cat-custom-name" placeholder="备注名（选填）" style="padding:9px 11px;border:1px solid #cbd5e1;border-radius:9px;font-size:13px;background:#fff;" />
+              <button class="primary" onclick="catalogSearchOfficialSite()">🔍 搜官网免链接添加</button>
+              <button onclick="catalogAddCustomUrl()">＋ 填网址添加</button>
             </div>
             <div class="seg-bar" id="catalog-cat-tabs" style="margin-top:10px;width:100%;justify-content:flex-start;"></div>
           </div>
@@ -1951,6 +1955,11 @@
         `).join("");
     }
 
+    function isHighRiskSingleEndSite(name, rawUrl) {
+      const hay = `${name || ""} ${rawUrl || ""}`.toLowerCase();
+      return /(goofish|taobao|tmall|1688|pinduoduo|yangkeduo|jinritemai|douyin|xiaohongshu|zhipin|weixin\.qq\.com|kuaishou|weibo|zhihu|闲鱼|千牛|淘宝|拼多多|抖店|飞鸽|抖音|小红书|boss|微信|视频号|公众号)/.test(hay);
+    }
+
     function renderPlatformCard(w, en) {
       const b = getBrandStyle(w.name, w.url);
       const host = cleanHostname(w.url);
@@ -1975,6 +1984,10 @@
         ? `<span class="micro-tag" style="color:var(--amber);border-color:var(--amber-border);background:var(--amber-bg);">🟠 待登录</span>`
         : `<span class="micro-tag" style="color:var(--green);border-color:var(--green-border);background:var(--green-bg);">🔒 ${en ? "Persistent" : "持久保活中"}</span>`;
 
+      const singleEndTag = (!en && isHighRiskSingleEndSite(w.name, w.url))
+        ? `<span class="micro-tag" style="color:#92400e;border-color:#fde68a;background:#fffbeb;">🛡️ 请固定单端登录</span>`
+        : "";
+
       return `
         <div class="p-card ${cls}">
           <div>
@@ -1994,6 +2007,7 @@
             <div class="p-meta-tags" style="margin-top:7px;">
               ${persistTag}
               <span class="micro-tag">${tierLabel}</span>
+              ${singleEndTag}
             </div>
           </div>
 
@@ -2128,12 +2142,15 @@
       let extraHtml = "";
       if (q && (looksLikeUrl || filtered.length === 0)) {
         extraHtml = `
-          <div class="p-card" style="grid-column:1/-1;border-color:#93c5fd;background:#eff6ff;flex-direction:row;align-items:center;justify-content:space-between;">
+          <div class="p-card" style="grid-column:1/-1;border-color:#93c5fd;background:#eff6ff;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;">
             <div>
-              <div style="font-weight:800;font-size:14px;color:#1e3a8a;">🌐 没找到「${escapeHtml(q)}」？直接作为小众自定义平台添加！</div>
-              <div style="font-size:12px;color:#334155;margin-top:2px;">支持任意带网页版的网站（输入域名如 example.com 或粘贴完整链接，自动分配独立防串号隔离仓）。</div>
+              <div style="font-weight:800;font-size:14px;color:#1e3a8a;">🔍 内置库没找到「${escapeHtml(q)}」？不用找网址，直接搜官网点进去收藏！</div>
+              <div style="font-size:12px;color:#334155;margin-top:2px;">点右侧按钮直接搜官网，进入登录页后点窗口顶栏「⭐ 就守这个页面」即可一键加入，全程无需复制链接。</div>
             </div>
-            <button class="primary sm" onclick="catalogAddCustomUrl()">＋ 立即添加并打开登录</button>
+            <div style="display:flex;gap:8px;flex-shrink:0;">
+              <button class="primary sm" onclick="catalogSearchOfficialSite()">🔍 搜「${escapeHtml(q)}」官网添加</button>
+              ${looksLikeUrl ? `<button class="sm" onclick="catalogAddCustomUrl()">＋ 按网址添加</button>` : ""}
+            </div>
           </div>
         `;
       }
@@ -2178,6 +2195,35 @@
       if (!q) return;
       if (/^(https?:\/\/)?[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(q)) {
         catalogAddCustomUrl();
+      } else {
+        catalogSearchOfficialSite();
+      }
+    }
+
+    function catalogSearchOfficialSite() {
+      const en = currentLang === "en";
+      if (!isProUnlocked() && (appState.watches || []).length >= 2) {
+        openPaywallModal(
+          en
+            ? "Free tier watches up to 2 accounts. Unlock Pro ($14.99 Lifetime) for unlimited accounts!"
+            : "免费版支持同时看护 2 个账号。升级专业版（¥39 永久买断）即可解锁无限平台！"
+        );
+        return;
+      }
+      const q = (document.getElementById("cat-search-input")?.value || "").trim();
+      if (!q) {
+        showToast("请先输入你想找的平台中文名（比如：转转、猪八戒）");
+        document.getElementById("cat-search-input")?.focus();
+        return;
+      }
+      const searchUrl = `https://cn.bing.com/search?q=${encodeURIComponent(q + " 官网 登录")}`;
+      const isMacNative = Boolean(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tabpulseNative);
+      if (isMacNative) {
+        showToast("🔍 点进官网后，按窗口顶部「⭐ 就守这个页面」即可免链接添加！");
+        openSiteLogin(searchUrl, `搜官网：${q}`, "", "", true);
+      } else {
+        showToast("🔍 已为您打开官网搜索，找到官网后复制地址粘贴回此框回车即可添加！");
+        window.open(searchUrl, "_blank", "noopener");
       }
     }
 

@@ -233,15 +233,17 @@ final class SessionCookieVault {
         return vaultDir.appendingPathComponent("\(safe.isEmpty ? "default" : safe).json")
     }
 
-    func snapshotCookies(watchId: String, from store: WKWebsiteDataStore) {
-        guard !watchId.isEmpty else { return }
+    func snapshotCookies(watchId: String, from store: WKWebsiteDataStore, completion: (() -> Void)? = nil) {
+        guard !watchId.isEmpty else { completion?(); return }
         DispatchQueue.main.async {
             store.httpCookieStore.getAllCookies { cookies in
-                guard !cookies.isEmpty else { return }
+                guard !cookies.isEmpty else {
+                    DispatchQueue.main.async { completion?() }
+                    return
+                }
                 let minPersist = Date().addingTimeInterval(180 * 86400)
                 var serialized: [[String: Any]] = []
                 for c in cookies {
-                    // Promote session-only cookies or short-lived cookies so app restart / Mac reboot NEVER drops login!
                     let expDate: Date = {
                         if let ex = c.expiresDate, ex > minPersist { return ex }
                         if c.isSessionOnly { return minPersist }
@@ -264,12 +266,13 @@ final class SessionCookieVault {
                 }
                 let target = self.fileURL(for: watchId)
                 self.ioQueue.async {
-                    guard let data = try? JSONSerialization.data(withJSONObject: ["savedAt": Date().timeIntervalSince1970, "cookies": serialized]) else { return }
-                    // Write directly to a 0600-created temp file inside 0700 vaultDir then atomically swap (zero 0644 exposure window!)
-                    let tmp = target.appendingPathExtension("tmp.\(UUID().uuidString.prefix(8))")
-                    if FileManager.default.createFile(atPath: tmp.path, contents: data, attributes: [.posixPermissions: 0o600]) {
-                        _ = try? FileManager.default.replaceItemAt(target, withItemAt: tmp)
+                    if let data = try? JSONSerialization.data(withJSONObject: ["savedAt": Date().timeIntervalSince1970, "cookies": serialized]) {
+                        let tmp = target.appendingPathExtension("tmp.\(UUID().uuidString.prefix(8))")
+                        if FileManager.default.createFile(atPath: tmp.path, contents: data, attributes: [.posixPermissions: 0o600]) {
+                            _ = try? FileManager.default.replaceItemAt(target, withItemAt: tmp)
+                        }
                     }
+                    DispatchQueue.main.async { completion?() }
                 }
             }
         }
@@ -523,7 +526,7 @@ final class StandaloneStore {
             ]
         ]
         let initial: [String: Any] = [
-            "version": "5.6.0",
+            "version": "5.7.0",
             "license": NSNull(),
             "mobileToken": UUID().uuidString.replacingOccurrences(of: "-", with: ""),
             "tunnelBoxId": "bx_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(20).lowercased(),
@@ -581,7 +584,7 @@ final class StandaloneStore {
         #endif
 
         return [
-            "version": "5.6.0",
+            "version": "5.7.0",
             "license": licOut,
             "settings": (st["settings"] as? [String: Any]) ?? ["webhookUrl": "", "lang": isChineseSystem ? "zh" : "en", "termsAcceptedAt": NSNull()],
             "stats": [
@@ -715,6 +718,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var toolbarStatusLabel: NSTextField?
     var nextPendingBtn: NSButton?
     var unbindBtn: NSButton?
+    var saveCurrentSiteBtn: NSButton?
     var cachedExternalState: [String: Any]?
     var warmedUpIds: Set<String> = []
     var lastKeepAliveAt: [String: Date] = [:]
@@ -1362,6 +1366,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
 
+        let saveSiteB = makeNavBtn(isChineseSystem ? "⭐ 就守这个页面" : "⭐ Watch This Page", action: #selector(wsSaveCurrentSite))
+        saveSiteB.isHidden = true
+        saveCurrentSiteBtn = saveSiteB
+
         let nextBtn = makeNavBtn(isChineseSystem ? "⚡ 下一个待登录" : "⚡ Next Sign-In", action: #selector(wsOpenNextPending))
         nextBtn.isHidden = true
         nextPendingBtn = nextBtn
@@ -1378,7 +1386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         let popBtn = makeNavBtn(isChineseSystem ? "↗ 独立窗口" : "↗ Pop Out", action: #selector(popOutWorkspaceWindow))
 
-        let hStack = NSStackView(views: [bBack, bFwd, bReload, bHome, titleLbl, statusLbl, spacer, nextBtn, unbindB, qrPop, popBtn])
+        let hStack = NSStackView(views: [bBack, bFwd, bReload, bHome, titleLbl, statusLbl, spacer, saveSiteB, nextBtn, unbindB, qrPop, popBtn])
         hStack.orientation = .horizontal
         hStack.alignment = .centerY
         hStack.spacing = 6
@@ -1407,6 +1415,112 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func wsGoHome() {
         if let h = activeHomeURL, let u = URL(string: h) {
             loginWebView?.load(URLRequest(url: u))
+        }
+    }
+
+    @objc func wsSaveCurrentSite() {
+        guard let wv = loginWebView,
+              let curURL = wv.url,
+              let host = curURL.host?.lowercased(),
+              !host.isEmpty else { return }
+
+        let searchHosts = ["bing.com", "baidu.com", "sogou.com", "so.com", "google.com"]
+        if searchHosts.contains(where: { host == $0 || host.hasSuffix(".\($0)") }) {
+            let alert = NSAlert()
+            alert.messageText = isChineseSystem ? "请先点进官方网站再收藏" : "Open Official Site First"
+            alert.informativeText = isChineseSystem
+                ? "当前还在搜索结果列表页，请先在页面里点击进入你想添加的目标网站，再点右上角「⭐ 就守这个页面」！"
+                : "Please click into the target website from the search results first, then click Watch This Page."
+            alert.addButton(withTitle: isChineseSystem ? "好，我去点" : "OK")
+            alert.runModal()
+            return
+        }
+
+        // Enforce free-tier 2-account limit consistently with dashboard
+        let curState = activeStateSnapshot()
+        let curWatches = (curState["watches"] as? [[String: Any]]) ?? []
+        let licObj = (curState["license"] as? [String: Any]) ?? [:]
+        let isPro = ((licObj["plan"] as? String) ?? "free") != "free"
+        #if !MAS_BUILD
+        if !isPro && curWatches.count >= 2 && !curWatches.contains(where: { ($0["url"] as? String) == curURL.absoluteString }) {
+            returnToDashboard()
+            dashboardWebView?.evaluateJavaScript("if(window.openPaywallModal) window.openPaywallModal('免费版支持同时看护 2 个平台，解锁专业版（¥39 永久买断）即可无限添加！');", completionHandler: nil)
+            return
+        }
+        #endif
+
+        let rawTitle = (wv.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTitle = rawTitle.isEmpty ? host.replacingOccurrences(of: "www.", with: "") : String(rawTitle.prefix(28))
+        let finalUrl = curURL.absoluteString
+
+        if useExternalHub, let apiURL = URL(string: "http://127.0.0.1:17890/api/watches") {
+            var req = URLRequest(url: apiURL)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let payload: [String: Any] = [
+                "name": cleanTitle,
+                "url": finalUrl,
+                "category": "主力阵地",
+                "publishTier": "red",
+                "isolatedProfile": true,
+                "contextSummary": "零网址一键收藏 · 持久保活"
+            ]
+            req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+            URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+                guard let self = self else { return }
+                var createdId = ""
+                var createdUuid = ""
+                if let d = data,
+                   let obj = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any],
+                   let wObj = obj["watch"] as? [String: Any] {
+                    createdId = (wObj["id"] as? String) ?? ""
+                    createdUuid = (wObj["profileUuid"] as? String) ?? ""
+                }
+                self.syncExternalHubState()
+                DispatchQueue.main.async {
+                    self.dashboardWebView?.evaluateJavaScript("if(window.refreshState) window.refreshState();", completionHandler: nil)
+                    if !createdId.isEmpty {
+                        SessionCookieVault.shared.snapshotCookies(watchId: createdId, from: wv.configuration.websiteDataStore) {
+                            self.openLoginSheet(urlStr: finalUrl, name: cleanTitle, watchId: createdId, profileUuidStr: createdUuid, isolated: true, dockInMain: self.isDockedInMainWindow)
+                            self.toolbarStatusLabel?.stringValue = isChineseSystem ? "✅ 已收进消息总管并保存登录态！" : "✅ Saved to ReplyRadar!"
+                        }
+                    }
+                }
+            }.resume()
+        } else {
+            var st = StandaloneStore.shared.loadState()
+            var watches = (st["watches"] as? [[String: Any]]) ?? []
+            if let existing = watches.first(where: { ($0["url"] as? String) == finalUrl }),
+               let exId = existing["id"] as? String {
+                let exUuid = (existing["profileUuid"] as? String) ?? deterministicProfileUUID(exId).uuidString
+                SessionCookieVault.shared.snapshotCookies(watchId: exId, from: wv.configuration.websiteDataStore) { [weak self] in
+                    guard let self = self else { return }
+                    self.openLoginSheet(urlStr: finalUrl, name: cleanTitle, watchId: exId, profileUuidStr: exUuid, isolated: true, dockInMain: self.isDockedInMainWindow)
+                }
+                return
+            }
+            let newId = "w_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(10))"
+            let newUuid = deterministicProfileUUID(String(newId)).uuidString
+            watches.append([
+                "id": newId,
+                "name": cleanTitle,
+                "url": finalUrl,
+                "category": "主力阵地",
+                "publishTier": "red",
+                "isolatedProfile": true,
+                "profileUuid": newUuid,
+                "status": "ok",
+                "unreadCount": 0,
+                "contextSummary": "零网址一键收藏 · 持久保活"
+            ])
+            st["watches"] = watches
+            StandaloneStore.shared.saveState(st)
+            dashboardWebView?.evaluateJavaScript("if(window.refreshState) window.refreshState();", completionHandler: nil)
+            SessionCookieVault.shared.snapshotCookies(watchId: newId, from: wv.configuration.websiteDataStore) { [weak self] in
+                guard let self = self else { return }
+                self.openLoginSheet(urlStr: finalUrl, name: cleanTitle, watchId: newId, profileUuidStr: newUuid, isolated: true, dockInMain: self.isDockedInMainWindow)
+                self.toolbarStatusLabel?.stringValue = isChineseSystem ? "✅ 已收进消息总管并保存登录态！" : "✅ Saved!"
+            }
         }
     }
 
@@ -1547,17 +1661,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             nb.title = isChineseSystem ? "⚡ 下一个待登录 (\(pendingCnt))" : "⚡ Next Sign-In (\(pendingCnt))"
         }
         unbindBtn?.isHidden = (activeLoginWatchId == nil)
+        saveCurrentSiteBtn?.isHidden = (activeLoginWatchId != nil)
 
         if let curId = activeLoginWatchId,
            let curW = watches.first(where: { ($0["id"] as? String) == curId }) {
             let s = (curW["status"] as? String) ?? "idle"
+            let nm = (curW["name"] as? String) ?? ""
+            let uStr = (curW["url"] as? String) ?? ""
+            let hay = "\(nm) \(uStr)".lowercased()
+            let highRisk = ["goofish", "taobao", "tmall", "pinduoduo", "yangkeduo", "jinritemai", "douyin", "xiaohongshu", "zhipin", "weixin.qq.com", "闲鱼", "千牛", "拼多多", "抖店", "小红书", "boss", "微信"].contains(where: { hay.contains($0) })
             if s == "auth_expired" {
-                toolbarStatusLabel?.stringValue = isChineseSystem ? "🟠 等待扫码/登录（登录后自动持久保活）" : "🟠 Waiting for sign-in"
+                toolbarStatusLabel?.stringValue = isChineseSystem
+                    ? (highRisk ? "🟠 待登录（⚠️ 请固定单端登录，勿手机电脑同登防互踢）" : "🟠 等待扫码/登录（登录后自动持久保活）")
+                    : "🟠 Waiting for sign-in"
                 toolbarStatusLabel?.textColor = NSColor(calibratedRed: 0.85, green: 0.47, blue: 0.02, alpha: 1.0)
             } else {
-                toolbarStatusLabel?.stringValue = isChineseSystem ? "🟢 已登录 · 持久保活中（独立隔离仓）" : "🟢 Signed In · Persistent"
+                toolbarStatusLabel?.stringValue = isChineseSystem
+                    ? (highRisk ? "🟢 持久保活中（🛡️ 请固定单端登录，勿手机电脑同登）" : "🟢 已登录 · 持久保活中（独立隔离仓）")
+                    : "🟢 Signed In · Persistent"
                 toolbarStatusLabel?.textColor = NSColor(calibratedRed: 0.02, green: 0.59, blue: 0.41, alpha: 1.0)
             }
+        } else {
+            toolbarStatusLabel?.stringValue = isChineseSystem ? "🔍 点进官网后，按右侧「⭐ 就守这个页面」即可免网址添加" : "🔍 Open official site then click Watch This Page"
+            toolbarStatusLabel?.textColor = NSColor(calibratedRed: 0.15, green: 0.39, blue: 0.92, alpha: 1.0)
         }
 
         if let qrPop = quickReplyPopup {
@@ -3442,7 +3568,7 @@ final class StandaloneMobileGateway {
         }
 
         if pathname == "/api/health" {
-            sendJson(conn: conn, obj: ["ok": true, "version": "5.6.0", "standalone": true])
+            sendJson(conn: conn, obj: ["ok": true, "version": "5.7.0", "standalone": true])
             return
         }
         if pathname == "/sw.js",

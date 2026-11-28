@@ -1,13 +1,13 @@
 {
-  "latestVersion": "5.6.0",
-  "publishedAt": "2026-11-27",
+  "latestVersion": "5.7.0",
+  "publishedAt": "2026-11-28",
   "downloadUrl": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlCn": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg",
   "downloadUrlEn": "https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-macOS.dmg",
   "downloadUrlWinCn": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-Windows-x64.zip",
   "downloadUrlWinEn": "https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-Windows-x64.zip",
   "downloadUrlAndroid": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-Android.apk",
-  "notesCn": "v5.6.0 手机电脑双端超级版：新增原生安卓独立版 APK（无需电脑也能独立登录86个常用/小众平台、长效保活、后台收消息弹窗提醒）；桌面端新增86平台常用+小众目录、Cookie保险库持久登录直至解绑、原生通知+多渠道推送与固定同源手机入口！",
-  "notesZh": "v5.6.0 手机电脑双端超级版：新增原生安卓独立版 APK（无需电脑也能独立登录86个常用/小众平台、长效保活、后台收消息弹窗提醒）；桌面端新增86平台常用+小众目录、Cookie保险库持久登录直至解绑、原生通知+多渠道推送与固定同源手机入口！",
-  "notesEn": "v5.6.0 Mobile + Desktop Edition: Native standalone Android APK (works with or without a PC, 86 popular + niche platforms, persistent session cookies, background foreground-service notifications) + desktop 86-platform directory, session cookie vault, and permanent same-origin mobile gateway!"
+  "notesCn": "v5.7.0 零网址傻瓜添加与免扫码海外 CC 通知版：① 彻底免复制链接（输中文名搜官网点「⭐ 就守这个页面」+ 安卓微信/浏览器系统分享直达 + 剪贴板感应）；② 手机与电脑各自100%独立可用，内置闲鱼/电商/小红书单端防互踢防封提醒；③ 新增免扫码「海外服务器/CC完工通知直达手机」（手机不装Claude零封号风险）；④ 新增首次启动本地隐私安全承诺弹窗！",
+  "notesZh": "v5.7.0 零网址傻瓜添加与免扫码海外 CC 通知版：① 彻底免复制链接（输中文名搜官网点「⭐ 就守这个页面」+ 安卓微信/浏览器系统分享直达 + 剪贴板感应）；② 手机与电脑各自100%独立可用，内置闲鱼/电商/小红书单端防互踢防封提醒；③ 新增免扫码「海外服务器/CC完工通知直达手机」（手机不装Claude零封号风险）；④ 新增首次启动本地隐私安全承诺弹窗！",
+  "notesEn": "v5.7.0 Zero-URL Discovery & Zero-QR Remote CC Relay Edition: Search-by-name & 1-tap bookmarking without copying URLs, Android system Share-to-Inbox, single-device anti-ban reminders, first-launch privacy consent, and zero-QR remote Claude Code / server completion notifications straight to mobile!"
 }

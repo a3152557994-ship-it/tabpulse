@@ -1280,7 +1280,7 @@ internal sealed class MainDashboardForm : Form
 
             if (pathname == "/api/health")
             {
-                await SendJsonObjAsync(new JsonObject { ["ok"] = true, ["version"] = "5.6.0", ["standalone"] = true });
+                await SendJsonObjAsync(new JsonObject { ["ok"] = true, ["version"] = "5.7.0", ["standalone"] = true });
                 return;
             }
             if (pathname == "/sw.js")

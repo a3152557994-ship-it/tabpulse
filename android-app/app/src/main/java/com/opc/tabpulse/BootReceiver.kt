@@ -10,7 +10,7 @@ class BootReceiver : BroadcastReceiver() {
         if (action == Intent.ACTION_BOOT_COMPLETED || action == Intent.ACTION_MY_PACKAGE_REPLACED) {
             val app = context.applicationContext as? TabPulseApp ?: return
             val settings = app.repository.getSettings()
-            if (settings.guardianEnabled && app.repository.getWatches().isNotEmpty()) {
+            if (settings.privacyAccepted && settings.guardianEnabled && app.repository.getWatches().isNotEmpty()) {
                 MonitorForegroundService.start(context)
             }
         }

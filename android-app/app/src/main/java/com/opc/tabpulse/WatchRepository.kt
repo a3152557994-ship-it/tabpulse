@@ -3,9 +3,13 @@ package com.opc.tabpulse
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Calendar
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class WatchRepository(
     private val context: Context,
@@ -14,6 +18,8 @@ class WatchRepository(
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val lock = Any()
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
+    private val relayExecutor = Executors.newSingleThreadExecutor()
+    private val isPollingRelay = AtomicBoolean(false)
 
     private val watches = ArrayList<WatchItem>()
     private val messages = ArrayList<MessageRecord>()
@@ -27,6 +33,24 @@ class WatchRepository(
         catalogCategories = cats
         catalogPlatforms = plats
         loadState()
+        ensureRelayTokenInitialized()
+    }
+
+    private fun ensureRelayTokenInitialized() {
+        synchronized(lock) {
+            if (!settings.relayToken.matches(Regex("^rc_[a-zA-Z0-9]{16,48}$"))) {
+                settings = settings.copy(relayToken = generateFreshRelayToken())
+                persistLocked()
+            }
+        }
+    }
+
+    private fun generateFreshRelayToken(): String {
+        val raw = (UUID.randomUUID().toString() + UUID.randomUUID().toString())
+            .replace("-", "")
+            .lowercase()
+            .take(24)
+        return "rc_$raw"
     }
 
     fun addListener(listener: () -> Unit) {
@@ -57,6 +81,34 @@ class WatchRepository(
 
     fun totalUnreadCount(): Int = synchronized(lock) { watches.sumOf { it.unreadCount } }
 
+    fun acceptPrivacyPolicy() {
+        synchronized(lock) {
+            settings = settings.copy(privacyAccepted = true)
+            persistLocked()
+        }
+        notifyChanged()
+    }
+
+    fun dismissRiskBanner(watchId: String) {
+        synchronized(lock) {
+            val nextSet = LinkedHashSet(settings.dismissedRiskIds)
+            nextSet.add(watchId)
+            settings = settings.copy(dismissedRiskIds = nextSet)
+            persistLocked()
+        }
+        notifyChanged()
+    }
+
+    fun resetRelayToken(): String {
+        val fresh = generateFreshRelayToken()
+        synchronized(lock) {
+            settings = settings.copy(relayToken = fresh, lastRelayEventId = 0L)
+            persistLocked()
+        }
+        notifyChanged()
+        return fresh
+    }
+
     fun addFromCatalog(platformId: String): Pair<WatchItem?, Boolean> {
         val item = catalogPlatforms.firstOrNull { it.id == platformId } ?: return Pair(null, false)
         return addPlatform(
@@ -77,7 +129,8 @@ class WatchRepository(
         group: String = "custom",
         loginHint: String = "打开页面登录，自动持久保持",
         desktopUa: Boolean? = null,
-        allowDuplicate: Boolean = false
+        allowDuplicate: Boolean = false,
+        initialStatus: String = "idle"
     ): Pair<WatchItem?, Boolean> {
         val normalized = UrlHelpers.normalizeHttpUrl(rawUrl) ?: return Pair(null, false)
         val cleanName = name.trim().ifBlank { UrlHelpers.extractHost(normalized) }
@@ -100,7 +153,8 @@ class WatchRepository(
                 group = group,
                 loginHint = loginHint,
                 desktopUa = desktopUa ?: UrlHelpers.recommendDesktopUa(normalized, settings.desktopUaDefault),
-                status = "idle",
+                status = initialStatus,
+                lastCheckedAt = if (initialStatus == "ok") System.currentTimeMillis() else 0L,
                 addedAt = System.currentTimeMillis()
             )
             watches.add(created)
@@ -193,6 +247,122 @@ class WatchRepository(
             persistLocked()
         }
         notifyChanged()
+    }
+
+    /**
+     * Zero-QR Cloud Relay Poller: pulls overseas server / Claude Code (CC) completion alerts!
+     */
+    fun pollRemoteRelayOnce(force: Boolean = false) {
+        val snap = synchronized(lock) { settings }
+        if (!snap.privacyAccepted || (!force && !snap.relayEnabled) || snap.relayToken.isBlank()) return
+        if (!isPollingRelay.compareAndSet(false, true)) return
+
+        relayExecutor.execute {
+            try {
+                val url = URL("$EDGE_ORIGIN/api/relay/pull/${snap.relayToken}?since=${snap.lastRelayEventId}")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 7000
+                    readTimeout = 7000
+                    setRequestProperty("Accept", "application/json")
+                }
+                val code = conn.responseCode
+                if (code == 200) {
+                    val raw = conn.inputStream.bufferedReader().use { it.readText() }
+                    val obj = JSONObject(raw)
+                    val arr = obj.optJSONArray("events") ?: JSONArray()
+                    val latestId = obj.optLong("latestId", snap.lastRelayEventId)
+
+                    val freshAlerts = ArrayList<Triple<Long, String, String>>()
+                    var changed = false
+                    synchronized(lock) {
+                        // Ensure token wasn't reset while request was in flight
+                        if (settings.relayToken == snap.relayToken) {
+                            var maxSeen = settings.lastRelayEventId
+                            for (i in 0 until arr.length()) {
+                                val ev = arr.getJSONObject(i)
+                                val id = ev.optLong("id", 0L)
+                                if (id <= settings.lastRelayEventId) continue
+                                val title = ev.optString("title", "🤖 海外 CC 完工提醒")
+                                val body = ev.optString("body", "任务已完成")
+                                val ts = ev.optLong("createdAt", System.currentTimeMillis())
+                                if (id > maxSeen) maxSeen = id
+                                prependMessageLocked(
+                                    MessageRecord(
+                                        id = "cc_${id}_${ts}",
+                                        watchId = "",
+                                        watchName = title,
+                                        unreadCount = 1,
+                                        snippet = body,
+                                        kind = "cc",
+                                        timestamp = ts
+                                    )
+                                )
+                                freshAlerts.add(Triple(id, title, body))
+                                changed = true
+                            }
+                            if (latestId > maxSeen) maxSeen = latestId
+                            if (maxSeen > settings.lastRelayEventId) {
+                                settings = settings.copy(lastRelayEventId = maxSeen)
+                                changed = true
+                            }
+                            if (changed) persistLocked()
+                        }
+                    }
+
+                    if (freshAlerts.isNotEmpty()) {
+                        val quiet = !force && isQuietHourNow(getSettings().nightQuietEnabled)
+                        if (!quiet) {
+                            for ((id, title, body) in freshAlerts) {
+                                NotificationHelper.notifyRemoteRelayEvent(context, id, title, body)
+                            }
+                        }
+                        notifyChanged()
+                    }
+                }
+                conn.disconnect()
+            } catch (_: Throwable) {
+                // Silent network retry on next tick
+            } finally {
+                isPollingRelay.set(false)
+            }
+        }
+    }
+
+    fun sendSelfTestRelayPing(onResult: (Boolean) -> Unit) {
+        val snap = synchronized(lock) { settings }
+        if (!snap.privacyAccepted || snap.relayToken.isBlank()) {
+            onResult(false)
+            return
+        }
+        relayExecutor.execute {
+            val ok = runCatching {
+                val url = URL("$EDGE_ORIGIN/api/relay/push/${snap.relayToken}")
+                val payload = JSONObject().apply {
+                    put("title", "✅ 海外 CC 通道自测成功！")
+                    put("body", "免扫码直连正常！把绑定命令粘到海外服务器终端后，CC 干完活就会这样响铃弹窗通知你。")
+                    put("source", "self-test")
+                }.toString().toByteArray(Charsets.UTF_8)
+
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    setFixedLengthStreamingMode(payload.size)
+                }
+                conn.outputStream.use { it.write(payload) }
+                val code = conn.responseCode
+                conn.disconnect()
+                code in 200..299
+            }.getOrDefault(false)
+
+            if (ok) {
+                pollRemoteRelayOnce(force = true)
+            }
+            onResult(ok)
+        }
     }
 
     fun handlePassiveEvent(watchId: String, event: PassiveEvent) {
@@ -301,7 +471,8 @@ class WatchRepository(
     ): String {
         return synchronized(lock) {
             val root = JSONObject()
-            root.put("version", "5.6.0")
+            root.put("version", "5.7.0")
+            root.put("edgeOrigin", EDGE_ORIGIN)
             root.put("guardianRunning", guardianRunning)
             root.put("notificationsGranted", notificationsGranted)
             root.put("batteryWhitelisted", batteryWhitelisted)
@@ -401,6 +572,7 @@ class WatchRepository(
     }
 
     companion object {
+        const val EDGE_ORIGIN = "https://replyradar-edge.a3152557994.workers.dev"
         private const val PREFS_NAME = "tabpulse_state"
         private const val KEY_WATCHES = "watches_v1"
         private const val KEY_MESSAGES = "messages_v1"

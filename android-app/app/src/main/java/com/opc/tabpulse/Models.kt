@@ -3,6 +3,7 @@ package com.opc.tabpulse
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
+import java.net.URLEncoder
 import java.util.Locale
 
 data class CatalogCategory(
@@ -50,6 +51,7 @@ data class CatalogPlatform(
         put("tier", tier)
         put("loginHint", loginHint)
         put("kw", kw)
+        put("highRiskSingleEnd", UrlHelpers.isHighRiskSingleEndPlatform(zh, url))
     }
 
     companion object {
@@ -104,6 +106,7 @@ data class WatchItem(
         put("lastAuthAlertAt", lastAuthAlertAt)
         put("muted", muted)
         put("addedAt", addedAt)
+        put("highRiskSingleEnd", UrlHelpers.isHighRiskSingleEndPlatform(name, url))
     }
 
     companion object {
@@ -134,7 +137,7 @@ data class MessageRecord(
     val watchName: String,
     val unreadCount: Int,
     val snippet: String,
-    val kind: String, // message | auth
+    val kind: String, // message | auth | cc
     val timestamp: Long
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
@@ -161,34 +164,59 @@ data class MessageRecord(
 }
 
 data class AppSettings(
+    val privacyAccepted: Boolean = false,
     val guardianEnabled: Boolean = true,
     val pollIntervalSec: Int = 45,
     val desktopUaDefault: Boolean = true,
     val nightQuietEnabled: Boolean = false,
     val notifyOnAuthExpired: Boolean = true,
     val maxLiveTabs: Int = 5,
+    val relayEnabled: Boolean = true,
+    val relayToken: String = "",
+    val lastRelayEventId: Long = 0L,
+    val dismissedRiskIds: Set<String> = emptySet(),
     val companionUrl: String = ""
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
+        put("privacyAccepted", privacyAccepted)
         put("guardianEnabled", guardianEnabled)
         put("pollIntervalSec", pollIntervalSec)
         put("desktopUaDefault", desktopUaDefault)
         put("nightQuietEnabled", nightQuietEnabled)
         put("notifyOnAuthExpired", notifyOnAuthExpired)
         put("maxLiveTabs", maxLiveTabs)
+        put("relayEnabled", relayEnabled)
+        put("relayToken", relayToken)
+        put("lastRelayEventId", lastRelayEventId)
+        put("dismissedRiskIds", JSONArray().apply { dismissedRiskIds.forEach { put(it) } })
         put("companionUrl", companionUrl)
     }
 
     companion object {
-        fun fromJson(obj: JSONObject): AppSettings = AppSettings(
-            guardianEnabled = obj.optBoolean("guardianEnabled", true),
-            pollIntervalSec = obj.optInt("pollIntervalSec", 45).coerceIn(15, 300),
-            desktopUaDefault = obj.optBoolean("desktopUaDefault", true),
-            nightQuietEnabled = obj.optBoolean("nightQuietEnabled", false),
-            notifyOnAuthExpired = obj.optBoolean("notifyOnAuthExpired", true),
-            maxLiveTabs = obj.optInt("maxLiveTabs", 5).coerceIn(2, 8),
-            companionUrl = obj.optString("companionUrl", "")
-        )
+        fun fromJson(obj: JSONObject): AppSettings {
+            val dismissed = LinkedHashSet<String>()
+            val arr = obj.optJSONArray("dismissedRiskIds")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val v = arr.optString(i, "")
+                    if (v.isNotBlank()) dismissed.add(v)
+                }
+            }
+            return AppSettings(
+                privacyAccepted = obj.optBoolean("privacyAccepted", false),
+                guardianEnabled = obj.optBoolean("guardianEnabled", true),
+                pollIntervalSec = obj.optInt("pollIntervalSec", 45).coerceIn(15, 300),
+                desktopUaDefault = obj.optBoolean("desktopUaDefault", true),
+                nightQuietEnabled = obj.optBoolean("nightQuietEnabled", false),
+                notifyOnAuthExpired = obj.optBoolean("notifyOnAuthExpired", true),
+                maxLiveTabs = obj.optInt("maxLiveTabs", 5).coerceIn(2, 8),
+                relayEnabled = obj.optBoolean("relayEnabled", true),
+                relayToken = obj.optString("relayToken", ""),
+                lastRelayEventId = obj.optLong("lastRelayEventId", 0L),
+                dismissedRiskIds = dismissed,
+                companionUrl = obj.optString("companionUrl", "")
+            )
+        }
     }
 }
 
@@ -223,6 +251,70 @@ object UrlHelpers {
         "m.weibo.cn", "mobile.twitter.com", "m.toutiao.com", "m.bilibili.com"
     )
 
+    private val HIGH_RISK_DOMAINS = listOf(
+        "goofish.com", "taobao.com", "tmall.com", "1688.com", "alibaba.com",
+        "pinduoduo.com", "yangkeduo.com", "jinritemai.com", "douyin.com",
+        "xiaohongshu.com", "zhipin.com", "weixin.qq.com", "kuaishou.com",
+        "weibo.com", "weibo.cn", "zhihu.com", "58.com", "liepin.com", "lagou.com"
+    )
+
+    private val HIGH_RISK_NAMES = listOf(
+        "闲鱼", "千牛", "淘宝", "天猫", "拼多多", "抖店", "飞鸽", "抖音",
+        "小红书", "BOSS", "微信", "视频号", "公众号", "快手", "微博", "知乎"
+    )
+
+    private val SEARCH_ENGINE_HOSTS = listOf(
+        "bing.com", "baidu.com", "sogou.com", "so.com", "google.com"
+    )
+
+    fun isHighRiskSingleEndPlatform(name: String, rawUrl: String): Boolean {
+        val host = extractHost(rawUrl)
+        if (HIGH_RISK_DOMAINS.any { host == it || host.endsWith(".$it") }) return true
+        val lowerName = name.lowercase(Locale.ROOT)
+        return HIGH_RISK_NAMES.any { lowerName.contains(it.lowercase(Locale.ROOT)) }
+    }
+
+    fun isSearchEnginePage(rawUrl: String): Boolean {
+        val host = extractHost(rawUrl)
+        if (host.isBlank()) return true
+        return SEARCH_ENGINE_HOSTS.any { host == it || host.endsWith(".$it") }
+    }
+
+    fun buildSearchOfficialUrl(keyword: String): String {
+        val q = "${keyword.trim()} 官网 登录"
+        val enc = runCatching { URLEncoder.encode(q, "UTF-8") }.getOrDefault(keyword.trim())
+        return "https://cn.bing.com/search?q=$enc"
+    }
+
+    /**
+     * Extracts (titleHint, normalizedUrl) from messy shared strings like:
+     * "【转转卖家后台】快来查看 https://seller.zhuanzhuan.com/ 立即点击"
+     */
+    fun extractFirstHttpUrl(rawText: String): Pair<String, String>? {
+        val text = rawText.trim()
+        if (text.isEmpty()) return null
+        val regex = Regex("https?://[^\\s\"'<>\\u3000\\uff0c\\u3002\\uff01\\uff1b）)\\]]+", RegexOption.IGNORE_CASE)
+        val match = regex.find(text) ?: return null
+        val rawUrl = match.value.trimEnd('.', ',', ';', ')', ']', '！', '。', '，')
+        val normalized = normalizeHttpUrl(rawUrl) ?: return null
+
+        val leftover = text.replace(match.value, " ")
+            .replace(Regex("[【】\\[\\]《》<>「」]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(24)
+        val titleHint = leftover.ifBlank { extractHost(normalized).removePrefix("www.") }
+        return Pair(titleHint, normalized)
+    }
+
+    fun cleanCapturedPageTitle(rawTitle: String?, rawUrl: String): String {
+        val t = (rawTitle ?: "").trim()
+            .replace(Regex("\\s*[-_|—·]\\s*(登录|首页|官方网站|官网|Sign in|Log in).*$", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .take(28)
+        return t.ifBlank { extractHost(rawUrl).removePrefix("www.").ifBlank { "自定义平台" } }
+    }
+
     fun normalizeHttpUrl(raw: String): String? {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return null
@@ -233,30 +325,50 @@ object UrlHelpers {
         } else {
             "https://$trimmed"
         }
-        return runCatching {
+        val viaUri = runCatching {
             val uri = URI(candidate)
             val scheme = uri.scheme?.lowercase(Locale.ROOT)
             val host = uri.host?.lowercase(Locale.ROOT)
             if ((scheme == "http" || scheme == "https") && !host.isNullOrBlank() && host.contains(".")) {
                 candidate
-            } else {
-                null
-            }
+            } else null
+        }.getOrNull()
+        if (viaUri != null) return viaUri
+
+        return runCatching {
+            val u = java.net.URL(candidate)
+            val scheme = u.protocol?.lowercase(Locale.ROOT)
+            val host = u.host?.lowercase(Locale.ROOT)
+            if ((scheme == "http" || scheme == "https") && !host.isNullOrBlank() && host.contains(".")) {
+                candidate
+            } else null
         }.getOrNull()
     }
 
     fun extractHost(rawUrl: String): String {
-        return runCatching {
-            URI(rawUrl).host?.lowercase(Locale.ROOT).orEmpty()
-        }.getOrDefault("")
+        val h1 = runCatching { URI(rawUrl).host?.lowercase(Locale.ROOT).orEmpty() }.getOrDefault("")
+        if (h1.isNotBlank()) return h1
+        return runCatching { java.net.URL(rawUrl).host?.lowercase(Locale.ROOT).orEmpty() }.getOrDefault("")
     }
 
     fun extractOrigin(rawUrl: String): String {
-        return runCatching {
+        val o1 = runCatching {
             val uri = URI(rawUrl)
-            val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return ""
-            val host = uri.host?.lowercase(Locale.ROOT) ?: return ""
-            val port = if (uri.port > 0 && uri.port != 80 && uri.port != 443) ":${uri.port}" else ""
+            val scheme = uri.scheme?.lowercase(Locale.ROOT)
+            val host = uri.host?.lowercase(Locale.ROOT)
+            if (!scheme.isNullOrBlank() && !host.isNullOrBlank()) {
+                val port = if (uri.port > 0 && uri.port != 80 && uri.port != 443) ":${uri.port}" else ""
+                "$scheme://$host$port"
+            } else ""
+        }.getOrDefault("")
+        if (o1.isNotBlank()) return o1
+
+        return runCatching {
+            val u = java.net.URL(rawUrl)
+            val scheme = u.protocol?.lowercase(Locale.ROOT) ?: return@runCatching ""
+            val host = u.host?.lowercase(Locale.ROOT) ?: return@runCatching ""
+            if (host.isBlank()) return@runCatching ""
+            val port = if (u.port > 0 && u.port != 80 && u.port != 443) ":${u.port}" else ""
             "$scheme://$host$port"
         }.getOrDefault("")
     }
@@ -284,11 +396,21 @@ object UrlHelpers {
     }
 
     fun canonicalCompareKey(rawUrl: String): String {
-        return runCatching {
+        val k1 = runCatching {
             val uri = URI(rawUrl.trim())
             val host = uri.host?.lowercase(Locale.ROOT)?.removePrefix("www.").orEmpty()
-            val path = (uri.path ?: "").trimEnd('/')
-            "$host$path"
+            if (host.isNotBlank()) {
+                val path = (uri.path ?: "").trimEnd('/')
+                "$host$path"
+            } else ""
+        }.getOrDefault("")
+        if (k1.isNotBlank()) return k1
+
+        return runCatching {
+            val u = java.net.URL(rawUrl.trim())
+            val host = u.host?.lowercase(Locale.ROOT)?.removePrefix("www.").orEmpty()
+            val path = (u.path ?: "").trimEnd('/')
+            if (host.isNotBlank()) "$host$path" else rawUrl.trim().lowercase(Locale.ROOT)
         }.getOrDefault(rawUrl.trim().lowercase(Locale.ROOT))
     }
 

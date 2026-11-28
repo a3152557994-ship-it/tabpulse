@@ -46,7 +46,7 @@
     .brand-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pill-btn {
       border: 1px solid var(--card-border); background: #1e293b; color: var(--text);
-      border-radius: 9px; padding: 6px 10px; font-size: 12px; font-weight: 700;
+      border-radius: 9px; padding: 7px 11px; font-size: 12.5px; font-weight: 700;
       cursor: pointer; white-space: nowrap;
     }
     .pill-btn.primary { background: var(--blue-deep); border-color: var(--blue); color: #fff; }
@@ -65,14 +65,14 @@
     .banner {
       background: linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(15, 23, 42, 0.9));
       border: 1px solid rgba(59, 130, 246, 0.4);
-      border-radius: 14px; padding: 12px 13px; margin-bottom: 12px;
+      border-radius: 14px; padding: 12px 13px; margin-bottom: 11px;
     }
     .banner.warn {
-      background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.42);
+      background: rgba(245, 158, 11, 0.13); border-color: rgba(245, 158, 11, 0.45);
     }
     .banner-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .banner-title { font-weight: 800; font-size: 13.5px; }
-    .banner-sub { font-size: 12px; color: #cbd5e1; margin-top: 3px; }
+    .banner-sub { font-size: 12px; color: #cbd5e1; margin-top: 3px; line-height: 1.5; }
 
     .card {
       background: var(--card); border: 1px solid var(--card-border);
@@ -81,7 +81,7 @@
     .card.unread { border-color: rgba(239, 68, 68, 0.65); box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2); }
     .card.auth { border-color: rgba(245, 158, 11, 0.55); }
     .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .card-name { font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .card-name { font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
     .badge {
       display: inline-flex; align-items: center; justify-content: center;
       padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap;
@@ -90,11 +90,9 @@
     .badge.green { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.35); }
     .badge.amber { background: rgba(245, 158, 11, 0.18); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.35); }
     .badge.slate { background: #1e293b; color: var(--muted); border: 1px solid #334155; }
-    .card-snippet {
-      font-size: 12.5px; color: #cbd5e1; margin: 7px 0 10px;
-      word-break: break-word;
-    }
-    .card-meta { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+    .card-snippet { font-size: 12.5px; color: #cbd5e1; margin: 7px 0 8px; word-break: break-word; }
+    .card-meta { font-size: 11px; color: var(--muted); margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .risk-tag { color: #fcd34d; background: rgba(245, 158, 11, 0.13); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 6px; padding: 1px 6px; font-size: 10.5px; font-weight: 700; }
     .card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
     .card-actions .pill-btn { flex: 1; text-align: center; padding: 8px 10px; }
     .card-actions .pill-btn.compact { flex: 0 0 auto; }
@@ -108,7 +106,7 @@
     .search-box {
       width: 100%; background: #0f172a; border: 1px solid var(--card-border);
       color: var(--text); border-radius: 11px; padding: 10px 12px; font-size: 14px;
-      outline: none; margin-bottom: 10px;
+      outline: none; margin-bottom: 9px;
     }
     .search-box:focus { border-color: var(--blue); }
 
@@ -135,6 +133,7 @@
     .tag-mini { font-size: 10px; padding: 1px 6px; border-radius: 6px; font-weight: 700; }
     .tag-mini.hot { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
     .tag-mini.niche { background: rgba(139, 92, 246, 0.22); color: #c4b5fd; }
+    .tag-mini.risk { background: rgba(245, 158, 11, 0.18); color: #fcd34d; }
 
     .quick-grid {
       display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0;
@@ -150,18 +149,24 @@
       background: #111827; border: 1px solid var(--card-border); border-radius: 11px;
       padding: 10px 12px; margin-bottom: 7px; cursor: pointer;
     }
-    .feed-top { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 700; }
-    .feed-time { font-size: 11px; color: var(--muted); font-weight: 500; }
-    .feed-body { font-size: 12px; color: #cbd5e1; margin-top: 4px; }
+    .feed-item.cc { border-color: rgba(59, 130, 246, 0.55); background: rgba(30, 58, 138, 0.22); }
+    .feed-top { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 700; gap: 8px; }
+    .feed-time { font-size: 11px; color: var(--muted); font-weight: 500; flex-shrink: 0; }
+    .feed-body { font-size: 12px; color: #cbd5e1; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
 
-    .field-label { display: block; font-size: 12px; color: #cbd5e1; font-weight: 700; margin: 8px 0 4px; }
     .row-setting {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
       padding: 10px 0; border-bottom: 1px solid rgba(51, 65, 85, 0.6);
     }
     .row-setting:last-child { border-bottom: none; }
     .row-title { font-weight: 700; font-size: 13.5px; }
-    .row-desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .row-desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+
+    .cmd-box {
+      background: #090d16; border: 1px solid #334155; border-radius: 10px;
+      padding: 9px 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11.5px; color: #6ee7b7; word-break: break-all; margin: 8px 0;
+    }
 
     select.sel {
       background: #0f172a; color: var(--text); border: 1px solid var(--card-border);
@@ -173,22 +178,38 @@
 
     .bottom-nav {
       flex-shrink: 0; background: #111827; border-top: 1px solid var(--card-border);
-      display: grid; grid-template-columns: repeat(4, 1fr);
+      display: grid; grid-template-columns: repeat(3, 1fr);
       padding: 6px 4px 8px;
     }
     .nav-btn {
       background: none; border: none; color: var(--muted);
       display: flex; flex-direction: column; align-items: center; gap: 2px;
-      font-size: 11px; font-weight: 700; cursor: pointer; position: relative; padding: 4px 0;
+      font-size: 11.5px; font-weight: 700; cursor: pointer; position: relative; padding: 4px 0;
     }
     .nav-btn .ico { font-size: 18px; line-height: 1.1; }
     .nav-btn.active { color: #60a5fa; }
     .nav-badge {
-      position: absolute; top: 0; right: 20%;
+      position: absolute; top: 0; right: 26%;
       background: var(--red); color: #fff; font-size: 10px; font-weight: 800;
       padding: 1px 5px; border-radius: 999px; display: none;
     }
     .nav-badge.show { display: inline-block; }
+
+    /* Privacy Policy & User Agreement Modal */
+    .modal-mask {
+      position: fixed; inset: 0; background: rgba(2, 6, 23, 0.85);
+      display: none; place-items: center; padding: 18px; z-index: 200;
+    }
+    .modal-mask.show { display: grid; }
+    .modal-card {
+      background: #162033; border: 1.5px solid #3b82f6; border-radius: 18px;
+      padding: 18px 16px; width: 100%; max-width: 400px; max-height: 86vh;
+      display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+    }
+    .modal-body {
+      overflow-y: auto; font-size: 12.5px; color: #cbd5e1; line-height: 1.65;
+      margin: 10px 0 14px; padding-right: 4px;
+    }
 
     .toast-bar {
       position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%);
@@ -222,46 +243,68 @@
       <div id="feedContainer"></div>
     </section>
 
-    <!-- TAB 2: CATALOG (86 POPULAR + NICHE) -->
+    <!-- TAB 2: ZERO-URL FOOLPROOF ADD PLATFORM -->
     <section id="tab-catalog" class="tab-panel">
-      <div class="card" style="padding:11px 12px;margin-bottom:10px">
-        <div style="font-weight:800;font-size:13.5px;margin-bottom:6px">➕ 添加任意小众网站 / 内部后台</div>
-        <div style="display:flex;gap:7px;margin-bottom:7px">
-          <input id="customName" class="search-box" style="margin:0;flex:0.85" placeholder="平台名（如 独立站客服）" />
-          <input id="customUrl" class="search-box" style="margin:0;flex:1.15" placeholder="网址（如 https://...）" />
+      <!-- Zero-URL Method 1: Search by Chinese Name -->
+      <div class="banner" style="margin-bottom:10px">
+        <div class="banner-title">🔍 不知道网址？输平台名字直接找官网添加！</div>
+        <div class="banner-sub" style="margin-bottom:8px">不用复制链接！打汉字（如：转转卖家、得物商家、猪八戒）点搜官网，进去后点右上角「⭐ 就守这个页面」就行。</div>
+        <div style="display:flex;gap:7px">
+          <input id="discoverInput" class="search-box" style="margin:0;flex:1" placeholder="输入任意平台名字（如 转转、得物商家）" />
+          <button id="btnDiscoverGo" class="pill-btn primary">🔍 搜官网</button>
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1">
-            <input id="customDesktopUa" type="checkbox" class="toggle" checked />
-            默认电脑网页版（防强制跳App）
-          </label>
-          <button id="btnAddCustom" class="pill-btn primary">添加并登录</button>
+        <div id="clipboardDetectedBox" style="margin-top:8px"></div>
+        <div style="font-size:11px;color:#93c5fd;margin-top:7px">
+          💡 小窍门：在微信或浏览器里看到网页，直接点手机系统「分享 → 收进消息总管」也能一键加！
         </div>
       </div>
 
-      <input id="catalogSearch" class="search-box" placeholder="🔍 搜 86 个常用 & 小众平台（支持拼音：xy / xhs / boss / 电鸭）" />
+      <!-- Anti-Ban Reminder Card -->
+      <div class="banner warn" style="padding:9px 12px;margin-bottom:10px">
+        <div class="banner-sub" style="margin:0;color:#fde68a;font-size:11.8px">
+          🛡️ <b>防封号重要提醒</b>：闲鱼、千牛、拼多多、抖店、小红书、BOSS 等高敏平台，<b>请固定只在「手机」或「电脑」其中一端登网页</b>，切勿两头同时登同一号；登国内号请关掉海外 VPN！
+        </div>
+      </div>
+
+      <input id="catalogSearch" class="search-box" placeholder="🔎 在内置 86 个常用 & 小众平台里秒搜（支持拼音 xy / xhs / boss）" />
       <div id="categoryChips" class="chips"></div>
       <div id="catalogList"></div>
+
+      <!-- Optional manual URL fallback tucked cleanly at bottom -->
+      <details class="card" style="margin-top:12px">
+        <summary style="font-weight:700;font-size:12.5px;color:var(--muted);cursor:pointer">🔗 我手头已经有现成网址，点此直接填</summary>
+        <div style="margin-top:10px">
+          <input id="customName" class="search-box" placeholder="备注名字（选填）" />
+          <input id="customUrl" class="search-box" placeholder="粘贴网址（https://...）" />
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1">
+              <input id="customDesktopUa" type="checkbox" class="toggle" checked /> 电脑网页模式
+            </label>
+            <button id="btnAddCustom" class="pill-btn primary">添加并打开</button>
+          </div>
+        </div>
+      </details>
     </section>
 
-    <!-- TAB 3: OPTIONAL PC COMPANION -->
-    <section id="tab-pc" class="tab-panel">
-      <div class="banner">
-        <div class="banner-title">💡 没有电脑？完全不需要管这一页！</div>
-        <div class="banner-sub">本软件在手机上就能独立添加平台、登录保活、来消息发手机通知。只有当您家里电脑也开了《消息总管》（想看微信/千牛/多开账号）时，才需要填下面的链接。</div>
-      </div>
-      <div class="card">
-        <div class="row-title">🖥️ 连接家里电脑的《消息总管》</div>
-        <div class="row-desc" style="margin-bottom:10px">把电脑端《消息总管》里的「永久手机随身链接」（<code>https://replyradar-edge.../box/...</code>）粘贴到下面，保存后随时一键直连。</div>
-        <input id="companionUrlInput" class="search-box" placeholder="https://replyradar-edge.a3152557994.workers.dev/box/..." />
-        <div style="display:flex;gap:8px">
-          <button id="btnOpenCompanion" class="pill-btn primary" style="flex:1;padding:10px">🚀 保存并打开电脑随身版</button>
+    <!-- TAB 3: OVERSEAS CC RELAY & GUARDIAN SETTINGS -->
+    <section id="tab-settings" class="tab-panel">
+      <!-- Zero-QR Overseas CC / Remote Server Notification Card -->
+      <div class="card" style="border-color:rgba(59,130,246,0.55)">
+        <div class="card-head">
+          <div class="row-title">🤖 接收海外服务器 / CC 完工通知（免扫码）</div>
+          <input id="chkRelayEnabled" type="checkbox" class="toggle" checked />
+        </div>
+        <div class="row-desc" style="margin-top:5px;color:#cbd5e1">
+          手机<b>不用装 CC（零封号风险）</b>，也<b>不用扫码绑电脑</b>！复制下面这一行命令，发到海外服务器 SSH 终端粘贴回车，以后海外 CC 干完活或卡住等确认，你这部手机就会自动响铃弹窗。
+        </div>
+        <div id="ccHookCmdBox" class="cmd-box">加载中…</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <button id="btnCopyCcCmd" class="pill-btn primary" style="flex:1">📋 一键复制海外绑定命令</button>
+          <button id="btnTestCcRelay" class="pill-btn ok">🔔 模拟弹窗测试</button>
+          <button id="btnResetCcToken" class="pill-btn">🔄 换码</button>
         </div>
       </div>
-    </section>
 
-    <!-- TAB 4: SETTINGS & KEEP-ALIVE -->
-    <section id="tab-settings" class="tab-panel">
       <div class="card">
         <div class="row-title" style="margin-bottom:6px">🛡️ 通知与后台防杀体检（确保来消息必响！）</div>
         <div class="row-setting">
@@ -284,7 +327,7 @@
         <div class="row-setting">
           <div>
             <div class="row-title">开启后台持续守护</div>
-            <div class="row-desc">状态栏保留静默守护条，切后台/息屏仍监听新消息</div>
+            <div class="row-desc">状态栏保留静默守护条，切后台/息屏仍监听新消息与海外 CC 通知</div>
           </div>
           <input id="chkGuardian" type="checkbox" class="toggle" />
         </div>
@@ -294,17 +337,17 @@
         <div class="row-title" style="margin-bottom:4px">📱 国产安卓保活 3 步必做（华为/荣耀/小米/OPPO/vivo）</div>
         <div class="row-desc" style="line-height:1.65;color:#cbd5e1">
           1. 点上方「一键放行」，允许消息总管忽略电池优化；<br/>
-          2. 手机「设置 → 应用启动管理/自启动」里打开消息总管的「允许自启动 + 允许后台活动」；<br/>
-          3. 在手机多任务卡片界面，把消息总管下拉或点右上角「🔒 锁定」，系统就不会清掉它！
+          2. 手机「设置 → 应用启动管理/自启动」打开消息总管的「允许自启动 + 允许后台活动」；<br/>
+          3. 在手机多任务界面，把消息总管下拉或点右上角「🔒 锁定」，系统就不会清掉它！
         </div>
       </div>
 
       <div class="card">
-        <div class="row-title" style="margin-bottom:4px">⚙️ 监听与持久登录偏好</div>
+        <div class="row-title" style="margin-bottom:4px">⚙️ 监听偏好与隐私安全</div>
         <div class="row-setting">
           <div>
             <div class="row-title">后台巡检频率</div>
-            <div class="row-desc">活跃平台实时推送，多平台轮巡间隔</div>
+            <div class="row-desc">平台未读与海外 CC 通知检查间隔</div>
           </div>
           <select id="selPollSec" class="sel">
             <option value="25">25秒（极速）</option>
@@ -316,39 +359,54 @@
         <div class="row-setting">
           <div>
             <div class="row-title">后台同时驻留平台数</div>
-            <div class="row-desc">超出此数量的平台会自动轮巡检查，不占内存</div>
+            <div class="row-desc">超出此数量的平台会自动轮巡检查</div>
           </div>
           <select id="selMaxLive" class="sel">
             <option value="3">3 个（省电）</option>
             <option value="5">5 个（推荐）</option>
-            <option value="8">8 个（多开重度）</option>
+            <option value="8">8 个（多开）</option>
           </select>
         </div>
         <div class="row-setting">
           <div>
-            <div class="row-title">新增平台默认用电脑网页版</div>
-            <div class="row-desc">强烈推荐开启：防止闲鱼/小红书/BOSS强制跳去下载官方App</div>
+            <div class="row-title">新增平台默认电脑网页版</div>
+            <div class="row-desc">防止闲鱼/小红书/BOSS强制跳去下载官方App</div>
           </div>
           <input id="chkDesktopDefault" type="checkbox" class="toggle" />
         </div>
         <div class="row-setting">
           <div>
             <div class="row-title">夜间免打扰（23:00–07:00）</div>
-            <div class="row-desc">深夜静音不弹窗，消息照样记录在列表里</div>
+            <div class="row-desc">深夜静音不响铃，消息照样记录在列表里</div>
           </div>
           <input id="chkNightQuiet" type="checkbox" class="toggle" />
         </div>
         <div class="row-setting">
           <div>
             <div class="row-title">平台登录失效时提醒我</div>
-            <div class="row-desc">若某平台官方主动踢下线，通知我一键续登</div>
+            <div class="row-desc">若某平台要求重登，通知我一键续登</div>
           </div>
           <input id="chkNotifyAuth" type="checkbox" class="toggle" />
         </div>
+        <div class="row-setting">
+          <div>
+            <div class="row-title">隐私政策与本地数据承诺</div>
+            <div class="row-desc">所有账号登录态 100% 仅存在您本机</div>
+          </div>
+          <button id="btnShowPrivacy" class="pill-btn">查看协议</button>
+        </div>
       </div>
 
+      <details class="card">
+        <summary style="font-size:12px;color:var(--muted);cursor:pointer">高级选配：已有家里电脑随身链接（无电脑请忽略）</summary>
+        <div style="margin-top:8px">
+          <input id="companionUrlInput" class="search-box" placeholder="https://replyradar-edge.../box/..." />
+          <button id="btnOpenCompanion" class="pill-btn" style="width:100%">打开远程电脑面板</button>
+        </div>
+      </details>
+
       <div style="text-align:center;color:var(--muted);font-size:11.5px;padding:6px 0 12px">
-        消息总管 Android 独立版 v5.6.0 · 所有账号 Cookie 仅加密保存在您自己手机本地
+        消息总管 Android 独立版 v5.7.0 · 单独一部手机即可完整使用
       </div>
     </section>
   </main>
@@ -359,15 +417,30 @@
       <span id="navUnreadBadge" class="nav-badge"></span>
     </button>
     <button class="nav-btn" data-tab="catalog">
-      <span class="ico">🌐</span><span>常用平台</span>
-    </button>
-    <button class="nav-btn" data-tab="pc">
-      <span class="ico">🖥️</span><span>连电脑</span>
+      <span class="ico">🌐</span><span>加平台</span>
     </button>
     <button class="nav-btn" data-tab="settings">
-      <span class="ico">⚙️</span><span>守护设置</span>
+      <span class="ico">📡</span><span>远程与设置</span>
     </button>
   </nav>
+</div>
+
+<!-- First-Launch Store-Compliant Privacy & Safety Modal -->
+<div id="privacyModal" class="modal-mask">
+  <div class="modal-card">
+    <div style="font-weight:800;font-size:16px;color:#f8fafc">🔒 欢迎使用《消息总管》隐私与安全说明</div>
+    <div class="modal-body">
+      感谢使用《消息总管》（杭州数创引擎出品）。为了打消您的顾虑并保护账号安全，我们郑重承诺：<br/><br/>
+      <b>1. 账号 100% 纯本地存储</b>：您在软件内登录的任何平台账号、密码及 Cookie 仅加密保存在您自己这部手机本地沙盒中，<b>绝不上传任何外部服务器</b>；随时点「🔌 解绑」即可一键彻底擦除。<br/>
+      <b>2. 无需电脑，单手机独立可用</b>：软件采用安卓官方系统 WebView 标准内核展示网页并检测未读红点，不篡改平台协议、不自动群发消息。<br/>
+      <b>3. 平台防封号建议</b>：闲鱼、淘宝千牛、拼多多、抖店、小红书、BOSS直聘等风控较严的平台，请<b>固定只在「手机」或「电脑」其中一端登录网页</b>，避免两端同时登同一号引发互踢或安全验证；登录国内平台请关闭海外 VPN。<br/>
+      <b>4. 权限说明</b>：软件仅申请「通知权限」（用于来新消息或海外远程任务完成时向您弹窗响铃）与可选「后台保活」（防止息屏漏收消息）。未点击下方同意前，软件不会发起任何后台联网。
+    </div>
+    <div style="display:flex;gap:8px">
+      <button id="btnDeclinePrivacy" class="pill-btn" style="flex:0.7">不同意退出</button>
+      <button id="btnAcceptPrivacy" class="pill-btn primary" style="flex:1.3;padding:10px">同意并开始使用</button>
+    </div>
+  </div>
 </div>
 
 <div id="toastBar" class="toast-bar"></div>
@@ -376,18 +449,22 @@
 (() => {
   const Bridge = window.TabPulseAppUI || null;
   let state = {
-    version: "5.6.0",
+    version: "5.7.0",
+    edgeOrigin: "https://replyradar-edge.a3152557994.workers.dev",
     guardianRunning: false,
     notificationsGranted: true,
     batteryWhitelisted: false,
     totalUnread: 0,
     settings: {
+      privacyAccepted: false,
       guardianEnabled: true,
       pollIntervalSec: 45,
       desktopUaDefault: true,
       nightQuietEnabled: false,
       notifyOnAuthExpired: true,
       maxLiveTabs: 5,
+      relayEnabled: true,
+      relayToken: "",
       companionUrl: ""
     },
     watches: [],
@@ -397,6 +474,7 @@
   let activeTab = "inbox";
   let activeCat = "hot";
   let searchQuery = "";
+  let viewingPrivacyManually = false;
   let toastTimer = null;
 
   function esc(s) {
@@ -408,7 +486,7 @@
     el.textContent = msg;
     el.style.display = "block";
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.style.display = "none"; }, 2400);
+    toastTimer = setTimeout(() => { el.style.display = "none"; }, 2500);
   }
 
   function fmtTime(ts) {
@@ -428,6 +506,13 @@
     }
   }
 
+  function buildCcInstallCmd() {
+    const tok = (state.settings && state.settings.relayToken) || "";
+    const origin = state.edgeOrigin || "https://replyradar-edge.a3152557994.workers.dev";
+    if (!tok) return "正在生成专属通道码…";
+    return `curl -fsSL ${origin}/sh/cc-hook/${tok} | bash`;
+  }
+
   function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll(".tab-panel").forEach((p) => {
@@ -436,15 +521,56 @@
     document.querySelectorAll(".nav-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.tab === tab);
     });
-    if (tab === "catalog") renderCatalog();
+    if (tab === "catalog") {
+      checkClipboardLink();
+      renderCatalog();
+    }
     if (tab === "settings") renderSettings();
+  }
+
+  function checkClipboardLink() {
+    const box = document.getElementById("clipboardDetectedBox");
+    if (!Bridge || !box) return;
+    try {
+      const res = JSON.parse(Bridge.peekClipboardUrl());
+      if (res && res.found && res.url) {
+        box.innerHTML = `
+          <div style="background:#1e293b;border:1px solid #3b82f6;border-radius:10px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div style="min-width:0;flex:1;font-size:12px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              📋 刚复制了：<b>${esc(res.title || res.url)}</b>
+            </div>
+            <button class="pill-btn ok" data-action="add-clip" data-title="${esc(res.title || "")}" data-url="${esc(res.url)}">＋ 一键添加</button>
+          </div>
+        `;
+      } else {
+        box.innerHTML = "";
+      }
+    } catch {
+      box.innerHTML = "";
+    }
+  }
+
+  function syncPrivacyModal() {
+    const mask = document.getElementById("privacyModal");
+    const accepted = Boolean(state.settings && state.settings.privacyAccepted);
+    const declineBtn = document.getElementById("btnDeclinePrivacy");
+    const acceptBtn = document.getElementById("btnAcceptPrivacy");
+    if (!accepted) {
+      declineBtn.style.display = "inline-block";
+      acceptBtn.textContent = "同意并开始使用";
+      mask.classList.add("show");
+    } else if (viewingPrivacyManually) {
+      declineBtn.style.display = "none";
+      acceptBtn.textContent = "我知道了";
+      mask.classList.add("show");
+    } else {
+      mask.classList.remove("show");
+    }
   }
 
   function renderTopAndNav() {
     const unread = Number(state.totalUnread || 0);
-    const dot = document.getElementById("brandDot");
-    dot.classList.toggle("show", unread > 0);
-
+    document.getElementById("brandDot").classList.toggle("show", unread > 0);
     const badge = document.getElementById("navUnreadBadge");
     if (unread > 0) {
       badge.textContent = unread > 99 ? "99+" : String(unread);
@@ -453,10 +579,9 @@
       badge.classList.remove("show");
     }
 
-    const sub = document.getElementById("brandSub");
     const n = (state.watches || []).length;
-    sub.textContent = state.guardianRunning
-      ? `🟢 守护中 · ${n} 个平台 · 无需电脑`
+    document.getElementById("brandSub").textContent = state.guardianRunning
+      ? `🟢 守护中 · ${n} 个平台 · 独立免电脑`
       : `⚪ 未守护 · 已加 ${n} 个平台`;
   }
 
@@ -464,7 +589,7 @@
     const gBox = document.getElementById("guardianBanner");
     const warnings = [];
     if (!state.notificationsGranted) {
-      warnings.push(`<button class="pill-btn danger" data-action="test-notif">⚠️ 点此开启通知权限</button>`);
+      warnings.push(`<button class="pill-btn danger" data-action="test-notif">⚠️ 开启手机通知权限</button>`);
     }
     if (!state.batteryWhitelisted) {
       warnings.push(`<button class="pill-btn warn" data-action="battery">⚡ 开启防杀后台</button>`);
@@ -473,10 +598,10 @@
       <div class="banner ${warnings.length ? "warn" : ""}">
         <div class="banner-row">
           <div>
-            <div class="banner-title">${state.guardianRunning ? "🟢 后台消息守护运行中" : "⏸️ 后台守护已暂停"}</div>
-            <div class="banner-sub">${warnings.length ? "开启通知与防杀后，息屏锁屏也能秒收平台消息" : "登录 Cookie 已自动持久保存，除非手动点「解绑」"}</div>
+            <div class="banner-title">${state.guardianRunning ? "🟢 手机独立守护中（无需电脑）" : "⏸️ 后台守护已暂停"}</div>
+            <div class="banner-sub">${warnings.length ? "建议点下方按钮开启通知与防杀，息屏也能秒收平台消息与海外 CC 提醒" : "登录状态持久保存在本机；海外 CC 完工免扫码自动弹窗"}</div>
           </div>
-          <button class="pill-btn ${state.guardianRunning ? "ok" : "primary"}" data-action="sync-all">↻ 刷一下</button>
+          <button class="pill-btn ${state.guardianRunning ? "ok" : "primary"}" data-action="sync-all">↻ 刷新</button>
         </div>
         ${warnings.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">${warnings.join("")}</div>` : ""}
       </div>
@@ -499,7 +624,7 @@
           <div class="banner-row">
             <div>
               <div class="banner-title">⚡ 还有 ${pendingLogin.length} 个平台待登录</div>
-              <div class="banner-sub">下一个：${esc(first.name)}（支持点右上角「📷存码」相册扫码秒登）</div>
+              <div class="banner-sub">下一个：${esc(first.name)}（可点右上角「📷存码」用相册扫一扫秒登）</div>
             </div>
             <button class="pill-btn primary" data-action="open-watch" data-id="${esc(first.id)}">立即去登</button>
           </div>
@@ -512,23 +637,28 @@
     const listEl = document.getElementById("watchListContainer");
     if (watches.length === 0) {
       listEl.innerHTML = `
-        <div class="card" style="text-align:center;padding:20px 14px">
-          <div style="font-size:32px;margin-bottom:6px">📬</div>
-          <div style="font-weight:800;font-size:16px">手机独立收全网平台消息</div>
+        <div class="card" style="text-align:center;padding:18px 14px">
+          <div style="font-size:30px;margin-bottom:5px">📬</div>
+          <div style="font-weight:800;font-size:16px">一部手机看护全网消息</div>
           <div style="color:var(--muted);font-size:12.5px;margin:6px 0 12px">
-            不需要电脑！点下方常用平台一键添加，登录一次自动持久保活，来消息直接手机弹窗提醒。
+            完全不需要电脑、也不用复制网址！点下方常用图标一键加，或输中文名字直接搜官网添加。
           </div>
           <div class="quick-grid">
-            <button class="quick-tile" data-action="quick-add" data-pid="goofish-im">🐟 闲鱼买家消息<span>扫码/短信登录</span></button>
+            <button class="quick-tile" data-action="quick-add" data-pid="goofish-im">🐟 闲鱼买家消息<span>单端固定登录防互踢</span></button>
             <button class="quick-tile" data-action="quick-add" data-pid="xhs-creator-home">📕 小红书创作者<span>私信与商单提醒</span></button>
             <button class="quick-tile" data-action="quick-add" data-pid="taobao-qianniu">🛒 淘宝千牛卖家<span>旺旺买家咨询</span></button>
             <button class="quick-tile" data-action="quick-add" data-pid="boss-zhipin">💼 BOSS直聘消息<span>求职/招聘秒回</span></button>
             <button class="quick-tile" data-action="quick-add" data-pid="pdd-merchant">🍊 拼多多商家<span>客服消息不漏</span></button>
             <button class="quick-tile" data-action="quick-add" data-pid="github-notifications">🐙 GitHub 通知<span>Issue/PR实时提醒</span></button>
           </div>
-          <button class="pill-btn primary" style="width:100%;padding:11px;font-size:14px" data-action="go-catalog">
-            🌐 逛全部 86 个常用 + 小众宝藏平台 →
-          </button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="pill-btn primary" style="flex:1.2;padding:11px;font-size:13.5px" data-action="go-catalog">
+              🌐 添加更多常用/小众平台
+            </button>
+            <button class="pill-btn" style="flex:1;padding:11px;font-size:13px" data-action="go-cc">
+              🤖 绑海外 CC 通知
+            </button>
+          </div>
         </div>
       `;
     } else {
@@ -537,7 +667,7 @@
           const unread = Number(w.unreadCount || 0);
           const isAuth = w.status === "auth_expired";
           const isOk = w.status === "ok" || w.status === "unread" || w.hasSavedCookie;
-          let statusBadge = `<span class="badge slate">⚪ 待打开登录</span>`;
+          let statusBadge = `<span class="badge slate">⚪ 待登录</span>`;
           if (unread > 0) statusBadge = `<span class="badge red">🔴 ${unread} 条未读</span>`;
           else if (isAuth) statusBadge = `<span class="badge amber">🟠 待登录</span>`;
           else if (isOk) statusBadge = `<span class="badge green">🟢 持久在线</span>`;
@@ -545,8 +675,9 @@
           const cardClass = unread > 0 ? "card unread" : (isAuth ? "card auth" : "card");
           const desc = w.snippet
             ? esc(w.snippet)
-            : (isAuth || !isOk ? esc(w.loginHint || "点「去登录」扫码或验证码登录，之后持久保持") : "暂无新未读 · 后台持续静默监听中");
-          const timeText = w.lastCheckedAt ? `上次检测 ${fmtTime(w.lastCheckedAt)}` : "刚添加";
+            : (isAuth || !isOk ? esc(w.loginHint || "点「去登录」登录一次，之后自动持久保持") : "暂无新未读 · 后台持续静默监听中");
+          const timeText = w.lastCheckedAt ? `检测 ${fmtTime(w.lastCheckedAt)}` : "刚添加";
+          const riskTag = w.highRiskSingleEnd ? `<span class="risk-tag">🛡️ 请单端固定登录（勿手机电脑同登）</span>` : "";
           return `
             <div class="${cardClass}">
               <div class="card-head">
@@ -557,7 +688,10 @@
                 ${statusBadge}
               </div>
               <div class="card-snippet">${desc}</div>
-              <div class="card-meta">${w.desktopUa ? "💻电脑网页模式" : "📱手机网页模式"} · ${timeText}</div>
+              <div class="card-meta">
+                <span>${w.desktopUa ? "💻电脑版防跳App" : "📱手机版"} · ${timeText}</span>
+                ${riskTag}
+              </div>
               <div class="card-actions">
                 <button class="pill-btn primary" data-action="open-watch" data-id="${esc(w.id)}">
                   ${unread > 0 ? "💬 立即查看回复" : (isAuth || !isOk ? "🔑 去登录" : "📂 打开页面")}
@@ -575,18 +709,23 @@
     if (msgs.length > 0) {
       feedEl.innerHTML = `
         <div class="section-title">
-          <span>🔔 最近收到的消息提醒（${msgs.length}）</span>
+          <span>🔔 最近消息与海外 CC 提醒（${msgs.length}）</span>
           <button class="pill-btn" style="padding:3px 8px;font-size:11px" data-action="clear-feed">清空</button>
         </div>
-      ` + msgs.slice(0, 15).map((m) => `
-        <div class="feed-item" data-action="open-watch" data-id="${esc(m.watchId)}">
-          <div class="feed-top">
-            <span>${m.kind === "auth" ? "🟠" : "🔴"} ${esc(m.watchName)}${m.unreadCount > 0 ? ` (${m.unreadCount}条)` : ""}</span>
-            <span class="feed-time">${fmtTime(m.timestamp)}</span>
+      ` + msgs.slice(0, 20).map((m) => {
+        const isCc = m.kind === "cc";
+        const icon = isCc ? "🤖" : (m.kind === "auth" ? "🟠" : "🔴");
+        const clickAttrs = (!isCc && m.watchId) ? `data-action="open-watch" data-id="${esc(m.watchId)}"` : "";
+        return `
+          <div class="feed-item ${isCc ? "cc" : ""}" ${clickAttrs}>
+            <div class="feed-top">
+              <span>${icon} ${esc(m.watchName)}${(!isCc && m.unreadCount > 0) ? ` (${m.unreadCount}条)` : ""}</span>
+              <span class="feed-time">${fmtTime(m.timestamp)}</span>
+            </div>
+            <div class="feed-body">${esc(m.snippet)}</div>
           </div>
-          <div class="feed-body">${esc(m.snippet)}</div>
-        </div>
-      `).join("");
+        `;
+      }).join("");
     } else {
       feedEl.innerHTML = "";
     }
@@ -616,21 +755,28 @@
 
     const listEl = document.getElementById("catalogList");
     if (list.length === 0) {
-      listEl.innerHTML = `<div class="card" style="text-align:center;color:var(--muted)">没搜到「${esc(q)}」？直接在上方输入任意网址就能添加！</div>`;
+      listEl.innerHTML = `
+        <div class="card" style="text-align:center">
+          <div style="font-weight:800;margin-bottom:6px">内置库没搜到「${esc(searchQuery.trim())}」？</div>
+          <div style="color:var(--muted);font-size:12px;margin-bottom:10px">不用找网址！直接点下面按钮搜官网，点进去按「⭐ 就守这个页面」就能收进来！</div>
+          <button class="pill-btn primary" data-action="search-official" data-kw="${esc(searchQuery.trim())}">🔍 直接搜「${esc(searchQuery.trim())}」官网并添加</button>
+        </div>
+      `;
       return;
     }
 
-    listEl.innerHTML = `<div class="section-title"><span>共找到 ${list.length} 个平台（可连续点添加）</span></div>` +
+    listEl.innerHTML = `<div class="section-title"><span>共 ${list.length} 个现成平台（点一下即加，不用填网址）</span></div>` +
       list.map((p) => {
         const addedWatchId = existingMap.get(canonicalUrl(p.url));
         const tag = p.niche
           ? `<span class="tag-mini niche">小众宝藏</span>`
           : (p.hot ? `<span class="tag-mini hot">热门</span>` : "");
+        const risk = p.highRiskSingleEnd ? `<span class="tag-mini risk">单端防封</span>` : "";
         return `
           <div class="cat-item">
             <div class="cat-info">
-              <div class="cat-title">${esc(p.zh)} ${tag}</div>
-              <div class="cat-hint">${esc(p.loginHint || p.url)}</div>
+              <div class="cat-title">${esc(p.zh)} ${tag} ${risk}</div>
+              <div class="cat-hint">${esc(p.loginHint || "一键添加，持久保活")}</div>
             </div>
             ${addedWatchId
               ? `<button class="pill-btn ok" data-action="open-watch" data-id="${esc(addedWatchId)}">✓ 打开</button>`
@@ -643,8 +789,10 @@
 
   function renderSettings() {
     const s = state.settings || {};
+    document.getElementById("ccHookCmdBox").textContent = buildCcInstallCmd();
+    document.getElementById("chkRelayEnabled").checked = s.relayEnabled !== false;
     document.getElementById("setNotifStatus").textContent = state.notificationsGranted
-      ? "✅ 已开启！有新消息会弹出横幅并响铃"
+      ? "✅ 已开启！平台来消息或海外 CC 完工都会弹窗响铃"
       : "⚠️ 尚未授权，点右侧按钮立即开启";
     document.getElementById("setBatteryStatus").textContent = state.batteryWhitelisted
       ? "✅ 已加入电池白名单，后台更稳不断线"
@@ -662,6 +810,7 @@
   }
 
   function renderAll() {
+    syncPrivacyModal();
     renderTopAndNav();
     renderInbox();
     if (activeTab === "catalog") renderCatalog();
@@ -681,7 +830,8 @@
       maxLiveTabs: Number(document.getElementById("selMaxLive").value) || 5,
       desktopUaDefault: document.getElementById("chkDesktopDefault").checked,
       nightQuietEnabled: document.getElementById("chkNightQuiet").checked,
-      notifyOnAuthExpired: document.getElementById("chkNotifyAuth").checked
+      notifyOnAuthExpired: document.getElementById("chkNotifyAuth").checked,
+      relayEnabled: document.getElementById("chkRelayEnabled").checked
     };
     Bridge.updateSettingsJson(JSON.stringify(payload));
     showToast("设置已保存");
@@ -699,8 +849,52 @@
   document.getElementById("chkGuardian").addEventListener("change", (e) => {
     if (Bridge) Bridge.setGuardianEnabled(Boolean(e.target.checked));
   });
-  ["selPollSec", "selMaxLive", "chkDesktopDefault", "chkNightQuiet", "chkNotifyAuth"].forEach((id) => {
+  ["selPollSec", "selMaxLive", "chkDesktopDefault", "chkNightQuiet", "chkNotifyAuth", "chkRelayEnabled"].forEach((id) => {
     document.getElementById(id).addEventListener("change", pushSettingsUpdate);
+  });
+
+  // Zero-URL Search Discovery
+  document.getElementById("btnDiscoverGo").addEventListener("click", () => {
+    const kw = (document.getElementById("discoverInput").value || "").trim();
+    if (!kw) { showToast("请输入你想找的网站名字（如 转转、猪八戒）"); return; }
+    if (Bridge) Bridge.openSearchDiscovery(kw);
+  });
+  document.getElementById("discoverInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btnDiscoverGo").click();
+  });
+
+  // Privacy Consent Modal buttons
+  document.getElementById("btnAcceptPrivacy").addEventListener("click", () => {
+    if (viewingPrivacyManually) {
+      viewingPrivacyManually = false;
+      syncPrivacyModal();
+      return;
+    }
+    if (Bridge) Bridge.acceptPrivacy();
+  });
+  document.getElementById("btnDeclinePrivacy").addEventListener("click", () => {
+    if (Bridge) Bridge.exitApp();
+  });
+  document.getElementById("btnShowPrivacy").addEventListener("click", () => {
+    viewingPrivacyManually = true;
+    syncPrivacyModal();
+  });
+
+  // Overseas CC Relay buttons
+  document.getElementById("btnCopyCcCmd").addEventListener("click", () => {
+    const cmd = buildCcInstallCmd();
+    if (Bridge) Bridge.copyText(cmd, "✅ 已复制绑定命令！发到海外服务器终端粘贴回车即可");
+  });
+  document.getElementById("btnTestCcRelay").addEventListener("click", () => {
+    if (Bridge) Bridge.testRemoteRelayPush();
+  });
+  document.getElementById("btnResetCcToken").addEventListener("click", () => {
+    if (!confirm("确定更换新的通道码吗？换码后旧海外服务器需重新执行一次新命令。")) return;
+    if (Bridge) {
+      Bridge.resetRelayToken();
+      try { state = JSON.parse(Bridge.getStateJson()); } catch {}
+      renderSettings();
+    }
   });
 
   document.getElementById("catalogSearch").addEventListener("input", (e) => {
@@ -712,7 +906,7 @@
     const name = (document.getElementById("customName").value || "").trim();
     const url = (document.getElementById("customUrl").value || "").trim();
     const desktopUa = document.getElementById("customDesktopUa").checked;
-    if (!url) { showToast("请先输入平台网址"); return; }
+    if (!url) { showToast("请输入网址，或直接用上方「输名字搜官网」"); return; }
     if (!Bridge) return;
     const res = JSON.parse(Bridge.addCustomPlatform(name, url, desktopUa));
     if (!res.ok) { showToast(res.error || "网址格式不正确"); return; }
@@ -724,7 +918,7 @@
 
   document.getElementById("btnOpenCompanion").addEventListener("click", () => {
     const raw = (document.getElementById("companionUrlInput").value || "").trim();
-    if (!raw) { showToast("请先粘贴电脑端生成的固定随身链接"); return; }
+    if (!raw) { showToast("请先输入远程面板链接"); return; }
     if (Bridge) Bridge.openCompanionUrl(raw);
   });
 
@@ -747,6 +941,16 @@
     else if (action === "unbind-watch" && Bridge && id) Bridge.unbindWatch(id);
     else if (action === "delete-watch" && Bridge && id) Bridge.deleteWatch(id);
     else if (action === "go-catalog") switchTab("catalog");
+    else if (action === "go-cc") switchTab("settings");
+    else if (action === "search-official" && Bridge) Bridge.openSearchDiscovery(actEl.dataset.kw || "");
+    else if (action === "add-clip" && Bridge) {
+      const res = JSON.parse(Bridge.addCustomPlatform(actEl.dataset.title || "", actEl.dataset.url || "", true));
+      if (res.ok) {
+        checkClipboardLink();
+        showToast("✅ 已一键添加剪贴板网址！");
+        Bridge.openWatch(res.id);
+      }
+    }
     else if (action === "test-notif" && Bridge) Bridge.sendTestNotification();
     else if (action === "battery" && Bridge) Bridge.requestBatteryWhitelist();
     else if (action === "sync-all" && Bridge) Bridge.syncAllNow();
@@ -754,7 +958,11 @@
     else if (action === "add-catalog" && Bridge && pid) {
       const res = JSON.parse(Bridge.addCatalogPlatform(pid));
       if (res.ok) {
-        showToast(res.created ? `✅ 已添加「${res.name}」，可继续选或点打开登录` : `「${res.name}」已在列表中`);
+        showToast(
+          res.created
+            ? (res.highRisk ? `✅ 已加「${res.name}」（注意：请固定单端登录防互踢）` : `✅ 已添加「${res.name}」，可继续选或点打开登录`)
+            : `「${res.name}」已在列表中`
+        );
         renderCatalog();
       }
     } else if (action === "quick-add" && Bridge && pid) {
@@ -766,7 +974,6 @@
     }
   });
 
-  // Initial load from native Kotlin bridge
   if (Bridge) {
     try { catalog = JSON.parse(Bridge.getCatalogJson()); } catch {}
     try { state = JSON.parse(Bridge.getStateJson()); } catch {}

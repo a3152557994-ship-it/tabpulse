@@ -233,4 +233,40 @@ object NotificationHelper {
             NotificationManagerCompat.from(context).cancel(notifId)
         }
     }
+
+    fun notifyRemoteRelayEvent(context: Context, eventId: Long, title: String, body: String) {
+        if (!hasNotificationPermission(context)) return
+        ensureChannels(context)
+        val notifId = 50000 + ((eventId % 9000L).toInt())
+
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pi = PendingIntent.getActivity(
+            context,
+            notifId,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val cleanTitle = title.ifBlank { "🤖 海外 CC / 远程任务提醒" }
+        val cleanBody = body.ifBlank { "远程任务已完成，点此查看详情" }
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS)
+            .setSmallIcon(R.drawable.ic_stat_notify)
+            .setContentTitle(cleanTitle)
+            .setContentText(cleanBody)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(cleanBody))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+
+        runCatching {
+            NotificationManagerCompat.from(context).notify(notifId, notification)
+        }
+    }
 }

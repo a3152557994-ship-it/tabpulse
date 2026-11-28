@@ -147,6 +147,13 @@ export class TunnelBox extends DurableObject {
           customer_email TEXT NOT NULL,
           created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS relay_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          source TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
       `);
     });
   }
@@ -212,6 +219,50 @@ export class TunnelBox extends DurableObject {
       );
     }
     return { found: true, licenseKey, plan, email: String(email || ""), createdAt: nowIso };
+  }
+
+  async pushRelayEvent({ title = "", body = "", source = "cc" }) {
+    const nowMs = Date.now();
+    const cleanTitle = String(title || "🤖 远程任务提醒").trim().slice(0, 120) || "🤖 远程任务提醒";
+    const cleanBody = String(body || "任务已完成，请查看").trim().slice(0, 800);
+    const cleanSource = String(source || "cc").trim().slice(0, 40);
+    this.ctx.storage.sql.exec(
+      "INSERT INTO relay_events (title, body, source, created_at) VALUES (?, ?, ?, ?)",
+      cleanTitle,
+      cleanBody,
+      cleanSource,
+      nowMs
+    );
+    // Keep only latest 50 events so storage stays tiny
+    this.ctx.storage.sql.exec(
+      "DELETE FROM relay_events WHERE id NOT IN (SELECT id FROM relay_events ORDER BY id DESC LIMIT 50)"
+    );
+    const row = this.ctx.storage.sql.exec("SELECT MAX(id) AS max_id FROM relay_events").toArray();
+    const id = row.length > 0 ? Number(row[0].max_id || 0) : 0;
+    return { ok: true, id, createdAt: nowMs };
+  }
+
+  async pullRelayEvents(sinceId = 0) {
+    const cleanSince = Math.max(0, Number(sinceId) || 0);
+    const rows = this.ctx.storage.sql
+      .exec(
+        "SELECT id, title, body, source, created_at FROM relay_events WHERE id > ? ORDER BY id ASC LIMIT 30",
+        cleanSince
+      )
+      .toArray();
+    const maxRow = this.ctx.storage.sql.exec("SELECT MAX(id) AS max_id FROM relay_events").toArray();
+    const latestId = maxRow.length > 0 && maxRow[0].max_id != null ? Number(maxRow[0].max_id) : cleanSince;
+    return {
+      ok: true,
+      latestId,
+      events: rows.map((r) => ({
+        id: Number(r.id),
+        title: String(r.title || ""),
+        body: String(r.body || ""),
+        source: String(r.source || "cc"),
+        createdAt: Number(r.created_at || 0),
+      })),
+    };
   }
 }
 
@@ -374,7 +425,7 @@ export default {
         return Response.json({ ok: false, error: "unknown asset" }, { status: 404, headers: cors });
       }
       const noCache = url.searchParams.get("nocache") === "1";
-      const cacheKey = new Request(`https://edge-cache.replyradar.internal/v56/${encodeURIComponent(name)}`, {
+      const cacheKey = new Request(`https://edge-cache.replyradar.internal/v57/${encodeURIComponent(name)}`, {
         method: "GET",
       });
       const cache = caches.default;
@@ -576,6 +627,152 @@ export default {
           status: 503,
           headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
         });
+      }
+    }
+
+    // 7. Zero-QR Overseas Server / Claude Code (CC) Notification Relay -> Straight to Standalone Phone App!
+    const ccHookMatch = url.pathname.match(/^\/sh\/cc-hook\/(rc_[a-zA-Z0-9]{16,48})\/?$/);
+    if (ccHookMatch && (request.method === "GET" || request.method === "HEAD")) {
+      const token = ccHookMatch[1];
+      const pushEndpoint = `${url.origin}/api/relay/push/${token}`;
+      const script = `#!/usr/bin/env bash
+set -e
+mkdir -p "$HOME/.claude" "$HOME/.local/bin"
+cat > "$HOME/.local/bin/cc-notify" <<'EOF'
+#!/usr/bin/env bash
+MSG="\${1:-任务已完成}"
+curl -fsS -m 8 -X POST "${pushEndpoint}?src=cli" --data-raw "$MSG" >/dev/null 2>&1 || true
+EOF
+chmod +x "$HOME/.local/bin/cc-notify"
+
+if command -v python3 >/dev/null 2>&1; then
+python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.claude/settings.json")
+try:
+    with open(p, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    if not isinstance(cfg, dict):
+        cfg = {}
+except Exception:
+    cfg = {}
+hooks = cfg.get("hooks")
+if not isinstance(hooks, dict):
+    hooks = {}
+    cfg["hooks"] = hooks
+cmd = 'curl -fsS -m 8 -X POST ${pushEndpoint} -H "Content-Type: application/json" --data-binary @- >/dev/null 2>&1 || true'
+new_item = {"hooks": [{"type": "command", "command": cmd}]}
+for ev in ("Stop", "Notification"):
+    existing = hooks.get(ev)
+    if not isinstance(existing, list):
+        existing = []
+    kept = [x for x in existing if "/api/relay/push/" not in json.dumps(x)]
+    kept.append(new_item)
+    hooks[ev] = kept
+with open(p, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+PY
+elif command -v node >/dev/null 2>&1; then
+node -e '
+const fs = require("fs"), os = require("os"), p = os.homedir() + "/.claude/settings.json";
+let cfg = {}; try { const parsed = JSON.parse(fs.readFileSync(p, "utf8")); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) cfg = parsed; } catch {}
+if (!cfg.hooks || typeof cfg.hooks !== "object" || Array.isArray(cfg.hooks)) cfg.hooks = {};
+const cmd = "curl -fsS -m 8 -X POST ${pushEndpoint} -H \\"Content-Type: application/json\\" --data-binary @- >/dev/null 2>&1 || true";
+const newItem = { hooks: [{ type: "command", command: cmd }] };
+for (const ev of ["Stop", "Notification"]) {
+  const cur = Array.isArray(cfg.hooks[ev]) ? cfg.hooks[ev] : [];
+  const kept = cur.filter((x) => !JSON.stringify(x).includes("/api/relay/push/"));
+  kept.push(newItem);
+  cfg.hooks[ev] = kept;
+}
+fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+'
+elif [ ! -s "$HOME/.claude/settings.json" ]; then
+cat > "$HOME/.claude/settings.json" <<'JSON'
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "curl -fsS -m 8 -X POST ${pushEndpoint} -H \"Content-Type: application/json\" --data-binary @- >/dev/null 2>&1 || true" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "curl -fsS -m 8 -X POST ${pushEndpoint} -H \"Content-Type: application/json\" --data-binary @- >/dev/null 2>&1 || true" }] }
+    ]
+  }
+}
+JSON
+else
+  echo "⚠️ 检测到已有 ~/.claude/settings.json 但未安装 python3/node，请直接使用 ~/.local/bin/cc-notify 发送提醒。"
+fi
+
+curl -fsS -m 8 -X POST "${pushEndpoint}" -H "Content-Type: application/json" \\
+  -d '{"title":"✅ 海外 CC 通知已连上手机！","body":"配置成功！以后这台服务器上的 CC 干完活或需要确认时，你的手机《消息总管》会自动响铃弹窗提醒（手机无需装 Claude，零封号风险）。","source":"cc-setup"}' >/dev/null 2>&1 || true
+echo "✅ 绑定成功！你的手机《消息总管》马上会收到连接成功提醒。"
+echo "💡 平时任意脚本也可执行: ~/.local/bin/cc-notify '任务跑完了'"
+`;
+      return new Response(script, {
+        headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+      });
+    }
+
+    const relayMatch = url.pathname.match(/^\/api\/relay\/(push|pull)\/(rc_[a-zA-Z0-9]{16,48})\/?$/);
+    if (relayMatch) {
+      const mode = relayMatch[1];
+      const token = relayMatch[2];
+      const boxHash = (await sha256Hex(`relay_v1:${token}`)).slice(0, 36);
+      const stub = env.TUNNEL_BOX.getByName(`relay_${boxHash}`);
+
+      if (mode === "pull" && request.method === "GET") {
+        const since = Number(url.searchParams.get("since") || "0") || 0;
+        const data = await stub.pullRelayEvents(since);
+        return Response.json(data, { headers: { ...cors, "Cache-Control": "no-store" } });
+      }
+
+      if (mode === "push" && (request.method === "POST" || request.method === "GET")) {
+        let title = url.searchParams.get("title") || "";
+        let body = url.searchParams.get("msg") || url.searchParams.get("body") || "";
+        let source = url.searchParams.get("src") || "cc";
+
+        if (request.method === "POST") {
+          const raw = (await request.text()).trim();
+          if (raw) {
+            try {
+              const j = JSON.parse(raw);
+              const cwdBase = String(j.cwd || "")
+                .replace(/\/+$/, "")
+                .split("/")
+                .filter(Boolean)
+                .pop() || "";
+              const hookEvent = String(j.hook_event_name || "");
+              if (hookEvent === "Notification" || j.notification_type) {
+                title = cwdBase ? `⏳ 海外 CC 等你确认（${cwdBase}）` : "⏳ 海外 CC 等你处理";
+                body = String(j.message || j.last_assistant_message || "海外服务器上的 CC 正在等待你的输入或确认");
+                source = "cc-wait";
+              } else if (hookEvent === "Stop" || j.stop_hook_active !== undefined || j.last_assistant_message !== undefined) {
+                title = cwdBase ? `✅ 海外 CC 干完活了（${cwdBase}）` : "✅ 海外 CC 干完活了！";
+                body = String(
+                  j.last_assistant_message ||
+                    j.summary ||
+                    j.message ||
+                    (cwdBase ? `目录 ${cwdBase} 中的任务已执行完毕` : "海外服务器上的 CC 已完成当前任务")
+                );
+                source = "cc-stop";
+              } else if (j.title || j.body || j.msg) {
+                title = String(j.title || title || (cwdBase ? `🤖 CC 提醒（${cwdBase}）` : "🤖 海外 CC 提醒"));
+                body = String(j.body || j.msg || j.message || body || "任务已完成");
+                source = String(j.source || source);
+              } else {
+                title = cwdBase ? `✅ 海外 CC 干完活了（${cwdBase}）` : "✅ 海外 CC 干完活了！";
+                body = String(j.message || "海外服务器上的任务已执行完毕");
+                source = "cc-stop";
+              }
+            } catch {
+              title = title || "🤖 远程服务器提醒";
+              body = raw;
+            }
+          }
+        }
+        const saved = await stub.pushRelayEvent({ title, body, source });
+        return Response.json(saved, { headers: { ...cors, "Cache-Control": "no-store" } });
       }
     }
 
