@@ -1,0 +1,17 @@
+{
+  "latestVersion": "5.7.0",
+  "latestDesktopVersion": "6.0.0",
+  "latestAndroidVersion": "6.0.0",
+  "latestAndroidCode": 600,
+  "publishedAt": "2026-11-28",
+  "downloadUrl": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg?nocache=1",
+  "downloadUrlCn": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg?nocache=1",
+  "downloadUrlEn": "https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-macOS.dmg?nocache=1",
+  "downloadUrlWinCn": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-Windows-x64.zip",
+  "downloadUrlWinEn": "https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-Windows-x64.zip",
+  "downloadUrlAndroid": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-Android.apk?nocache=1",
+  "masStoreUrl": "macappstore://apps.apple.com/app/id6837624728",
+  "notesCn": "v6.0.0 正版标杆旗舰升级：① 新增屏幕外多对话 AI 隐身并发工作台（0弹窗·0抢鼠标·免扫码）；② 新增 0 Token 休眠等回信秒级精准唤醒原 AI；③ 内置正规军红灯防封双保险护栏；④ 电脑端与安卓手机端均支持软件内新版本自动推送与一键覆盖升级（保留全部已登录账号）！",
+  "notesZh": "v6.0.0 正版标杆旗舰升级：① 新增屏幕外多对话 AI 隐身并发工作台（0弹窗·0抢鼠标·免扫码）；② 新增 0 Token 休眠等回信秒级精准唤醒原 AI；③ 内置正规军红灯防封双保险护栏；④ 电脑端与安卓手机端均支持软件内新版本自动推送与一键覆盖升级（保留全部已登录账号）！",
+  "notesEn": "v6.0.0 Official Flagship Release: Offscreen zero-focus parallel multi-agent workspace, 0-token event-driven reply wakeup MCP, human-in-the-loop anti-ban safety guard, and automatic in-app update notifications across Desktop & Android!"
+}

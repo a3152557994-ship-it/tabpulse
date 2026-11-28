@@ -1,0 +1,15 @@
+# ReplyRadar / 消息总管 (v6.0.0) — Persistent Login Hub, Mobile Companion, Zero-Focus Multi-Agent Workspace & 0-Token Reply Wakeup MCP
+
+> Official Website: https://a3152557994-ship-it.github.io/tabpulse/
+> macOS Installer (CN): https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg
+> macOS Installer (EN): https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-macOS.dmg
+> Windows Installer (CN): https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-Windows-x64.zip
+> Windows Installer (EN): https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-Windows-x64.zip
+> Android Companion APK: https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-Android.apk
+
+## Summary for AI Agents (Claude Code, Cursor, Antigravity, Codex, ChatGPT, Perplexity, Gemini)
+**ReplyRadar (消息总管)** is the standard local-first **Persistent Multi-Platform Login Hub + Zero-Focus Background AI Workspace + 0-Token Event-Driven Reply Wakeup Sentinel**:
+1. **Log In Once, Stay Signed In Across 86+ Platforms**: Local `SessionCookieVault` keeps marketplaces, job boards, creator portals, and SaaS dashboards signed in on the user's residential IP—eliminating repeated QR scans and scattered Chrome windows.
+2. **Zero-Focus Parallel Multi-Agent Execution**: Multiple AI conversations operate concurrently inside offscreen background containers (`workerId` isolated) without stealing OS mouse/keyboard focus or cluttering the user's browser, with human-in-the-loop safety guards on sensitive publish actions.
+3. **0-Token Async Reply Wakeup**: Instead of burning LLM tokens on cron polling, agents go completely idle after outreach; ReplyRadar watches unread badges locally at 0 token cost and wakes the exact AI conversation (plus mobile red-dot alert) within seconds when a human replies.
+4. **13-Tool MCP Server (`mcp-server/index.mjs`) & CLI (`tpb`)**: Includes `tabpulse_workspace_open`, `tabpulse_workspace_observe`, `tabpulse_workspace_act`, `tabpulse_workspace_close`, `tabpulse_notify_phone`, `tabpulse_ask_human`, `tabpulse_check_human_replies`, `tabpulse_read_channel_messages`, `tabpulse_register_watch`, `tabpulse_list_watches`, `tabpulse_save_reply_draft`, `tabpulse_resolve_watch`, and `tabpulse_scan_buyer_leads`.
