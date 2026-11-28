@@ -285,6 +285,7 @@ class WatchRepository(
                                 if (id <= settings.lastRelayEventId) continue
                                 val title = ev.optString("title", "🤖 海外 CC 完工提醒")
                                 val body = ev.optString("body", "任务已完成")
+                                val src = ev.optString("source", "cc")
                                 val ts = ev.optLong("createdAt", System.currentTimeMillis())
                                 if (id > maxSeen) maxSeen = id
                                 prependMessageLocked(
@@ -292,13 +293,15 @@ class WatchRepository(
                                         id = "cc_${id}_${ts}",
                                         watchId = "",
                                         watchName = title,
-                                        unreadCount = 1,
+                                        unreadCount = if (src == "user-cmd") 0 else 1,
                                         snippet = body,
-                                        kind = "cc",
+                                        kind = if (src == "user-cmd") "cc_user" else "cc",
                                         timestamp = ts
                                     )
                                 )
-                                freshAlerts.add(Triple(id, title, body))
+                                if (src != "user-cmd") {
+                                    freshAlerts.add(Triple(id, title, body))
+                                }
                                 changed = true
                             }
                             if (latestId > maxSeen) maxSeen = latestId
@@ -360,6 +363,42 @@ class WatchRepository(
 
             if (ok) {
                 pollRemoteRelayOnce(force = true)
+            }
+            onResult(ok)
+        }
+    }
+
+    fun sendRemoteCommandToCc(prompt: String, onResult: (Boolean) -> Unit) {
+        val cleanPrompt = prompt.trim()
+        val snap = synchronized(lock) { settings }
+        if (!snap.privacyAccepted || snap.relayToken.isBlank() || cleanPrompt.isBlank()) {
+            onResult(false)
+            return
+        }
+        relayExecutor.execute {
+            val ok = runCatching {
+                val url = URL("$EDGE_ORIGIN/api/relay/cmd/${snap.relayToken}")
+                val payload = JSONObject().apply {
+                    put("prompt", cleanPrompt)
+                }.toString().toByteArray(Charsets.UTF_8)
+
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    setFixedLengthStreamingMode(payload.size)
+                }
+                conn.outputStream.use { it.write(payload) }
+                val code = conn.responseCode
+                conn.disconnect()
+                code in 200..299
+            }.getOrDefault(false)
+
+            if (ok) {
+                pollRemoteRelayOnce(force = true)
+                notifyChanged()
             }
             onResult(ok)
         }
@@ -471,7 +510,7 @@ class WatchRepository(
     ): String {
         return synchronized(lock) {
             val root = JSONObject()
-            root.put("version", "5.7.0")
+            root.put("version", "5.8.0")
             root.put("edgeOrigin", EDGE_ORIGIN)
             root.put("guardianRunning", guardianRunning)
             root.put("notificationsGranted", notificationsGranted)

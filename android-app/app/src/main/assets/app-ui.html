@@ -239,6 +239,7 @@
     <section id="tab-inbox" class="tab-panel active">
       <div id="guardianBanner"></div>
       <div id="nextLoginBanner"></div>
+      <div id="ccQuickComposerBox"></div>
       <div id="watchListContainer"></div>
       <div id="feedContainer"></div>
     </section>
@@ -288,20 +289,26 @@
 
     <!-- TAB 3: OVERSEAS CC RELAY & GUARDIAN SETTINGS -->
     <section id="tab-settings" class="tab-panel">
-      <!-- Zero-QR Overseas CC / Remote Server Notification Card -->
+      <!-- Zero-QR Claude-Cage / Overseas CC Two-Way Relay Card -->
       <div class="card" style="border-color:rgba(59,130,246,0.55)">
         <div class="card-head">
-          <div class="row-title">🤖 接收海外服务器 / CC 完工通知（免扫码）</div>
+          <div class="row-title">🤖 CC 笼子 / 海外服务器双向接力（免扫码）</div>
           <input id="chkRelayEnabled" type="checkbox" class="toggle" checked />
         </div>
         <div class="row-desc" style="margin-top:5px;color:#cbd5e1">
-          手机<b>不用装 CC（零封号风险）</b>，也<b>不用扫码绑电脑</b>！复制下面这一行命令，发到海外服务器 SSH 终端粘贴回车，以后海外 CC 干完活或卡住等确认，你这部手机就会自动响铃弹窗。
+          专门适配 <b>Claude-Cage（CC笼子）</b> 与海外服务器！手机不用装 CC（零封号风险）、不用扫码绑电脑：<br/>
+          <b>第 1 步</b>：复制下面命令粘进笼子或海外终端回车（自动配好完工通知）；<br/>
+          <b>第 2 步</b>：在项目目录运行 <code>~/.local/bin/cc-remote --auto</code>，你就能在手机上<b>收完工弹窗 + 直接打字给 CC 发下一条指令</b>！
         </div>
         <div id="ccHookCmdBox" class="cmd-box">加载中…</div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap">
-          <button id="btnCopyCcCmd" class="pill-btn primary" style="flex:1">📋 一键复制海外绑定命令</button>
-          <button id="btnTestCcRelay" class="pill-btn ok">🔔 模拟弹窗测试</button>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px">
+          <button id="btnCopyCcCmd" class="pill-btn primary" style="flex:1">📋 复制一键绑定命令</button>
+          <button id="btnTestCcRelay" class="pill-btn ok">🔔 模拟测试</button>
           <button id="btnResetCcToken" class="pill-btn">🔄 换码</button>
+        </div>
+        <div style="display:flex;gap:7px">
+          <input id="settingsCcInput" class="search-box" style="margin:0;flex:1" placeholder="直接给笼子里的 CC 发下一条指令…" />
+          <button id="btnSettingsSendCc" class="pill-btn primary">🚀 发送</button>
         </div>
       </div>
 
@@ -406,7 +413,7 @@
       </details>
 
       <div style="text-align:center;color:var(--muted);font-size:11.5px;padding:6px 0 12px">
-        消息总管 Android 独立版 v5.7.0 · 单独一部手机即可完整使用
+        消息总管 Android 独立版 v5.8.0 · 单独一部手机即可完整使用
       </div>
     </section>
   </main>
@@ -706,15 +713,38 @@
 
     const feedEl = document.getElementById("feedContainer");
     const msgs = state.messages || [];
+    const hasCcActivity = msgs.some((m) => m.kind === "cc" || m.kind === "cc_user");
+    const ccBox = document.getElementById("ccQuickComposerBox");
+    if (ccBox) {
+      if (hasCcActivity) {
+        if (!document.getElementById("inboxCcInput")) {
+          ccBox.innerHTML = `
+            <div class="card" style="border-color:rgba(59,130,246,0.55);padding:11px 12px">
+              <div style="font-weight:800;font-size:13px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+                <span>🤖 继续给笼子 / 海外 CC 发指令</span>
+                <span style="font-size:11px;color:#93c5fd;font-weight:600">免扫码双向接力</span>
+              </div>
+              <div style="display:flex;gap:7px">
+                <input id="inboxCcInput" class="search-box" style="margin:0;flex:1" placeholder="输入下一条指令（如：继续把单元测试跑通）" />
+                <button class="pill-btn primary" data-action="send-inbox-cc">🚀 发送</button>
+              </div>
+            </div>
+          `;
+        }
+      } else {
+        ccBox.innerHTML = "";
+      }
+    }
+
     if (msgs.length > 0) {
       feedEl.innerHTML = `
         <div class="section-title">
-          <span>🔔 最近消息与海外 CC 提醒（${msgs.length}）</span>
+          <span>🔔 最近消息与 CC 笼子动态（${msgs.length}）</span>
           <button class="pill-btn" style="padding:3px 8px;font-size:11px" data-action="clear-feed">清空</button>
         </div>
       ` + msgs.slice(0, 20).map((m) => {
-        const isCc = m.kind === "cc";
-        const icon = isCc ? "🤖" : (m.kind === "auth" ? "🟠" : "🔴");
+        const isCc = m.kind === "cc" || m.kind === "cc_user";
+        const icon = m.kind === "cc_user" ? "📤" : (m.kind === "cc" ? "🤖" : (m.kind === "auth" ? "🟠" : "🔴"));
         const clickAttrs = (!isCc && m.watchId) ? `data-action="open-watch" data-id="${esc(m.watchId)}"` : "";
         return `
           <div class="feed-item ${isCc ? "cc" : ""}" ${clickAttrs}>
@@ -888,6 +918,24 @@
   document.getElementById("btnTestCcRelay").addEventListener("click", () => {
     if (Bridge) Bridge.testRemoteRelayPush();
   });
+  document.getElementById("btnSettingsSendCc").addEventListener("click", () => {
+    const inp = document.getElementById("settingsCcInput");
+    const val = (inp.value || "").trim();
+    if (!val) { showToast("请输入要发给 CC 的指令"); return; }
+    if (Bridge) {
+      Bridge.sendCcCommand(val);
+      inp.value = "";
+    }
+  });
+  document.getElementById("settingsCcInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("btnSettingsSendCc").click();
+  });
+  document.body.addEventListener("keydown", (e) => {
+    if (e.target && e.target.id === "inboxCcInput" && e.key === "Enter") {
+      const btn = document.querySelector('[data-action="send-inbox-cc"]');
+      if (btn) btn.click();
+    }
+  });
   document.getElementById("btnResetCcToken").addEventListener("click", () => {
     if (!confirm("确定更换新的通道码吗？换码后旧海外服务器需重新执行一次新命令。")) return;
     if (Bridge) {
@@ -955,6 +1003,13 @@
     else if (action === "battery" && Bridge) Bridge.requestBatteryWhitelist();
     else if (action === "sync-all" && Bridge) Bridge.syncAllNow();
     else if (action === "clear-feed" && Bridge) Bridge.clearMessages();
+    else if (action === "send-inbox-cc" && Bridge) {
+      const inp = document.getElementById("inboxCcInput");
+      const val = (inp ? inp.value : "").trim();
+      if (!val) { showToast("请先输入给 CC 的指令"); return; }
+      Bridge.sendCcCommand(val);
+      if (inp) inp.value = "";
+    }
     else if (action === "add-catalog" && Bridge && pid) {
       const res = JSON.parse(Bridge.addCatalogPlatform(pid));
       if (res.ok) {

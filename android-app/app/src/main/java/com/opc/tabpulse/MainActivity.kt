@@ -1215,9 +1215,24 @@ class MainActivity : AppCompatActivity(), PlatformWebHostCallbacks {
                 }
                 return
             }
-            toast("正在模拟海外 CC 发送完工通知…")
+            toast("正在模拟 CC 笼子发送完工通知…")
             TabPulseApp.instance.repository.sendSelfTestRelayPing { ok ->
                 toast(if (ok) "🎉 模拟成功！请看手机顶部弹窗提醒" else "连接云端超时，请检查手机网络后重试")
+            }
+        }
+
+        @JavascriptInterface
+        fun sendCcCommand(prompt: String) {
+            val clean = prompt.trim()
+            if (clean.isEmpty()) {
+                toast("请先输入要发给 CC 的指令")
+                return
+            }
+            TabPulseApp.instance.repository.sendRemoteCommandToCc(clean) { ok ->
+                toast(
+                    if (ok) "📤 已投递给 CC！笼子里的 cc-remote 收到后会立即开工并在完工后弹窗通知你"
+                    else "发送失败，请检查手机网络后重试"
+                )
             }
         }
 

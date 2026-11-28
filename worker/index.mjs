@@ -154,6 +154,12 @@ export class TunnelBox extends DurableObject {
           source TEXT NOT NULL,
           created_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS relay_commands (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          prompt TEXT NOT NULL,
+          status TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
       `);
     });
   }
@@ -262,6 +268,49 @@ export class TunnelBox extends DurableObject {
         source: String(r.source || "cc"),
         createdAt: Number(r.created_at || 0),
       })),
+    };
+  }
+
+  async enqueueRelayCommand(prompt = "") {
+    const cleanPrompt = String(prompt || "").trim().slice(0, 4000);
+    if (!cleanPrompt) return { ok: false, error: "empty prompt" };
+    const nowMs = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO relay_commands (prompt, status, created_at) VALUES (?, 'pending', ?)",
+      cleanPrompt,
+      nowMs
+    );
+    this.ctx.storage.sql.exec(
+      "DELETE FROM relay_commands WHERE id NOT IN (SELECT id FROM relay_commands ORDER BY id DESC LIMIT 30)"
+    );
+    const row = this.ctx.storage.sql.exec("SELECT MAX(id) AS max_id FROM relay_commands").toArray();
+    const cmdId = row.length > 0 ? Number(row[0].max_id || 0) : 0;
+    // Mirror user's sent command into timeline so phone sees full back-and-forth history
+    await this.pushRelayEvent({
+      title: "📤 你在手机发给 CC 的指令",
+      body: cleanPrompt,
+      source: "user-cmd",
+    });
+    return { ok: true, commandId: cmdId, createdAt: nowMs };
+  }
+
+  async claimNextRelayCommand() {
+    const rows = this.ctx.storage.sql
+      .exec("SELECT id, prompt, created_at FROM relay_commands WHERE status = 'pending' ORDER BY id ASC LIMIT 1")
+      .toArray();
+    if (!rows.length) {
+      return { ok: true, command: null };
+    }
+    const picked = rows[0];
+    const id = Number(picked.id);
+    this.ctx.storage.sql.exec("UPDATE relay_commands SET status = 'claimed' WHERE id = ?", id);
+    return {
+      ok: true,
+      command: {
+        id,
+        prompt: String(picked.prompt || ""),
+        createdAt: Number(picked.created_at || 0),
+      },
     };
   }
 }
@@ -425,7 +474,7 @@ export default {
         return Response.json({ ok: false, error: "unknown asset" }, { status: 404, headers: cors });
       }
       const noCache = url.searchParams.get("nocache") === "1";
-      const cacheKey = new Request(`https://edge-cache.replyradar.internal/v57/${encodeURIComponent(name)}`, {
+      const cacheKey = new Request(`https://edge-cache.replyradar.internal/v58/${encodeURIComponent(name)}`, {
         method: "GET",
       });
       const cache = caches.default;
@@ -630,20 +679,78 @@ export default {
       }
     }
 
-    // 7. Zero-QR Overseas Server / Claude Code (CC) Notification Relay -> Straight to Standalone Phone App!
+    // 7. Zero-QR Claude-Cage / Overseas Server Two-Way Relay -> Notify Phone & Receive Next Command!
     const ccHookMatch = url.pathname.match(/^\/sh\/cc-hook\/(rc_[a-zA-Z0-9]{16,48})\/?$/);
     if (ccHookMatch && (request.method === "GET" || request.method === "HEAD")) {
       const token = ccHookMatch[1];
       const pushEndpoint = `${url.origin}/api/relay/push/${token}`;
+      const cmdEndpoint = `${url.origin}/api/relay/cmd/${token}`;
+      const relayHost = url.hostname;
       const script = `#!/usr/bin/env bash
 set -e
 mkdir -p "$HOME/.claude" "$HOME/.local/bin"
+
 cat > "$HOME/.local/bin/cc-notify" <<'EOF'
 #!/usr/bin/env bash
 MSG="\${1:-任务已完成}"
 curl -fsS -m 8 -X POST "${pushEndpoint}?src=cli" --data-raw "$MSG" >/dev/null 2>&1 || true
 EOF
 chmod +x "$HOME/.local/bin/cc-notify"
+
+cat > "$HOME/.local/bin/cc-remote" <<'EOF'
+#!/usr/bin/env bash
+AUTO_FLAG=""
+if [ "\${1:-}" = "--auto" ] || [ "\${1:-}" = "-y" ]; then
+  AUTO_FLAG="--dangerously-skip-permissions"
+fi
+DIR_NAME="\$(basename "\$(pwd)")"
+echo "🔒 消息总管 · CC 笼子/远程双向接力已启动（当前目录: \$(pwd)）"
+echo "📱 现在可以在手机《消息总管》接收完工弹窗，并直接打字给 CC 发下一条指令！(按 Ctrl+C 停止)"
+curl -fsS -m 8 -X POST "${pushEndpoint}?src=cc-ready&title=\$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))' "🟢 CC 已在笼子待命（\$DIR_NAME）" 2>/dev/null || echo "CC-Ready")" \\
+  --data-raw "已在目录 \$(pwd) 开启双向接力，你在手机上直接发指令即可继续干活！" >/dev/null 2>&1 || true
+
+HAS_SESSION=0
+while true; do
+  RAW="\$(curl -fsS -m 10 "${cmdEndpoint}" 2>/dev/null || true)"
+  PROMPT=""
+  if [ -n "\$RAW" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+      PROMPT="\$(printf '%s' "\$RAW" | python3 -c 'import sys,json;d=json.load(sys.stdin);c=d.get("command");print(c.get("prompt","") if isinstance(c,dict) else "")' 2>/dev/null || true)"
+    elif command -v node >/dev/null 2>&1; then
+      PROMPT="\$(printf '%s' "\$RAW" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const d=JSON.parse(s);console.log((d.command&&d.command.prompt)||"");}catch{}});' 2>/dev/null || true)"
+    fi
+  fi
+  if [ -n "\$PROMPT" ]; then
+    echo ""
+    echo "▶ [手机发来新指令]: \$PROMPT"
+    curl -fsS -m 8 -X POST "${pushEndpoint}?src=cc-running" --data-raw "⏳ 笼子里的 CC 已收到指令，正在执行：\$PROMPT" >/dev/null 2>&1 || true
+    OUT_TMP="\$(mktemp)"
+    if [ "\$HAS_SESSION" -eq 1 ]; then
+      TABPULSE_REMOTE_WRAPPER=1 claude -p "\$PROMPT" --continue \$AUTO_FLAG >"\$OUT_TMP" 2>&1 || TABPULSE_REMOTE_WRAPPER=1 claude -p "\$PROMPT" \$AUTO_FLAG >"\$OUT_TMP" 2>&1 || true
+    else
+      TABPULSE_REMOTE_WRAPPER=1 claude -p "\$PROMPT" --continue \$AUTO_FLAG >"\$OUT_TMP" 2>&1 || TABPULSE_REMOTE_WRAPPER=1 claude -p "\$PROMPT" \$AUTO_FLAG >"\$OUT_TMP" 2>&1 || true
+      HAS_SESSION=1
+    fi
+    cat "\$OUT_TMP"
+    SUMMARY="\$(tail -c 700 "\$OUT_TMP" | tr '\\000' ' ')"
+    rm -f "\$OUT_TMP"
+    [ -z "\$SUMMARY" ] && SUMMARY="指令已执行完毕，请指示下一步。"
+    # Note: if Stop hook is also active, we send explicit result summary with output text!
+    curl -fsS -m 8 -X POST "${pushEndpoint}?src=cc-done" --data-raw "✅ [\$DIR_NAME 执行完毕] \$SUMMARY" >/dev/null 2>&1 || true
+    echo "✅ 已将结果推回手机《消息总管》，等待你手机发来下一条指令..."
+  fi
+  sleep 3
+done
+EOF
+chmod +x "$HOME/.local/bin/cc-remote"
+
+if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [ -f "$rc" ] && ! grep -q '.local/bin' "$rc" 2>/dev/null; then
+      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+    fi
+  done
+fi
 
 if command -v python3 >/dev/null 2>&1; then
 python3 - <<'PY'
@@ -660,7 +767,7 @@ hooks = cfg.get("hooks")
 if not isinstance(hooks, dict):
     hooks = {}
     cfg["hooks"] = hooks
-cmd = 'curl -fsS -m 8 -X POST ${pushEndpoint} -H "Content-Type: application/json" --data-binary @- >/dev/null 2>&1 || true'
+cmd = '[ -z "$TABPULSE_REMOTE_WRAPPER" ] && curl -fsS -m 8 -X POST ${pushEndpoint} -H "Content-Type: application/json" --data-binary @- >/dev/null 2>&1 || true'
 new_item = {"hooks": [{"type": "command", "command": cmd}]}
 for ev in ("Stop", "Notification"):
     existing = hooks.get(ev)
@@ -669,6 +776,15 @@ for ev in ("Stop", "Notification"):
     kept = [x for x in existing if "/api/relay/push/" not in json.dumps(x)]
     kept.append(new_item)
     hooks[ev] = kept
+# If strict sandbox domain whitelist is configured, allow relay host automatically
+net = cfg.get("network")
+if isinstance(net, dict) and isinstance(net.get("allowedDomains"), list):
+    if "${relayHost}" not in net["allowedDomains"]:
+        net["allowedDomains"].append("${relayHost}")
+sb = cfg.get("sandbox")
+if isinstance(sb, dict) and isinstance(sb.get("network"), dict) and isinstance(sb["network"].get("allowedDomains"), list):
+    if "${relayHost}" not in sb["network"]["allowedDomains"]:
+        sb["network"]["allowedDomains"].append("${relayHost}")
 with open(p, "w", encoding="utf-8") as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
 PY
@@ -677,7 +793,7 @@ node -e '
 const fs = require("fs"), os = require("os"), p = os.homedir() + "/.claude/settings.json";
 let cfg = {}; try { const parsed = JSON.parse(fs.readFileSync(p, "utf8")); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) cfg = parsed; } catch {}
 if (!cfg.hooks || typeof cfg.hooks !== "object" || Array.isArray(cfg.hooks)) cfg.hooks = {};
-const cmd = "curl -fsS -m 8 -X POST ${pushEndpoint} -H \\"Content-Type: application/json\\" --data-binary @- >/dev/null 2>&1 || true";
+const cmd = "[ -z \\"$TABPULSE_REMOTE_WRAPPER\\" ] && curl -fsS -m 8 -X POST ${pushEndpoint} -H \\"Content-Type: application/json\\" --data-binary @- >/dev/null 2>&1 || true";
 const newItem = { hooks: [{ type: "command", command: cmd }] };
 for (const ev of ["Stop", "Notification"]) {
   const cur = Array.isArray(cfg.hooks[ev]) ? cfg.hooks[ev] : [];
@@ -701,20 +817,21 @@ cat > "$HOME/.claude/settings.json" <<'JSON'
 }
 JSON
 else
-  echo "⚠️ 检测到已有 ~/.claude/settings.json 但未安装 python3/node，请直接使用 ~/.local/bin/cc-notify 发送提醒。"
+  echo "⚠️ 检测到已有 ~/.claude/settings.json 但未安装 python3/node，请直接使用 ~/.local/bin/cc-remote 开启手机双向接力。"
 fi
 
 curl -fsS -m 8 -X POST "${pushEndpoint}" -H "Content-Type: application/json" \\
-  -d '{"title":"✅ 海外 CC 通知已连上手机！","body":"配置成功！以后这台服务器上的 CC 干完活或需要确认时，你的手机《消息总管》会自动响铃弹窗提醒（手机无需装 Claude，零封号风险）。","source":"cc-setup"}' >/dev/null 2>&1 || true
-echo "✅ 绑定成功！你的手机《消息总管》马上会收到连接成功提醒。"
-echo "💡 平时任意脚本也可执行: ~/.local/bin/cc-notify '任务跑完了'"
+  -d '{"title":"✅ CC 笼子 / 海外服务器已连上手机！","body":"绑定成功！1）平时敲 claude 干完活会自动弹窗通知手机；2）在项目目录敲 ~/.local/bin/cc-remote（笼子内免确认加 --auto），手机收到通知后还能直接打字给 CC 发下一条指令！","source":"cc-setup"}' >/dev/null 2>&1 || true
+echo "✅ 绑定成功！你的手机《消息总管》马上会收到连接成功弹窗。"
+echo "🚀 想在手机上直接给笼子里的 CC 回发下一条指令，请在项目目录运行："
+echo "   ~/.local/bin/cc-remote --auto"
 `;
       return new Response(script, {
         headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
       });
     }
 
-    const relayMatch = url.pathname.match(/^\/api\/relay\/(push|pull)\/(rc_[a-zA-Z0-9]{16,48})\/?$/);
+    const relayMatch = url.pathname.match(/^\/api\/relay\/(push|pull|cmd)\/(rc_[a-zA-Z0-9]{16,48})\/?$/);
     if (relayMatch) {
       const mode = relayMatch[1];
       const token = relayMatch[2];
@@ -725,6 +842,27 @@ echo "💡 平时任意脚本也可执行: ~/.local/bin/cc-notify '任务跑完�
         const since = Number(url.searchParams.get("since") || "0") || 0;
         const data = await stub.pullRelayEvents(since);
         return Response.json(data, { headers: { ...cors, "Cache-Control": "no-store" } });
+      }
+
+      if (mode === "cmd") {
+        if (request.method === "POST") {
+          let prompt = url.searchParams.get("prompt") || "";
+          const raw = (await request.text()).trim();
+          if (raw) {
+            try {
+              const j = JSON.parse(raw);
+              prompt = String(j.prompt || j.cmd || j.text || prompt);
+            } catch {
+              prompt = raw;
+            }
+          }
+          const queued = await stub.enqueueRelayCommand(prompt);
+          return Response.json(queued, { status: queued.ok ? 200 : 400, headers: { ...cors, "Cache-Control": "no-store" } });
+        }
+        if (request.method === "GET") {
+          const claimed = await stub.claimNextRelayCommand();
+          return Response.json(claimed, { headers: { ...cors, "Cache-Control": "no-store" } });
+        }
       }
 
       if (mode === "push" && (request.method === "POST" || request.method === "GET")) {
