@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>消息总管 (ReplyRadar) — 全平台免扫码收信与 AI 隐身工作台</title>
+  <meta name="description" content="登一次常年在线！原生桌面端一屏收发闲鱼、小红书、抖音、电鸭、Upwork、Reddit 未读私信，手机随身秒回；内置多对话 AI 隐身工作台与 0 Token 来信秒唤醒 MCP。" />
+  <meta property="og:title" content="消息总管 (ReplyRadar) — 全平台免扫码收信与 AI 隐身工作台" />
+  <meta property="og:description" content="电脑+手机一站式看红点回消息 · 多路 AI 后台隐身免扫码干活不抢鼠标 · 0 Token 休眠等回信秒唤醒。" />
+  <meta property="og:image" content="https://a3152557994-ship-it.github.io/tabpulse/og-hero.png" />
+  <meta property="og:type" content="website" />
+  <link rel="canonical" href="https://a3152557994-ship-it.github.io/tabpulse/" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "消息总管 (ReplyRadar)",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "macOS 12.0+, Windows 10/11, iOS 16.0+, Android 7.0+, Cross-Platform MCP",
+        "url": "https://a3152557994-ship-it.github.io/tabpulse/",
+        "downloadUrl": "https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg",
+        "softwareVersion": "6.0.0",
+        "description": "Native multi-platform persistent login workspace, mobile red-dot companion, background zero-focus multi-agent browser container, and 0-token async reply wakeup MCP server.",
+        "offers": [
+          { "@type": "Offer", "name": "Free Starter", "price": "0", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "Annual Pro", "price": "4.99", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "Lifetime Pro", "price": "14.99", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "CN Lifetime Pro", "price": "39", "priceCurrency": "CNY" }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Does TabPulse require Chrome or a browser extension?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. TabPulse ships as a standalone native macOS app powered by system WebKit. You log in once inside the built-in window—no Chrome extension or technical setup needed."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Will platforms ban my account if TabPulse monitors unread messages?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "TabPulse runs locally on your own residential IP with ±25% random human jitter, automatic 00:00–08:00 night sleep, instant pause on login expiry, and strictly read-only badge inspection—never auto-posting on red-light social platforms."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --surface: #111827;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 50% 0%, #172554 0%, var(--bg) 52%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: inherit; text-decoration: none; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+    header {
+      display: flex; justify-content: space-between; align-items: center; padding: 20px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; }
+    .logo-badge {
+      width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #3b82f6, #6366f1);
+      display: grid; place-items: center; font-size: 18px;
+    }
+    .nav-links { display: flex; gap: 16px; align-items: center; font-size: 14px; color: var(--muted); }
+    .nav-links a:hover { color: #fff; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 20px; border-radius: 11px; font-weight: 700; font-size: 14.5px;
+      cursor: pointer; border: 1px solid var(--border); background: var(--card); color: #fff;
+      transition: transform 0.14s, background 0.14s;
+    }
+    .btn:hover { transform: translateY(-1px); background: #26354d; }
+    .btn.primary { background: linear-gradient(135deg, #2563eb, #4f46e5); border: none; box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35); }
+    .btn.primary:hover { background: linear-gradient(135deg, #1d4ed8, #4338ca); }
+    .btn.sm { padding: 6px 12px; font-size: 12.5px; border-radius: 8px; }
+
+    .hero { text-align: center; padding: 54px 0 36px; }
+    .eyebrow {
+      display: inline-block; padding: 5px 14px; border-radius: 999px;
+      background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(96, 165, 250, 0.35);
+      color: #93c5fd; font-size: 12.5px; font-weight: 700; margin-bottom: 16px;
+    }
+    h1 { font-size: clamp(28px, 4.5vw, 48px); line-height: 1.18; margin: 0 auto 16px; max-width: 880px; letter-spacing: -0.02em; }
+    .hero p { color: var(--muted); font-size: 17px; max-width: 720px; margin: 0 auto 26px; }
+    .cta-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 34px; }
+
+    /* Free Live Scanner Box */
+    .scanner-panel {
+      background: rgba(30, 41, 59, 0.88); border: 1px solid rgba(96, 165, 250, 0.35);
+      border-radius: 20px; padding: 24px; text-align: left; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+      margin-bottom: 56px;
+    }
+    .scanner-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); display: inline-block; box-shadow: 0 0 10px var(--green); }
+    .scanner-bar { display: flex; gap: 10px; flex-wrap: wrap; }
+    .scanner-bar input {
+      flex: 1; min-width: 220px; background: #0f172a; border: 1px solid var(--border);
+      color: #fff; padding: 12px 15px; border-radius: 11px; font-size: 15px; font-family: inherit;
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+    .chip {
+      font-size: 12px; padding: 4px 11px; border-radius: 999px; background: #0f172a;
+      border: 1px solid var(--border); color: #cbd5e1; cursor: pointer;
+    }
+    .chip:hover { border-color: var(--primary); color: #fff; }
+    .results-grid { display: grid; gap: 10px; }
+    .lead-row {
+      background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 13px 16px;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .lead-row:hover { border-color: #3b82f6; }
+    .tag { font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 700; }
+    .tag-green { background: rgba(16, 185, 129, 0.16); color: #34d399; }
+    .tag-blue { background: rgba(59, 130, 246, 0.16); color: #93c5fd; }
+
+    /* Features */
+    .section { padding: 44px 0; }
+    .section h2 { text-align: center; font-size: 29px; margin: 0 0 10px; }
+    .section .lead { text-align: center; color: var(--muted); max-width: 680px; margin: 0 auto 32px; }
+    .feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; }
+    .feat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .feat-card h3 { margin: 0 0 8px; font-size: 17px; }
+    .feat-card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    /* Pricing */
+    .price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px; margin-top: 22px; }
+    .p-card {
+      background: var(--card); border: 1.5px solid var(--border); border-radius: 18px;
+      padding: 24px; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .p-card.pop { border-color: #3b82f6; background: linear-gradient(180deg, #1e293b 0%, #172554 100%); position: relative; }
+    .p-big { font-size: 36px; font-weight: 800; margin: 8px 0 4px; }
+    .p-card ul { padding-left: 18px; color: #cbd5e1; font-size: 14px; margin: 14px 0 20px; }
+    .p-card li { margin-bottom: 7px; }
+
+    pre.codebox {
+      background: #090d16; border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; overflow-x: auto; font-size: 13px; color: #cbd5e1;
+    }
+    footer { border-top: 1px solid rgba(148, 163, 184, 0.14); padding: 32px 0 48px; margin-top: 40px; color: var(--muted); font-size: 13.5px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <div class="logo-badge">🔔</div>
+        <span id="brand-name">消息总管</span>
+      </div>
+      <nav class="nav-links">
+        <a href="#scanner" id="nav-scan">免费漏单扫描</a>
+        <a href="#features" id="nav-feat">核心特性</a>
+        <a href="#pricing" id="nav-price">买断与订阅</a>
+        <a href="#mcp">MCP 接入</a>
+        <a href="./llms.txt">llms.txt</a>
+        <button class="btn sm" onclick="toggleSiteLang()" id="lang-btn">English</button>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <span class="eyebrow" id="h-eyebrow">🚀 《消息总管》v6.0 全平台五端旗舰版 · 苹果电脑 + Windows + 苹果手机 + 安卓手机 + AI 隐身工作台</span>
+      <h1 id="h-title">你不打开平台，客户发来的询盘就永远躺在死角里烂掉。</h1>
+      <p id="h-sub">
+        专为多店卖家、自由职业者与一人公司打造的<strong>多平台未读消息总管与 AI 免扫码隐身底座</strong>。<strong>手机（iOS/安卓）无需电脑即可独立使用</strong>，电脑端（Mac/Win）支持多号独立隔离防串号、多路 AI 屏幕外隐身并发与 0 Token 来信秒级唤醒。
+      </p>
+      <div class="cta-group">
+        <a class="btn primary" href="https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg" id="cta-dl">
+           苹果电脑版 (.dmg · 1.5MB)
+        </a>
+        <a class="btn primary" href="https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-Windows-x64.zip" id="cta-dl-win" style="background:linear-gradient(135deg,#059669,#0d9488);">
+          🪟 Windows 电脑版 (.zip)
+        </a>
+        <a class="btn primary" href="https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-Android.apk" id="cta-dl-android" style="background:linear-gradient(135deg,#2563eb,#7c3aed);">
+          🤖 安卓手机独立版 (.apk · 0.8MB)
+        </a>
+        <a class="btn primary" href="#ios" onclick="alert(siteLang==='en'?'ReplyRadar iOS v6.0 is live on Apple TestFlight (public App Store review in progress). Desktop users can also open their Mobile Pocket Link directly in iPhone Safari!':'📱《消息总管》苹果手机 iOS 独立版 v6.0 已上传苹果官方 TestFlight 内测（公开商店排队审核中）！已装电脑版的用户也可直接用 iPhone Safari 打开电脑端生成的随身书签免装即用。');return false;" id="cta-dl-ios" style="background:linear-gradient(135deg,#0284c7,#2563eb);">
+          📱 苹果手机 iOS 版 (TestFlight/随身版)
+        </a>
+        <button class="btn" type="button" onclick="openSiteCheckout('life')" id="cta-buy">💎 获取 ¥39 永久买断码</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.65;max-width:780px;margin:0 auto;" id="h-trust">
+        🔒 <strong>安全与签名说明</strong>：安装包均含官方正式数字签名，所有平台账号密码与 Cookie <strong>100% 仅保存在您自己手机/电脑本地</strong>，绝不上传云端。<br/>
+        💡 安卓手机浏览器直接下载时，华为/小米/OPPO/vivo 若提示「未在应用商店备案 / 安全检测」，属官网直装包的正常系统提示，点「继续安装 / 了解风险安装」即可安心使用；Mac 首次打开双击包内「一键放行」即开。
+      </div>
+    </section>
+
+    <!-- FREE INTERACTIVE TOOL: 24H MISSED LEAD SCANNER -->
+    <section id="scanner" class="scanner-panel">
+      <div class="scanner-head">
+        <div>
+          <span class="live-dot"></span>
+          <strong style="margin-left:6px;font-size:16px;" id="sc-title">免费在线实测：《过去 24～72 小时全网漏单与求购贴扫描器》</strong>
+        </div>
+        <span style="font-size:12px;color:var(--muted);" id="sc-note">免登录 · 实时直连 电鸭社区 / V2EX / Reddit / HN / GitHub 需求池</span>
+      </div>
+      <div class="scanner-bar">
+        <input id="kw" value="远程 外包" placeholder="输入关键词，如 远程 外包, 设计 剪辑, 小红书 运营, Shopify, Python..." onkeydown="if(event.key==='Enter')scanNow()" />
+        <button class="btn primary" onclick="scanNow()" id="sc-btn">🔍 立即扫描我漏掉的商机</button>
+      </div>
+      <div class="chip-row">
+        <span class="chip" onclick="pickKw('远程 外包')">🔥 国内远程外包(电鸭)</span>
+        <span class="chip" onclick="pickKw('设计 剪辑')">🎨 电商美工剪辑</span>
+        <span class="chip" onclick="pickKw('小红书 运营')">📕 小红书代运营</span>
+        <span class="chip" onclick="pickKw('小程序')">📱 小程序/App开发</span>
+        <span class="chip" onclick="pickKw('Shopify')">🛍️ Shopify 独立站</span>
+        <span class="chip" onclick="pickKw('Python scraper')">🤖 Python 自动化</span>
+      </div>
+      <div id="results" class="results-grid"></div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #334155;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;font-size:13px;color:#cbd5e1;">
+        <span id="sc-upsell">💡 公开求购帖只是冰山一角——客户在你闲鱼、小红书、电鸭、猎聘、Reddit 后台发的私信更值钱！</span>
+        <a class="btn sm primary" href="https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg">高速下载桌面端开启 24h 秒推 →</a>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <h2 id="f-heading">为什么同行软件要么卡死电脑、要么封号，而《消息总管》稳稳好用？</h2>
+      <p class="lead" id="f-lead">吸取 Station 重壳浏览器卡死电脑、云端代爬封号的惨痛教训，用极简本地原生架构护住你的账号与订单。</p>
+      <div class="feat-grid">
+        <div class="feat-card">
+          <h3>🖥️ 突破网页限制 · 电脑软件与日常浏览器全看护</h3>
+          <p>不止独立多开仓！零注入监控电脑上微信、千牛、飞书、Telegram 及日常浏览器消息窗的<strong>未读红点与系统通知</strong>，手机扫码即可纯文字秒看消息并由电脑固定网络代打回复（零截图防隐私泄露）！</p>
+        </div>
+        <div class="feat-card">
+          <h3>📱 手机锁屏必响 + 锁死家里固定 IP</h3>
+          <p>手机切 Wi-Fi / 5G 极易触发平台异地风控！把账号稳稳挂在网络干净的电脑上，支持一键填微信 PushPlus 口令或 Bark 锁屏强提醒，出门在外手机随时纯文字代发回复！</p>
+        </div>
+        <div class="feat-card">
+          <h3>🤖 Claude Code 提醒 + 多号同窗直聊</h3>
+          <p>同平台无限多开独立防串号，<code>{你好呀|哈喽}</code> 防封变体话术一键自动塞进聊天框；电脑端 CC / Codex 跑完秒推手机，手机直接回指令继续干活。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="pricing" class="section">
+      <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:8px;">
+        <h2 style="margin:0;" id="p-heading">简单透明的定价 · 抓到 1 单就回本十倍</h2>
+      </div>
+      <div style="display:flex;justify-content:center;gap:8px;margin:14px 0 24px;">
+        <button class="btn sm primary" id="tab-cn" onclick="setMarket('cn')">🇨🇳 国内版（人民币买断推荐）</button>
+        <button class="btn sm" id="tab-gl" onclick="setMarket('gl')">🌍 Global Edition (USD)</button>
+      </div>
+
+      <!-- CN PRICING -->
+      <div id="market-cn" class="price-grid">
+        <div class="p-card">
+          <div>
+            <span class="tag tag-blue">零门槛验血</span>
+            <div class="p-big">¥0 <span style="font-size:14px;font-weight:500;color:var(--muted);">永久免费</span></div>
+            <div style="font-size:13px;color:var(--muted);">免注册直接下载即用</div>
+            <ul>
+              <li>同时静默盯守 <strong>2 个</strong> 自选平台</li>
+              <li>网页与桌面内置 24h 求购扫描器</li>
+              <li>完整开放本地 9 工具 AI MCP Server</li>
+            </ul>
+          </div>
+          <a class="btn" href="https://replyradar-edge.a3152557994.workers.dev/dl/XiaoXiZongGuan-CN-macOS.dmg">免费高速下载体验</a>
+        </div>
+
+        <div class="p-card">
+          <div>
+            <span class="tag tag-blue">轻量体验年卡</span>
+            <div class="p-big">¥9.9 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ 年</span></div>
+            <div style="font-size:13px;color:var(--muted);">一杯奶茶钱 · 单次付款不自动扣费</div>
+            <ul>
+              <li>支持最多 <strong>6 个</strong> 网站或账号同时看护</li>
+              <li>独立防串号隔离仓（2 个闲鱼/小红书号同挂）</li>
+              <li>零刷页常驻安全防封保护</li>
+            </ul>
+          </div>
+          <button class="btn" type="button" onclick="openSiteCheckout('year')">⚡ 获取 ¥9.9 年卡激活码</button>
+        </div>
+
+        <div class="p-card pop">
+          <div>
+            <span class="tag tag-green">🔥 92% 多号卖家首选 · 一次买断</span>
+            <div class="p-big">¥39 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ 永久买断</span></div>
+            <div style="font-size:13px;color:#93c5fd;font-weight:700;">同行客服软件十分之一价格 · 支持无限多开防串号</div>
+            <ul>
+              <li><strong>无限个闲鱼 / 小红书 / 店铺账号物理隔离同挂</strong></li>
+              <li><strong>永久固定手机随身书签 + 微信/Bark 锁屏秒推</strong></li>
+              <li>🎁 <strong>附赠福利</strong>：《高成交率外包与商务破冰话术库》</li>
+              <li>🛡️ <strong>14 天无忧承诺</strong>：14 天内不满意全额退！</li>
+            </ul>
+          </div>
+          <button class="btn primary" type="button" onclick="openSiteCheckout('life')">⚡ 立即获取 ¥39 永久买断码 →</button>
+        </div>
+      </div>
+
+      <!-- GLOBAL PRICING -->
+      <div id="market-gl" class="price-grid" style="display:none;">
+        <div class="p-card">
+          <div>
+            <span class="tag tag-blue">Free Starter</span>
+            <div class="p-big">$0 <span style="font-size:14px;font-weight:500;color:var(--muted);">Forever</span></div>
+            <div style="font-size:13px;color:var(--muted);">Download &amp; start in 10 seconds</div>
+            <ul>
+              <li>Watch up to <strong>2</strong> platforms simultaneously</li>
+              <li>Built-in 24h live buyer-intent lead scanner</li>
+              <li>Local 9-tool AI MCP Server included</li>
+            </ul>
+          </div>
+          <a class="btn" href="https://replyradar-edge.a3152557994.workers.dev/dl/ReplyRadar-EN-macOS.dmg">Download Free →</a>
+        </div>
+
+        <div class="p-card">
+          <div>
+            <span class="tag tag-blue">Annual Pro</span>
+            <div class="p-big">$4.99 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ yr</span></div>
+            <div style="font-size:13px;color:var(--muted);">Multi-account inbox &amp; 24/7 lead alerts</div>
+            <ul>
+              <li>Up to <strong>10</strong> isolated marketplace &amp; social accounts</li>
+              <li>Instant Slack, Telegram, Discord &amp; Webhook alerts</li>
+              <li>Zero-polling safe native workspace engine</li>
+            </ul>
+          </div>
+          <button class="btn" type="button" onclick="openSiteCheckout('gl_year')">Get Annual Key ($4.99) →</button>
+        </div>
+
+        <div class="p-card pop">
+          <div>
+            <span class="tag tag-green">🔥 Most Popular · Pay Once</span>
+            <div class="p-big">$14.99 <span style="font-size:14px;font-weight:500;color:var(--muted);">/ Lifetime</span></div>
+            <div style="font-size:13px;color:#93c5fd;font-weight:700;">Unlimited isolated accounts · Zero subscription</div>
+            <ul>
+              <li><strong>Unlimited isolated cookie sandboxes per platform</strong></li>
+              <li><strong>Mobile red-dot companion + AI Butler auto-drafts</strong></li>
+              <li>🎁 <strong>Free Bonus</strong>: High-Converting Cold Reply Playbook</li>
+              <li>🛡️ <strong>14-Day Guarantee</strong>: Catch a real lead or 100% refund</li>
+            </ul>
+          </div>
+          <button class="btn primary" type="button" onclick="openSiteCheckout('gl_life')">Unlock Lifetime ($14.99) →</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="mcp" class="section">
+      <h2>一行配置接入 Claude / Cursor / Antigravity MCP</h2>
+      <p class="lead">让你的 AI 编程与业务助手直接拥有「实时扫描全球求购帖」与「自动挂哨盯客户回信」超能力。</p>
+      <pre class="codebox">{
+  "mcpServers": {
+    "replyradar": {
+      "command": "node",
+      "args": ["/Applications/消息总管.app/Contents/Resources/app-server/mcp-server/index.mjs"]
+    }
+  }
+}</pre>
+    </section>
+
+    <section class="section">
+      <h2>实战指南与方案对比</h2>
+      <div class="feat-grid">
+        <a class="feat-card" href="./guides/xianyu-xiaohongshu-multi-account-anti-ban.html">
+          <h3>闲鱼、小红书、抖店多账号电脑版怎么防串号？Windows/Mac/安卓免费下载 →</h3>
+          <p>每个账号独立物理隔离仓，Cookie 与缓存彻底隔绝，内置 86 个常用平台一键秒加。</p>
+        </a>
+        <a class="feat-card" href="./guides/ai-agent-headless-browser-mcp-workspace.html">
+          <h3>告别 AI 狂开 Chrome 窗口与掉登录：屏幕外 0 弹窗并发工作台与 MCP →</h3>
+          <p>多路 AI 对话按 workerId 隐身并发不抢鼠标，0 Token 休眠等回信秒级唤醒。</p>
+        </a>
+        <a class="feat-card" href="./guides/eleduck-v2ex-xiaohongshu-monitor.html">
+          <h3>一人公司防漏单指南：免开浏览器同时盯住电鸭、V2EX、小红书与闲鱼 →</h3>
+          <p>3 分钟搭好不串号、不封号的跨平台客户回音壁。</p>
+        </a>
+        <a class="feat-card" href="./guides/upwork-rss-alternative.html">
+          <h3>Upwork 关停 RSS 后怎么秒收新单与消息提醒？（2026 防封方案）→</h3>
+          <p>对比云端爬虫与本地原生 WebKit 哨兵的真实成交率与账号安全性。</p>
+        </a>
+        <a class="feat-card" href="./guides/reddit-hackernews-lead-monitor.html">
+          <h3>F5Bot vs Syften vs TabPulse：独立开发者怎么盯 Reddit 与 HN 求购帖？→</h3>
+          <p>为什么光盯公开关键词不够，必须把已登录私信收件箱合一？</p>
+        </a>
+      </div>
+    </section>
+
+    <footer>
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;">
+        <div>© 2026 消息总管 (ReplyRadar) · Built for Indie Sellers, Creators &amp; AI-First Founders.</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <a href="./terms.html">用户协议 (Terms)</a>
+          <a href="./privacy.html">隐私政策 (Privacy)</a>
+          <a href="./llms.txt">llms.txt (AI Agents)</a>
+          <a href="./sitemap.xml">Sitemap</a>
+          <a href="https://github.com/a3152557994-ship-it/tabpulse">GitHub</a>
+          <a href="mailto:a3152557994@gmail.com">Support &amp; 30% Affiliate</a>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#64748b;line-height:1.5;">
+        Terms &amp; Local-First Disclaimer: TabPulse executes locally on your device as a read-only workspace browser helper and public feed scanner. It never stores credentials on external servers and never performs automated posting or messaging. Users remain responsible for complying with third-party site terms; maximum software liability is strictly limited to the license fee paid (100% refund within 14 days).
+      </div>
+    </footer>
+  </div>
+
+  <!-- 高转化秒选收银台弹窗（替代低转化发邮件） -->
+  <div id="siteCheckoutModal" onclick="if(event.target===this)closeSiteCheckout()" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.86);z-index:1000;align-items:center;justify-content:center;padding:18px;">
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:22px;max-width:540px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,0.6);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <strong style="font-size:17px;" id="ck-title">⚡ 选择方案 · 极速获取正版离线激活码</strong>
+        <button class="btn sm" type="button" onclick="closeSiteCheckout()">关闭 ✕</button>
+      </div>
+      <div style="display:grid;gap:8px;margin-bottom:14px;">
+        <label id="ck-card-year" style="display:block;border:1px solid #334155;border-radius:11px;padding:10px 13px;cursor:pointer;background:#0f172a;">
+          <input type="radio" name="tpPlan" value="year" onchange="refreshSiteCheckoutText()" />
+          <strong id="ck-lbl-year">¥9.9 / 年 轻量体验年卡</strong> — <span style="font-size:12.5px;color:#94a3b8;" id="ck-sub-year">看护最多 6 个账号 · 同站双开防串号</span>
+        </label>
+        <label id="ck-card-life" style="display:block;border:2px solid #3b82f6;border-radius:11px;padding:11px 13px;cursor:pointer;background:rgba(37,99,235,0.14);">
+          <input type="radio" name="tpPlan" value="life" checked onchange="refreshSiteCheckoutText()" />
+          <strong id="ck-lbl-life">🔥 ¥39 永久买断专业版（92% 首选）</strong> — <span style="font-size:12.5px;color:#bfdbfe;" id="ck-sub-life">无限个账号物理隔离多开 + 永久固定手机书签 + 赠《破冰话术库》</span>
+        </label>
+      </div>
+      <div style="background:#0b1120;border:1px solid #334155;border-radius:11px;padding:12px 14px;font-size:13px;color:#e2e8f0;line-height:1.65;">
+        <div id="ck-way-1">🛒 <strong>方式 1（24h 自动秒发卡密 · 平台担保）</strong>：打开<strong>闲鱼 App</strong> 搜索「<code style="color:#fbbf24;">消息总管 多开防串号</code>」拍下系统自动秒发 <code>TP1.</code> 激活码！</div>
+        <div style="margin-top:6px;" id="ck-way-2">💬 <strong>方式 2（QQ / 微信扫码直发）</strong>：直接加客服 QQ <code style="color:#34d399;">3152557994</code>（或发信 <code>3152557994@qq.com</code>），秒发收款码与永久激活码。</div>
+        <div id="ck-order-code" style="margin-top:8px;padding:7px 10px;background:#111827;border-radius:8px;color:#93c5fd;font-family:monospace;font-size:12px;"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+        <button class="btn primary" type="button" onclick="copyCheckoutXianyu()" id="btn-ck-xy" style="flex:1;">📋 复制闲鱼自动发卡搜索词</button>
+        <button class="btn" type="button" onclick="copyCheckoutQq()" id="btn-ck-qq" style="flex:1;">💬 复制客服 QQ + 下单口令</button>
+      </div>
+      <div id="ck-toast" style="font-size:12.5px;color:#34d399;margin-top:9px;min-height:18px;font-weight:700;"></div>
+    </div>
+  </div>
+
+  <script>
+    const EDGE_DL = "https://replyradar-edge.a3152557994.workers.dev/dl";
+    const DL_CN = `${EDGE_DL}/XiaoXiZongGuan-CN-macOS.dmg`;
+    const DL_EN = `${EDGE_DL}/ReplyRadar-EN-macOS.dmg`;
+    const DL_WIN_CN = `${EDGE_DL}/XiaoXiZongGuan-CN-Windows-x64.zip`;
+    const DL_WIN_EN = `${EDGE_DL}/ReplyRadar-EN-Windows-x64.zip`;
+    let siteLang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+
+    // Set true only after Creem store KYC & live storefront verification completes (avoids 404 checkout links)
+    const CREEM_LIVE_ENABLED = false;
+    const CREEM_YEAR_URL = "https://www.creem.io/product/prod_7GwFeV4qIacTtjIg6t8QE";
+    const CREEM_LIFE_URL = "https://www.creem.io/product/prod_WXZloyzwbIaBZ2LAlOgkX";
+
+    function openSiteCheckout(preset) {
+      if (preset === "gl_year" || preset === "gl_life") {
+        siteLang = "en";
+        applySiteLang();
+      } else if (preset === "year" || preset === "life") {
+        // Keep current language unless explicitly triggered from CN cards
+      }
+      const radios = document.querySelectorAll('input[name="tpPlan"]');
+      const wantYear = preset === "year" || preset === "gl_year";
+      radios.forEach((r) => { r.checked = r.value === (wantYear ? "year" : "life"); });
+      document.getElementById("ck-toast").textContent = "";
+      refreshSiteCheckoutText();
+      document.getElementById("siteCheckoutModal").style.display = "flex";
+    }
+
+    function closeSiteCheckout() {
+      document.getElementById("siteCheckoutModal").style.display = "none";
+    }
+
+    function refreshSiteCheckoutText() {
+      const en = siteLang === "en";
+      const val = document.querySelector('input[name="tpPlan"]:checked')?.value || "life";
+      document.getElementById("ck-card-year").style.borderColor = val === "year" ? "#3b82f6" : "#334155";
+      document.getElementById("ck-card-life").style.borderColor = val === "life" ? "#3b82f6" : "#334155";
+      if (en) {
+        document.getElementById("ck-title").textContent = "⚡ Unlock ReplyRadar Pro — Offline Ed25519 License Key";
+        document.getElementById("ck-lbl-year").textContent = "$4.99 / yr Annual Pro";
+        document.getElementById("ck-sub-year").textContent = "Up to 10 isolated accounts · Instant push alerts";
+        document.getElementById("ck-lbl-life").textContent = "🔥 $14.99 Lifetime Pro (Pay Once, Own Forever)";
+        document.getElementById("ck-sub-life").textContent = "Unlimited isolated accounts + Mobile companion + Cold-Reply Playbook";
+        if (CREEM_LIVE_ENABLED) {
+          document.getElementById("ck-way-1").innerHTML = "💳 <strong>Option 1 (Instant Card / Apple Pay)</strong>: Click below to complete secure checkout and receive your <code>TP1.</code> key immediately.";
+          document.getElementById("btn-ck-xy").textContent = val === "year" ? "💳 Pay $4.99 / yr Now →" : "💳 Pay $14.99 Lifetime Now →";
+        } else {
+          document.getElementById("ck-way-1").innerHTML = "✉️ <strong>Option 1 (Direct Invoice &amp; Fast Key Dispatch)</strong>: Click the primary button below to copy your order code and email <code style=\"color:#fbbf24;\">a3152557994@gmail.com</code> (PayPal / Alipay / Card invoice supported — your permanent <code>TP1.</code> offline key is issued with a 14-day 100% refund guarantee).";
+          document.getElementById("btn-ck-xy").textContent = val === "year" ? "✉️ Request $4.99 Annual Key (Copy + Email) →" : "✉️ Request $14.99 Lifetime Key (Copy + Email) →";
+        }
+        document.getElementById("ck-way-2").innerHTML = "🛒 <strong>Option 2 (24/7 Automated Self-Serve via Goofish / QQ)</strong>: Have Alipay/WeChat? Switch to <strong>中文版</strong> or search <code>消息总管 多开防串号</code> on Goofish (Xianyu) / add QQ <code style=\"color:#34d399;\">3152557994</code> for 24/7 automated <code>TP1.</code> key delivery.";
+        document.getElementById("btn-ck-qq").textContent = "📋 Copy Support Email & Order ID";
+      } else {
+        document.getElementById("ck-title").textContent = "⚡ 选择方案 · 极速获取正版离线激活码";
+        document.getElementById("ck-lbl-year").textContent = "¥9.9 / 年 轻量体验年卡";
+        document.getElementById("ck-sub-year").textContent = "看护最多 6 个账号 · 同站双开防串号";
+        document.getElementById("ck-lbl-life").textContent = "🔥 ¥39 永久买断专业版（92% 首选）";
+        document.getElementById("ck-sub-life").textContent = "无限个账号物理隔离多开 + 永久固定手机书签 + 赠《破冰话术库》";
+        document.getElementById("ck-way-1").innerHTML = "🛒 <strong>方式 1（24h 自动秒发卡密 · 平台担保）</strong>：打开<strong>闲鱼 App</strong> 搜索「<code style=\"color:#fbbf24;\">消息总管 多开防串号</code>」拍下系统自动秒发 <code>TP1.</code> 激活码！";
+        document.getElementById("ck-way-2").innerHTML = "💬 <strong>方式 2（QQ / 邮箱人工极速直发）</strong>：直接加客服 QQ <code style=\"color:#34d399;\">3152557994</code>（或发邮件至 <code>3152557994@qq.com</code>），秒发微信/支付宝收款码与永久激活码，粘贴进软件左下角「💎 解锁专业版」即刻生效。";
+        document.getElementById("btn-ck-xy").textContent = "📋 复制闲鱼自动发卡搜索词";
+        document.getElementById("btn-ck-qq").textContent = "💬 复制客服 QQ + 下单口令";
+      }
+      const planLabel = en
+        ? (val === "year" ? "ReplyRadar Annual Pro ($4.99/yr)" : "ReplyRadar Lifetime Pro ($14.99 Once)")
+        : (val === "year" ? "《消息总管》¥9.9 轻量年卡" : "《消息总管》¥39 永久买断专业版");
+      document.getElementById("ck-order-code").textContent = en
+        ? `Order Plan: ${planLabel} (Works offline on macOS + Windows)`
+        : `下单方案：${planLabel}（支持 Mac + Windows 双端离线永久激活）`;
+    }
+
+    async function copyCheckoutXianyu() {
+      const en = siteLang === "en";
+      const val = document.querySelector('input[name="tpPlan"]:checked')?.value || "life";
+      if (en) {
+        if (CREEM_LIVE_ENABLED) {
+          window.open(val === "year" ? CREEM_YEAR_URL : CREEM_LIFE_URL, "_blank", "noopener");
+          return;
+        }
+        const orderText = document.getElementById("ck-order-code").textContent;
+        await navigator.clipboard.writeText(`a3152557994@gmail.com | ${orderText}`).catch(() => {});
+        document.getElementById("ck-toast").textContent = "✅ Copied support email & order details! Send to a3152557994@gmail.com to receive your TP1. offline license key.";
+        const sub = encodeURIComponent(`[License Order] ${orderText}`);
+        const body = encodeURIComponent(`Hi ReplyRadar team,\n\nI'd like to purchase ${orderText}.\nPreferred payment method (PayPal / Alipay / Card Invoice):\n`);
+        location.href = `mailto:a3152557994@gmail.com?subject=${sub}&body=${body}`;
+        return;
+      }
+      const text = "消息总管 多开防串号";
+      await navigator.clipboard.writeText(text).catch(() => {});
+      document.getElementById("ck-toast").textContent = "✅ 已复制「消息总管 多开防串号」！打开闲鱼粘贴搜索拍下，系统24h自动秒发 TP1 激活码！";
+    }
+
+    async function copyCheckoutQq() {
+      const en = siteLang === "en";
+      if (en) {
+        const orderText = document.getElementById("ck-order-code").textContent;
+        await navigator.clipboard.writeText(`a3152557994@gmail.com — ${orderText}`).catch(() => {});
+        document.getElementById("ck-toast").textContent = "✅ Copied: a3152557994@gmail.com (plus your selected plan)! Email anytime for fast activation.";
+        return;
+      }
+      const orderText = document.getElementById("ck-order-code").textContent;
+      await navigator.clipboard.writeText(`3152557994（${orderText}）`).catch(() => {});
+      document.getElementById("ck-toast").textContent = "✅ 已复制客服 QQ 号「3152557994」及下单方案（也可发邮件至 3152557994@qq.com 秒回发码）！";
+    }
+
+    function applySiteLang() {
+      const en = siteLang === "en";
+      document.title = en
+        ? "ReplyRadar — Persistent Multi-Platform Inbox, Mobile Companion & Zero-Focus AI Workspace"
+        : "消息总管 — 全平台免扫码收信与 AI 隐身工作台";
+      document.getElementById("brand-name").textContent = en ? "ReplyRadar" : "消息总管";
+      document.getElementById("lang-btn").textContent = en ? "中文版" : "English";
+      document.getElementById("nav-scan").textContent = en ? "Free Lead Scanner" : "免费找单扫描";
+      document.getElementById("nav-feat").textContent = en ? "Why ReplyRadar" : "为什么选它";
+      document.getElementById("nav-price").textContent = en ? "Pricing" : "买断与会员";
+      document.getElementById("h-eyebrow").textContent = en
+        ? "🚀 ReplyRadar v6.0 Official · Persistent Login Vault · Zero-Focus Multi-Agent MCP & 0-Token Reply Wakeup"
+        : "🚀 《消息总管》v6.0 正版官方旗舰 · 登一次常年免扫码 · 多路 AI 后台隐身干活不抢鼠标 · 0 额度来信秒唤醒";
+      document.getElementById("h-title").textContent = en
+        ? "Every Hour a Buyer Reply Sits Unseen in a Closed Tab, Your Close Rate Drops 50%."
+        : "你不打开网页，客户发来的私信和订单就永远躺在角落里烂掉。";
+      document.getElementById("h-sub").innerHTML = en
+        ? "<strong>ReplyRadar</strong> keeps all your logged-in marketplaces &amp; desktop apps in one lightweight native workspace, with a permanent mobile pure-text inbox and 24h buyer-intent scanner."
+        : "<strong>《消息总管》</strong>帮你把闲鱼、小红书、微信、电鸭、猎聘、V2EX 等十几个平台的新消息统一收进电脑与手机。免装 Node 开箱即用，零刷页防封听消息，出门手机随时看图代回。";
+      const ctaDl = document.getElementById("cta-dl");
+      ctaDl.href = en ? DL_EN : DL_CN;
+      ctaDl.textContent = en
+        ? " Fast Download for macOS (.dmg)"
+        : " 高速下载《消息总管》苹果版 (.dmg · 1.1MB)";
+      const ctaWin = document.getElementById("cta-dl-win");
+      if (ctaWin) {
+        ctaWin.href = en ? DL_WIN_EN : DL_WIN_CN;
+        ctaWin.textContent = en
+          ? "🪟 Fast Download for Windows (.zip)"
+          : "🪟 高速下载《消息总管》Windows版 (.zip · 5.0MB)";
+      }
+      document.getElementById("cta-buy").textContent = en
+        ? "💎 Unlock Lifetime ($14.99)"
+        : "💎 获取 ¥39 永久买断码";
+      document.getElementById("sc-title").textContent = en
+        ? "Free Live Tool: Last 24–72h Buyer-Intent Lead Scanner"
+        : "免费在线实测：《过去 24～72 小时全网漏单与求购扫描器》";
+      document.getElementById("sc-btn").textContent = en ? "🔍 Scan Live Buyer Leads" : "🔍 立即扫描新商机";
+      document.getElementById("p-heading").textContent = en
+        ? "Simple Pricing · Catch 1 Client and Pay for Itself 10x"
+        : "简单实在的定价 · 帮你兜住 1 单就回本十倍";
+      setMarket(en ? "gl" : "cn");
+    }
+
+    function toggleSiteLang() {
+      siteLang = siteLang === "zh" ? "en" : "zh";
+      applySiteLang();
+    }
+
+    function setMarket(m) {
+      document.getElementById("market-cn").style.display = m === "cn" ? "grid" : "none";
+      document.getElementById("market-gl").style.display = m === "gl" ? "grid" : "none";
+      document.getElementById("tab-cn").classList.toggle("primary", m === "cn");
+      document.getElementById("tab-gl").classList.toggle("primary", m === "gl");
+    }
+
+    function pickKw(val) {
+      document.getElementById("kw").value = val;
+      scanNow();
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    async function scanNow() {
+      const q = document.getElementById("kw").value.trim() || "远程 外包";
+      const box = document.getElementById("results");
+      box.innerHTML = `<div class="lead-row"><span>⏳ 正在实时扫描 电鸭社区 / Reddit / Hacker News / GitHub 最新求购与外包帖（<strong>${esc(q)}</strong>）...</span></div>`;
+      const hasZh = /[\u4e00-\u9fa5]/.test(q);
+      const qTokens = q.toLowerCase().split(/[\s,，/]+/).filter((t) => t.length >= 2);
+      const rq = encodeURIComponent(hasZh ? q + " 外包" : q + " hiring freelance");
+      const hq = encodeURIComponent(hasZh ? q : q + " hiring freelance");
+      const gq = encodeURIComponent(hasZh ? `${q} is:issue is:open (外包 OR 远程 OR 兼职) in:title,body` : `${q} is:issue is:open (hiring OR freelance OR paid OR bounty) in:title,body`);
+
+      const [eRes, rRes, hRes, gRes] = await Promise.allSettled([
+        fetch("https://svc.eleduck.com/api/v1/posts?page=1").then((r) => r.json()),
+        fetch(`https://api.pullpush.io/reddit/search/submission/?q=${rq}&size=4&sort=desc`).then((r) => r.json()),
+        fetch(`https://hn.algolia.com/api/v1/search_by_date?query=${hq}&tags=(story,comment)&hitsPerPage=4`).then((r) => r.json()),
+        fetch(`https://api.github.com/search/issues?q=${gq}&sort=created&order=desc&per_page=4`).then((r) => r.json()),
+      ]);
+
+      const items = [];
+      if (eRes.status === "fulfilled" && Array.isArray(eRes.value?.posts)) {
+        for (const p of eRes.value.posts) {
+          const title = p.full_title || p.title || "";
+          if (!title || /(社区规则|新人必读|求职|个人接单)/.test(title)) continue;
+          const hay = `${title} ${p.summary || ""}`.toLowerCase();
+          if (qTokens.some((t) => hay.includes(t)) || (hasZh && /(远程|外包|设计|剪辑|运营|小程序|开发|合作)/.test(hay))) {
+            items.push({
+              src: "电鸭社区 · 国内远程/外包",
+              title,
+              url: "https://eleduck.com/posts/" + p.id,
+              ts: p.published_at ? new Date(p.published_at).getTime() : Date.now(),
+            });
+          }
+        }
+      }
+      if (rRes.status === "fulfilled" && Array.isArray(rRes.value?.data)) {
+        for (const d of rRes.value.data) {
+          if (!d.title) continue;
+          items.push({
+            src: "Reddit r/" + (d.subreddit || "all"),
+            title: d.title,
+            url: d.permalink ? "https://www.reddit.com" + d.permalink : "https://www.reddit.com",
+            ts: (d.created_utc || 0) * 1000,
+          });
+        }
+      }
+      if (hRes.status === "fulfilled" && Array.isArray(hRes.value?.hits)) {
+        for (const h of hRes.value.hits) {
+          items.push({
+            src: "Hacker News",
+            title: h.title || h.story_title || "HN Hiring Thread",
+            url: "https://news.ycombinator.com/item?id=" + h.objectID,
+            ts: (h.created_at_i || 0) * 1000,
+          });
+        }
+      }
+      if (gRes.status === "fulfilled" && Array.isArray(gRes.value?.items)) {
+        for (const g of gRes.value.items) {
+          if (g.pull_request) continue;
+          items.push({
+            src: "GitHub Bounty/Issue",
+            title: g.title,
+            url: g.html_url,
+            ts: new Date(g.created_at).getTime(),
+          });
+        }
+      }
+
+      items.sort((a, b) => b.ts - a.ts);
+      const top = items.slice(0, 7);
+      if (!top.length) {
+        box.innerHTML = `<div class="lead-row"><span>暂未找到实时匹配，建议试试「远程 外包」「设计 剪辑」「Shopify」「Python」。</span></div>`;
+        return;
+      }
+      box.innerHTML = top.map((it) => {
+        const hoursAgo = Math.max(1, Math.round((Date.now() - it.ts) / 3600000));
+        const ageLabel = hoursAgo < 48 ? `${hoursAgo}h ago` : `${Math.round(hoursAgo / 24)}d ago`;
+        return `
+          <div class="lead-row">
+            <div style="max-width:760px;">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:3px;">
+                <span class="tag tag-green">真实需求</span>
+                <span class="tag tag-blue">${esc(it.src)}</span>
+                <span style="font-size:12px;color:var(--muted);">${ageLabel}</span>
+              </div>
+              <a href="${esc(it.url)}" target="_blank" rel="noopener" style="font-weight:700;font-size:14.5px;color:#f8fafc;">${esc(it.title)}</a>
+            </div>
+            <a class="btn sm primary" href="${esc(it.url)}" target="_blank" rel="noopener">去联系客户 ↗</a>
+          </div>
+        `;
+      }).join("");
+    }
+
+    applySiteLang();
+    scanNow();
+    if (location.hash === "#checkout-life") openSiteCheckout("life");
+    else if (location.hash === "#checkout-year") openSiteCheckout("year");
+    else if (location.hash === "#checkout-gl-life") openSiteCheckout("gl_life");
+    else if (location.hash === "#checkout-gl-year") openSiteCheckout("gl_year");
+  </script>
+</body>
+</html>
