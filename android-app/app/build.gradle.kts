@@ -11,8 +11,8 @@ android {
         applicationId = "com.opc.tabpulse"
         minSdk = 24
         targetSdk = 34
-        versionCode = 580
-        versionName = "5.8.0"
+        versionCode = 581
+        versionName = "5.8.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -29,6 +29,9 @@ android {
                 keyAlias = ksAlias
                 keyPassword = ksPass
                 storeType = "PKCS12"
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
